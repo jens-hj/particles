@@ -32,6 +32,9 @@ bevy = { version = "0.17", default-features = false, features = [
 # Random number generation
 rand = "0.9"
 
+# Catppuccin color scheme
+bevy_catppuccin = { git = "https://github.com/jens-hj/bevy_catppuccin" }
+
 [profile.dev]
 opt-level = 1
 

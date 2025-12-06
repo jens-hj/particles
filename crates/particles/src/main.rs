@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_catppuccin::CatppuccinPlugin;
 use orbit_camera::OrbitCameraPlugin;
 use particles_core::ParticlesCorePlugin;
 use particles_render::ParticlesRenderPlugin;
@@ -12,6 +13,7 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins(CatppuccinPlugin)
         .add_plugins(ParticlesCorePlugin)
         .add_plugins(ParticlesRenderPlugin)
         .add_plugins(OrbitCameraPlugin)
