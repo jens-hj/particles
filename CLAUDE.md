@@ -2,3 +2,4 @@
 - Keep the main crate minimal without any logic. Always decompose into a separate crate documenting its purpose
 - Whenever you've implemented something make sure to check it with cargo check
 - Always keep in mind this should be as performant as possible. Make sure to use shaders for compute whenever it makes sense
+- Document failing methods of implementations of specific goals

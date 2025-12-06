@@ -73,7 +73,7 @@ impl Plugin for ParticlesCorePlugin {
 
 fn initialize_particles(mut particle_buffer: ResMut<ParticleBuffer>) {
     let mut rng = rand::rng();
-    let num_particles = 10000;
+    let num_particles = 100;
     let sphere_radius = 200.0;
 
     // Generate random particles within a sphere using rejection sampling
