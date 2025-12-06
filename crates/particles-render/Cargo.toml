@@ -1,0 +1,10 @@
+[package]
+name = "particles-render"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+bevy.workspace = true
+particles-core = { path = "../particles-core" }
