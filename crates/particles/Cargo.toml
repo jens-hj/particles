@@ -1,0 +1,12 @@
+[package]
+name = "particles"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+bevy.workspace = true
+particles-core = { path = "../particles-core" }
+particles-render = { path = "../particles-render" }
+orbit-camera = { path = "../orbit-camera" }
