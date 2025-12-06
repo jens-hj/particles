@@ -26,6 +26,8 @@ bevy = { version = "0.17", default-features = false, features = [
     "bevy_color",
     "bevy_log",
     "bevy_pbr",
+    "bevy_ui",
+    "bevy_text",
     "x11",
 ] }
 

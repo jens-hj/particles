@@ -11,3 +11,4 @@ bevy_catppuccin.workspace = true
 particles-core = { path = "../particles-core" }
 particles-render = { path = "../particles-render" }
 orbit-camera = { path = "../orbit-camera" }
+debug-ui = { path = "../debug-ui" }
