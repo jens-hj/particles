@@ -89,15 +89,15 @@ fn orbit_camera_control(
             let delta_x = -motion.delta.x * orbit_camera.rotation_speed;
             let delta_y = -motion.delta.y * orbit_camera.rotation_speed;
 
-            // Rotate around global Y axis for horizontal movement (yaw)
-            let yaw_rotation = Quat::from_rotation_y(delta_x);
+            // Rotate around camera's local up axis for horizontal movement (yaw)
+            let up = orbit_camera.rotation * Vec3::Y;
+            let yaw_rotation = Quat::from_axis_angle(up, delta_x);
 
-            // Rotate around camera's local X axis for vertical movement (pitch)
-            // Get the camera's right vector by rotating the global X axis
+            // Rotate around camera's local right axis for vertical movement (pitch)
             let right = orbit_camera.rotation * Vec3::X;
             let pitch_rotation = Quat::from_axis_angle(right, delta_y);
 
-            // Apply rotations: first pitch (local), then yaw (global)
+            // Apply rotations: both are now local to the camera
             orbit_camera.rotation = yaw_rotation * pitch_rotation * orbit_camera.rotation;
 
             // Normalize to prevent drift over time
