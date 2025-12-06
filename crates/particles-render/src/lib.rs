@@ -38,7 +38,7 @@ fn render_particles(
         }
 
         // Spawn new particle render entities with Catppuccin colors
-        let sphere_mesh = meshes.add(Sphere::new(2.0));
+        let sphere_mesh = meshes.add(Sphere::new(2.0).mesh().ico(2).unwrap());
 
         // Create materials with different Catppuccin colors
         let colors = [
@@ -58,7 +58,7 @@ fn render_particles(
             let color = colors[index % colors.len()];
             let material = materials.add(StandardMaterial {
                 base_color: color,
-                unlit: true, // Make particles unlit for better visibility
+                unlit: true,
                 ..default()
             });
 
