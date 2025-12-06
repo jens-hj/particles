@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
-use bevy::render::render_resource::{
-    Buffer, BufferInitDescriptor, BufferUsages, ShaderType,
-};
+use bevy::render::render_resource::{Buffer, BufferInitDescriptor, BufferUsages, ShaderType};
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::{Render, RenderApp, RenderSystems};
 use rand::Rng;
@@ -66,13 +64,16 @@ impl Plugin for ParticlesCorePlugin {
 
         // Set up render world systems
         let render_app = app.sub_app_mut(RenderApp);
-        render_app.add_systems(Render, prepare_particle_buffer.in_set(RenderSystems::Prepare));
+        render_app.add_systems(
+            Render,
+            prepare_particle_buffer.in_set(RenderSystems::Prepare),
+        );
     }
 }
 
 fn initialize_particles(mut particle_buffer: ResMut<ParticleBuffer>) {
     let mut rng = rand::rng();
-    let num_particles = 1000;
+    let num_particles = 10000;
     let sphere_radius = 200.0;
 
     // Generate random particles within a sphere using rejection sampling
@@ -87,18 +88,18 @@ fn initialize_particles(mut particle_buffer: ResMut<ParticleBuffer>) {
             let length_squared = x * x + y * y + z * z;
             if length_squared <= 1.0 {
                 // Scale by sphere radius
-                let particle = Particle::new(
-                    x * sphere_radius,
-                    y * sphere_radius,
-                    z * sphere_radius,
-                );
+                let particle =
+                    Particle::new(x * sphere_radius, y * sphere_radius, z * sphere_radius);
                 particle_buffer.add_particle(particle);
                 break;
             }
         }
     }
 
-    info!("Initialized {} particles in sphere", particle_buffer.particle_count());
+    info!(
+        "Initialized {} particles in sphere",
+        particle_buffer.particle_count()
+    );
 }
 
 /// System that runs in render world to create/update GPU buffer
