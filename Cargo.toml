@@ -1,44 +1,25 @@
-[workspace]
-resolver = "2"
-members = [
-    "crates/*",
-]
-
-[workspace.package]
+[package]
+name = "particles"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/yourusername/particles"
 
-[workspace.dependencies]
-# Bevy engine
-bevy = { version = "0.17", default-features = false, features = [
-    "zstd_rust",
-    "tonemapping_luts",
-    "bevy_winit",
-    "bevy_render",
-    "bevy_core_pipeline",
-    "bevy_sprite",
-    "bevy_sprite_render",
-    "bevy_mesh",
-    "bevy_asset",
-    "bevy_color",
-    "bevy_log",
-    "bevy_pbr",
-    "bevy_ui",
-    "bevy_text",
-    "x11",
-] }
-
+[dependencies]
+# Core wgpu for GPU programming (latest)
+wgpu = "27"
+# Window creation and event handling
+winit = "0.30"
+# Async runtime for wgpu initialization
+pollster = "0.4"
+# Linear algebra for 3D math
+glam = "0.30"
 # Random number generation
 rand = "0.9"
-
 # Byte conversion for GPU buffers
-bytemuck = "1.21"
-
-# Catppuccin color scheme
-bevy_catppuccin = { git = "https://github.com/jens-hj/bevy_catppuccin" }
+bytemuck = { version = "1.24", features = ["derive"] }
+# Catppuccin color palette
+catppuccin = "2.6"
 
 [profile.dev]
 opt-level = 1
