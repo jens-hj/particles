@@ -12,9 +12,9 @@ use winit::{
     window::{Window, WindowId},
 };
 
-const PARTICLE_COUNT: u32 = 10_000_000;
-const PARTICLE_SIZE: f32 = 0.1; // Smaller particles for less overlap
-const SPHERE_RADIUS: f32 = 200.0; // Larger distribution sphere
+const PARTICLE_COUNT: u32 = 100_000_000;
+const PARTICLE_SIZE: f32 = 0.05; // Smaller particles for less overlap
+const SPHERE_RADIUS: f32 = 800.0; // Larger distribution sphere
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 // Convert sRGB color (0-255) to linear RGB (0.0-1.0) for wgpu::Color
@@ -105,7 +105,7 @@ impl Camera {
     }
 
     fn zoom(&mut self, delta: f32) {
-        self.distance = (self.distance + delta).clamp(10.0, 500.0);
+        self.distance = (self.distance + delta).clamp(10.0, 5000.0);
     }
 
     fn build_view_projection_matrix(&self) -> Mat4 {
@@ -141,7 +141,7 @@ struct GpuState {
     depth_texture: wgpu::TextureView,
 
     // Buffers
-    particle_buffer: wgpu::Buffer,
+    _particle_buffer: wgpu::Buffer,
     camera_buffer: wgpu::Buffer,
     _size_buffer: wgpu::Buffer,
 
@@ -186,8 +186,8 @@ impl GpuState {
 
         // Create device and queue with higher buffer limits for large particle counts
         let mut limits = wgpu::Limits::default();
-        limits.max_storage_buffer_binding_size = 1024 * 1024 * 1024; // 1 GB
-        limits.max_buffer_size = 1024 * 1024 * 1024; // 1 GB
+        limits.max_storage_buffer_binding_size = 4 * 1024 * 1024 * 1024; // 4 GB
+        limits.max_buffer_size = 4 * 1024 * 1024 * 1024; // 4 GB
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
@@ -441,7 +441,7 @@ impl GpuState {
             config,
             size,
             depth_texture: depth_view,
-            particle_buffer,
+            _particle_buffer: particle_buffer,
             camera_buffer,
             _size_buffer: size_buffer,
             render_pipeline,
