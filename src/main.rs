@@ -186,8 +186,8 @@ impl GpuState {
 
         // Create device and queue with higher buffer limits for large particle counts
         let mut limits = wgpu::Limits::default();
-        limits.max_storage_buffer_binding_size = 4 * 1024 * 1024 * 1024; // 4 GB
-        limits.max_buffer_size = 4 * 1024 * 1024 * 1024; // 4 GB
+        limits.max_storage_buffer_binding_size = u32::MAX; // ~4 GB
+        limits.max_buffer_size = 4u64 * 1024 * 1024 * 1024; // 4 GB
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
