@@ -47,9 +47,5 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    // Soft edge for anti-aliasing
-    let edge_softness = 0.02;
-    let alpha = smoothstep(0.5, 0.5 - edge_softness, dist);
-
-    return vec4<f32>(input.color, alpha);
+    return vec4<f32>(input.color, 1.0);
 }
