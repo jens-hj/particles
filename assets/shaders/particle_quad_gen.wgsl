@@ -2,14 +2,18 @@
 
 struct Particle {
     position: vec3<f32>,
-    _padding: f32,  // Align to 16 bytes
+    _padding1: f32,
+    color: vec3<f32>,
+    _padding2: f32,
 }
 
 struct QuadVertex {
     position: vec3<f32>,
     _padding1: f32,
+    color: vec3<f32>,
+    _padding2: f32,
     uv: vec2<f32>,
-    _padding2: vec2<f32>,
+    _padding3: vec2<f32>,
 }
 
 struct Camera {
@@ -48,6 +52,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let particle = particles[particle_index];
     let particle_pos = particle.position;
+    let particle_color = particle.color;
 
     // Calculate camera-facing orientation
     let to_camera = normalize(camera.position - particle_pos);
@@ -67,39 +72,51 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     vertices[base_index + 0u] = QuadVertex(
         particle_pos - right * size - billboard_up * size,  // Bottom-left
         0.0,  // padding1
+        particle_color,
+        0.0,  // padding2
         vec2<f32>(0.0, 0.0),
-        vec2<f32>(0.0, 0.0)  // padding2
+        vec2<f32>(0.0, 0.0)  // padding3
     );
     vertices[base_index + 1u] = QuadVertex(
         particle_pos + right * size - billboard_up * size,  // Bottom-right
         0.0,  // padding1
+        particle_color,
+        0.0,  // padding2
         vec2<f32>(1.0, 0.0),
-        vec2<f32>(0.0, 0.0)  // padding2
+        vec2<f32>(0.0, 0.0)  // padding3
     );
     vertices[base_index + 2u] = QuadVertex(
         particle_pos + right * size + billboard_up * size,  // Top-right
         0.0,  // padding1
+        particle_color,
+        0.0,  // padding2
         vec2<f32>(1.0, 1.0),
-        vec2<f32>(0.0, 0.0)  // padding2
+        vec2<f32>(0.0, 0.0)  // padding3
     );
 
     // Triangle 2: bottom-left, top-right, top-left
     vertices[base_index + 3u] = QuadVertex(
         particle_pos - right * size - billboard_up * size,  // Bottom-left
         0.0,  // padding1
+        particle_color,
+        0.0,  // padding2
         vec2<f32>(0.0, 0.0),
-        vec2<f32>(0.0, 0.0)  // padding2
+        vec2<f32>(0.0, 0.0)  // padding3
     );
     vertices[base_index + 4u] = QuadVertex(
         particle_pos + right * size + billboard_up * size,  // Top-right
         0.0,  // padding1
+        particle_color,
+        0.0,  // padding2
         vec2<f32>(1.0, 1.0),
-        vec2<f32>(0.0, 0.0)  // padding2
+        vec2<f32>(0.0, 0.0)  // padding3
     );
     vertices[base_index + 5u] = QuadVertex(
         particle_pos - right * size + billboard_up * size,  // Top-left
         0.0,  // padding1
+        particle_color,
+        0.0,  // padding2
         vec2<f32>(0.0, 1.0),
-        vec2<f32>(0.0, 0.0)  // padding2
+        vec2<f32>(0.0, 0.0)  // padding3
     );
 }

@@ -31,7 +31,9 @@ fn srgb_to_linear(value: u8) -> f64 {
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Particle {
     position: [f32; 3],
-    _padding: f32,
+    _padding1: f32,
+    color: [f32; 3],
+    _padding2: f32,
 }
 
 // Camera uniform matching shaders
@@ -59,8 +61,10 @@ struct ParticleSizeUniform {
 struct QuadVertex {
     position: [f32; 3],
     _padding1: f32,
+    color: [f32; 3],
+    _padding2: f32,
     uv: [f32; 2],
-    _padding2: [f32; 2],
+    _padding3: [f32; 2],
 }
 
 struct Camera {
@@ -233,6 +237,24 @@ impl GpuState {
 
         // Generate particles uniformly in a sphere
         let mut rng = rand::rng();
+        let mocha = &catppuccin::PALETTE.mocha.colors;
+        let colors = [
+            mocha.rosewater,
+            mocha.flamingo,
+            mocha.pink,
+            mocha.mauve,
+            mocha.red,
+            mocha.maroon,
+            mocha.peach,
+            mocha.yellow,
+            mocha.green,
+            mocha.teal,
+            mocha.sky,
+            mocha.sapphire,
+            mocha.blue,
+            mocha.lavender,
+        ];
+
         let particles: Vec<Particle> = (0..PARTICLE_COUNT)
             .map(|_| {
                 let theta = rng.random::<f32>() * std::f32::consts::TAU;
@@ -244,9 +266,16 @@ impl GpuState {
                 let y = r * sin_phi * theta.sin();
                 let z = r * cos_phi;
 
+                let color = colors[rng.random_range(0..colors.len())];
+                let r_linear = srgb_to_linear(color.rgb.r) as f32;
+                let g_linear = srgb_to_linear(color.rgb.g) as f32;
+                let b_linear = srgb_to_linear(color.rgb.b) as f32;
+
                 Particle {
                     position: [x, y, z],
-                    _padding: 0.0,
+                    _padding1: 0.0,
+                    color: [r_linear, g_linear, b_linear],
+                    _padding2: 0.0,
                 }
             })
             .collect();
