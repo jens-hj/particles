@@ -15,6 +15,7 @@ use winit::{
 const PARTICLE_COUNT: u32 = 10_000;
 const PARTICLE_SIZE: f32 = 0.25; // Smaller particles for less overlap
 const SPHERE_RADIUS: f32 = 80.0; // Larger distribution sphere
+const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 // Convert sRGB color (0-255) to linear RGB (0.0-1.0) for wgpu::Color
 fn srgb_to_linear(value: u8) -> f64 {
@@ -149,6 +150,7 @@ struct GpuState {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
+    depth_texture: wgpu::TextureView,
 
     // Buffers
     _particle_buffer: wgpu::Buffer,
@@ -234,6 +236,22 @@ impl GpuState {
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &config);
+
+        let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Depth Texture"),
+            size: wgpu::Extent3d {
+                width: config.width,
+                height: config.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         // Generate particles uniformly in a sphere
         let mut rng = rand::rng();
@@ -498,7 +516,13 @@ impl GpuState {
                 polygon_mode: wgpu::PolygonMode::Fill,
                 conservative: false,
             },
-            depth_stencil: None,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
             cache: None,
@@ -528,6 +552,7 @@ impl GpuState {
             queue,
             config,
             size,
+            depth_texture: depth_view,
             _particle_buffer: particle_buffer,
             _vertex_buffer: vertex_buffer,
             camera_buffer,
@@ -548,7 +573,24 @@ impl GpuState {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
-            self.camera.aspect = new_size.width as f32 / new_size.height as f32;
+
+            let depth_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Depth Texture"),
+                size: wgpu::Extent3d {
+                    width: self.config.width,
+                    height: self.config.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: DEPTH_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            self.depth_texture = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            self.camera.aspect = self.config.width as f32 / self.config.height as f32;
         }
     }
 
@@ -622,7 +664,14 @@ impl GpuState {
                     },
                     depth_slice: None,
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_texture,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
