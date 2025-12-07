@@ -12,9 +12,9 @@ use winit::{
     window::{Window, WindowId},
 };
 
-const PARTICLE_COUNT: u32 = 10_000;
-const PARTICLE_SIZE: f32 = 0.25; // Smaller particles for less overlap
-const SPHERE_RADIUS: f32 = 80.0; // Larger distribution sphere
+const PARTICLE_COUNT: u32 = 10_000_000;
+const PARTICLE_SIZE: f32 = 0.1; // Smaller particles for less overlap
+const SPHERE_RADIUS: f32 = 200.0; // Larger distribution sphere
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 // Convert sRGB color (0-255) to linear RGB (0.0-1.0) for wgpu::Color
@@ -54,18 +54,6 @@ struct ParticleSizeUniform {
     _padding1: f32,
     _padding2: f32,
     _padding3: f32,
-}
-
-// QuadVertex structure matching shaders
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct QuadVertex {
-    position: [f32; 3],
-    _padding1: f32,
-    color: [f32; 3],
-    _padding2: f32,
-    uv: [f32; 2],
-    _padding3: [f32; 2],
 }
 
 struct Camera {
@@ -153,17 +141,14 @@ struct GpuState {
     depth_texture: wgpu::TextureView,
 
     // Buffers
-    _particle_buffer: wgpu::Buffer,
-    _vertex_buffer: wgpu::Buffer,
+    particle_buffer: wgpu::Buffer,
     camera_buffer: wgpu::Buffer,
     _size_buffer: wgpu::Buffer,
 
     // Pipelines
-    compute_pipeline: wgpu::ComputePipeline,
     render_pipeline: wgpu::RenderPipeline,
 
     // Bind groups
-    compute_bind_group: wgpu::BindGroup,
     render_bind_group: wgpu::BindGroup,
 
     // State
@@ -305,16 +290,6 @@ impl GpuState {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
-        // Create vertex buffer (will be filled by compute shader)
-        let vertex_count = PARTICLE_COUNT * 6; // 6 vertices per particle
-        let vertex_buffer_size = (vertex_count * std::mem::size_of::<QuadVertex>() as u32) as u64;
-        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Vertex Buffer"),
-            size: vertex_buffer_size,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
-            mapped_at_creation: false,
-        });
-
         // Create camera
         let camera = Camera::new(size.width, size.height);
         let camera_uniform = camera.to_uniform();
@@ -339,15 +314,6 @@ impl GpuState {
         });
 
         // Load shaders
-        let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Compute Shader"),
-            source: wgpu::ShaderSource::Wgsl(
-                std::fs::read_to_string("assets/shaders/particle_quad_gen.wgsl")
-                    .expect("Failed to load compute shader")
-                    .into(),
-            ),
-        });
-
         let render_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Render Shader"),
             source: wgpu::ShaderSource::Wgsl(
@@ -355,99 +321,6 @@ impl GpuState {
                     .expect("Failed to load render shader")
                     .into(),
             ),
-        });
-
-        // Create compute bind group layout
-        let compute_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Compute Bind Group Layout"),
-                entries: &[
-                    // Particles (storage, read)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    // Vertices (storage, read_write)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    // Camera (uniform)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    // Size (uniform)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-
-        // Create compute pipeline
-        let compute_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Compute Pipeline Layout"),
-                bind_group_layouts: &[&compute_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Compute Pipeline"),
-            layout: Some(&compute_pipeline_layout),
-            module: &compute_shader,
-            entry_point: Some("main"),
-            compilation_options: Default::default(),
-            cache: None,
-        });
-
-        // Create compute bind group
-        let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Compute Bind Group"),
-            layout: &compute_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: particle_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: vertex_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: camera_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: size_buffer.as_entire_binding(),
-                },
-            ],
         });
 
         // Create render bind group layout
@@ -466,12 +339,23 @@ impl GpuState {
                         },
                         count: None,
                     },
-                    // Vertices (storage, read)
+                    // Particles (storage, read)
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Particle Size (uniform)
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -539,7 +423,11 @@ impl GpuState {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: vertex_buffer.as_entire_binding(),
+                    resource: particle_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: size_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -553,13 +441,10 @@ impl GpuState {
             config,
             size,
             depth_texture: depth_view,
-            _particle_buffer: particle_buffer,
-            _vertex_buffer: vertex_buffer,
+            particle_buffer,
             camera_buffer,
             _size_buffer: size_buffer,
-            compute_pipeline,
             render_pipeline,
-            compute_bind_group,
             render_bind_group,
             camera,
             frame_times: Vec::with_capacity(100),
@@ -610,11 +495,10 @@ impl GpuState {
         let fps = 1000.0 / avg_frame_time;
 
         // Update camera buffer
-        let camera_uniform = self.camera.to_uniform();
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
-            bytemuck::cast_slice(&[camera_uniform]),
+            bytemuck::cast_slice(&[self.camera.to_uniform()]),
         );
 
         let output = self.surface.get_current_texture()?;
@@ -628,22 +512,6 @@ impl GpuState {
                 label: Some("Render Encoder"),
             });
 
-        // Compute pass: Generate billboard quads
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Compute Pass"),
-                timestamp_writes: None,
-            });
-
-            compute_pass.set_pipeline(&self.compute_pipeline);
-            compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
-
-            let workgroup_size = 64;
-            let workgroup_count = (PARTICLE_COUNT + workgroup_size - 1) / workgroup_size;
-            compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
-        }
-
-        // Render pass: Draw the quads
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -678,7 +546,8 @@ impl GpuState {
 
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.render_bind_group, &[]);
-            render_pass.draw(0..(PARTICLE_COUNT * 6), 0..1);
+            // Draw 6 vertices per particle using instancing
+            render_pass.draw(0..6, 0..PARTICLE_COUNT);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

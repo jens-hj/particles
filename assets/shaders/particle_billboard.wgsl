@@ -3,22 +3,32 @@
 
 struct Camera {
     view_proj: mat4x4<f32>,
+    position: vec3<f32>,
+    _padding: f32,
 }
 
 @group(0) @binding(0)
 var<uniform> camera: Camera;
 
-struct QuadVertex {
+struct Particle {
     position: vec3<f32>,
     _padding1: f32,
     color: vec3<f32>,
     _padding2: f32,
-    uv: vec2<f32>,
-    _padding3: vec2<f32>,
 }
 
 @group(0) @binding(1)
-var<storage, read> vertices: array<QuadVertex>;
+var<storage, read> particles: array<Particle>;
+
+struct ParticleSizeUniform {
+    size: f32,
+    _padding1: f32,
+    _padding2: f32,
+    _padding3: f32,
+}
+
+@group(0) @binding(2)
+var<uniform> particle_size: ParticleSizeUniform;
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -27,13 +37,49 @@ struct VertexOutput {
 }
 
 @vertex
-fn vertex(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
-    let vertex_data = vertices[vertex_index];
+fn vertex(
+    @builtin(vertex_index) vertex_index: u32,
+    @builtin(instance_index) instance_index: u32
+) -> VertexOutput {
+    let particle = particles[instance_index];
+
+    // Generate quad vertices on the fly
+    var uv = vec2<f32>(0.0, 0.0);
+    var pos_offset = vec2<f32>(0.0, 0.0);
+
+    switch (vertex_index) {
+        case 0u, 3u: {
+            uv = vec2<f32>(0.0, 0.0);
+            pos_offset = vec2<f32>(-1.0, -1.0);
+        }
+        case 1u: {
+            uv = vec2<f32>(1.0, 0.0);
+            pos_offset = vec2<f32>(1.0, -1.0);
+        }
+        case 2u, 4u: {
+            uv = vec2<f32>(1.0, 1.0);
+            pos_offset = vec2<f32>(1.0, 1.0);
+        }
+        case 5u: {
+            uv = vec2<f32>(0.0, 1.0);
+            pos_offset = vec2<f32>(-1.0, 1.0);
+        }
+        default: {}
+    }
+
+    // Billboard calculation
+    let to_camera = normalize(camera.position - particle.position);
+    let up = vec3<f32>(0.0, 1.0, 0.0);
+    let right = normalize(cross(up, to_camera));
+    let billboard_up = cross(to_camera, right);
+
+    let size = particle_size.size;
+    let world_pos = particle.position + (right * pos_offset.x + billboard_up * pos_offset.y) * size;
 
     var out: VertexOutput;
-    out.clip_position = camera.view_proj * vec4<f32>(vertex_data.position, 1.0);
-    out.uv = vertex_data.uv;
-    out.color = vertex_data.color;
+    out.clip_position = camera.view_proj * vec4<f32>(world_pos, 1.0);
+    out.uv = uv;
+    out.color = particle.color;
     return out;
 }
 
