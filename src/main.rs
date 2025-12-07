@@ -43,7 +43,7 @@ struct Particle {
 struct CameraUniform {
     view_proj: [[f32; 4]; 4],
     position: [f32; 3],
-    pixels_per_unit_height: f32,
+    _padding: f32,
 }
 
 // Particle size uniform
@@ -64,7 +64,6 @@ struct Camera {
     fovy: f32,
     znear: f32,
     zfar: f32,
-    height: f32,
 }
 
 impl Camera {
@@ -80,7 +79,6 @@ impl Camera {
             fovy: 45.0_f32.to_radians(),
             znear: 0.1,
             zfar: 100000.0,
-            height: height as f32,
         }
     }
 
@@ -126,16 +124,10 @@ impl Camera {
     }
 
     fn to_uniform(&self) -> CameraUniform {
-        // Calculate pixels per unit at unit distance (distance = 1.0)
-        // height_at_distance_1 = 2.0 * tan(fovy / 2.0)
-        // pixels_per_unit = screen_height / height_at_distance_1
-        let height_at_unit_dist = 2.0 * (self.fovy * 0.5).tan();
-        let pixels_per_unit_height = self.height / height_at_unit_dist;
-
         CameraUniform {
             view_proj: self.build_view_projection_matrix().to_cols_array_2d(),
             position: self.position().to_array(),
-            pixels_per_unit_height,
+            _padding: 0.0,
         }
     }
 }
@@ -494,7 +486,6 @@ impl GpuState {
             self.depth_texture = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
             self.camera.aspect = self.config.width as f32 / self.config.height as f32;
-            self.camera.height = self.config.height as f32;
         }
     }
 

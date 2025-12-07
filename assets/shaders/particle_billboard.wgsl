@@ -4,7 +4,7 @@
 struct Camera {
     view_proj: mat4x4<f32>,
     position: vec3<f32>,
-    pixels_per_unit_height: f32,
+    _padding: f32,
 }
 
 @group(0) @binding(0)
@@ -34,7 +34,6 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) color: vec3<f32>,
-    @location(2) alpha: f32,
 }
 
 @vertex
@@ -69,33 +68,18 @@ fn vertex(
     }
 
     // Billboard calculation
-    let dist = distance(camera.position, particle.position);
     let to_camera = normalize(camera.position - particle.position);
-
     let up = vec3<f32>(0.0, 1.0, 0.0);
     let right = normalize(cross(up, to_camera));
     let billboard_up = cross(to_camera, right);
 
-    var size = particle_size.size;
-    var alpha = 1.0;
-
-    // Subpixel rendering: if particle projects to less than 1px, clamp size and reduce alpha
-    let projected_radius_px = (size / dist) * camera.pixels_per_unit_height;
-    let min_radius_px = 0.5; // Minimum 1 pixel diameter
-
-    if (projected_radius_px < min_radius_px) {
-        let scale = min_radius_px / projected_radius_px;
-        size = size * scale;
-        alpha = 1.0 / (scale * scale);
-    }
-
+    let size = particle_size.size;
     let world_pos = particle.position + (right * pos_offset.x + billboard_up * pos_offset.y) * size;
 
     var out: VertexOutput;
     out.clip_position = camera.view_proj * vec4<f32>(world_pos, 1.0);
     out.uv = uv;
     out.color = particle.color;
-    out.alpha = alpha;
     return out;
 }
 
@@ -109,5 +93,5 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    return vec4<f32>(input.color, input.alpha);
+    return vec4<f32>(input.color, 1.0);
 }
