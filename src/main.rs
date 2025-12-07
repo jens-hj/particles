@@ -141,7 +141,7 @@ struct GpuState {
     depth_texture: wgpu::TextureView,
 
     // Buffers
-    _particle_buffer: wgpu::Buffer,
+    particle_buffers: Vec<wgpu::Buffer>,
     camera_buffer: wgpu::Buffer,
     _size_buffer: wgpu::Buffer,
 
@@ -149,7 +149,7 @@ struct GpuState {
     render_pipeline: wgpu::RenderPipeline,
 
     // Bind groups
-    render_bind_group: wgpu::BindGroup,
+    render_bind_groups: Vec<wgpu::BindGroup>,
 
     // State
     camera: Camera,
@@ -186,8 +186,8 @@ impl GpuState {
 
         // Create device and queue with higher buffer limits for large particle counts
         let mut limits = wgpu::Limits::default();
-        limits.max_storage_buffer_binding_size = u32::MAX; // ~4 GB
-        limits.max_buffer_size = 4u64 * 1024 * 1024 * 1024; // 4 GB
+        limits.max_storage_buffer_binding_size = 1024 * 1024 * 1024; // 1 GB
+        limits.max_buffer_size = 1024 * 1024 * 1024; // 1 GB
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
@@ -283,12 +283,18 @@ impl GpuState {
             })
             .collect();
 
-        // Create particle buffer
-        let particle_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Particle Buffer"),
-            contents: bytemuck::cast_slice(&particles),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
+        // Create particle buffers in chunks
+        const CHUNK_SIZE: usize = 20_000_000; // 20M particles * 32 bytes = 640MB
+        let mut particle_buffers = Vec::new();
+
+        for (i, chunk) in particles.chunks(CHUNK_SIZE).enumerate() {
+            let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("Particle Buffer {}", i)),
+                contents: bytemuck::cast_slice(chunk),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+            particle_buffers.push(buffer);
+        }
 
         // Create camera
         let camera = Camera::new(size.width, size.height);
@@ -412,25 +418,29 @@ impl GpuState {
             cache: None,
         });
 
-        // Create render bind group
-        let render_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Render Bind Group"),
-            layout: &render_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: particle_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: size_buffer.as_entire_binding(),
-                },
-            ],
-        });
+        // Create render bind groups (one per chunk)
+        let mut render_bind_groups = Vec::new();
+        for (i, buffer) in particle_buffers.iter().enumerate() {
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(&format!("Render Bind Group {}", i)),
+                layout: &render_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: camera_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: size_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+            render_bind_groups.push(bind_group);
+        }
 
         println!("✓ wgpu initialized: {} particles", PARTICLE_COUNT);
 
@@ -441,11 +451,11 @@ impl GpuState {
             config,
             size,
             depth_texture: depth_view,
-            _particle_buffer: particle_buffer,
+            particle_buffers,
             camera_buffer,
             _size_buffer: size_buffer,
             render_pipeline,
-            render_bind_group,
+            render_bind_groups,
             camera,
             frame_times: Vec::with_capacity(100),
             last_frame_time: Instant::now(),
@@ -545,9 +555,20 @@ impl GpuState {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.render_bind_group, &[]);
-            // Draw 6 vertices per particle using instancing
-            render_pass.draw(0..6, 0..PARTICLE_COUNT);
+
+            // Draw chunks
+            const CHUNK_SIZE: u32 = 20_000_000;
+            for (i, bind_group) in self.render_bind_groups.iter().enumerate() {
+                render_pass.set_bind_group(0, bind_group, &[]);
+
+                let start_instance = (i as u32) * CHUNK_SIZE;
+                let remaining = PARTICLE_COUNT.saturating_sub(start_instance);
+                let count = remaining.min(CHUNK_SIZE);
+
+                if count > 0 {
+                    render_pass.draw(0..6, 0..count);
+                }
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
