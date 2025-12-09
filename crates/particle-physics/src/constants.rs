@@ -1,0 +1,71 @@
+//! Physical constants for particle simulation
+//!
+//! These are simplified constants scaled for real-time visualization while
+//! maintaining relative physical relationships.
+
+/// Speed of light in simulation units
+pub const C: f32 = 1.0;
+
+/// Gravitational constant (extremely weak, may not be visible at particle scale)
+pub const G: f32 = 6.674e-11;
+
+/// Coulomb constant for electromagnetic force (k = 1/(4πε₀))
+/// Scaled for visualization
+pub const K_ELECTRIC: f32 = 8.99;
+
+/// Strong force coupling constant
+/// In QCD this is αs ≈ 0.1-1.0 depending on energy scale
+pub const ALPHA_STRONG: f32 = 0.3;
+
+/// Strong force confinement strength (linear term in Cornell potential)
+/// This creates the "string" that confines quarks
+pub const STRONG_CONFINEMENT: f32 = 1.0;
+
+/// Strong force short-range strength (Coulomb-like term)
+pub const STRONG_SHORT_RANGE: f32 = 0.5;
+
+/// Weak force coupling constant (much weaker than electromagnetic)
+pub const G_WEAK: f32 = 1.0e-5;
+
+/// Weak force range (very short, ~10^-18 m in reality)
+/// In simulation units, this limits weak force to very close range
+pub const WEAK_FORCE_RANGE: f32 = 0.1;
+
+/// Elementary charge (for quarks: +2/3 or -1/3, for electrons: -1)
+pub const E_CHARGE: f32 = 1.0;
+
+/// Quark mass (simplified - in reality up ~2.3 MeV, down ~4.8 MeV)
+/// Using simulation-friendly values
+pub const QUARK_UP_MASS: f32 = 0.002;
+pub const QUARK_DOWN_MASS: f32 = 0.005;
+
+/// Electron mass (in simulation units)
+pub const ELECTRON_MASS: f32 = 0.511;
+
+/// Proton mass (should emerge from quark binding, but used for reference)
+pub const PROTON_MASS: f32 = 938.0;
+
+/// Neutron mass
+pub const NEUTRON_MASS: f32 = 940.0;
+
+/// Damping factor for numerical stability
+pub const DAMPING: f32 = 0.995;
+
+/// Softening parameter to prevent singularities at r→0
+pub const SOFTENING: f32 = 0.01;
+
+// Particle sizes for visualization (scaled for visibility)
+/// Quark size (very small, ~10^-18 m in reality)
+pub const QUARK_SIZE: f32 = 0.3;
+
+/// Electron size (~10^-15 m classical radius)
+pub const ELECTRON_SIZE: f32 = 0.8;
+
+/// Gluon size (force carrier, similar to photons)
+pub const GLUON_SIZE: f32 = 0.5;
+
+/// Proton size (~10^-15 m, 1 femtometer)
+pub const PROTON_SIZE: f32 = 2.0;
+
+/// Neutron size (similar to proton)
+pub const NEUTRON_SIZE: f32 = 2.0;

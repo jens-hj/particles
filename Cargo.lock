@@ -1162,12 +1162,42 @@ dependencies = [
 ]
 
 [[package]]
-name = "particles"
+name = "particle-physics"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "glam",
+]
+
+[[package]]
+name = "particle-renderer"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "catppuccin",
  "glam",
+ "particle-physics",
+ "wgpu",
+]
+
+[[package]]
+name = "particle-simulation"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "glam",
+ "particle-physics",
+ "wgpu",
+]
+
+[[package]]
+name = "particles"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "particle-physics",
+ "particle-renderer",
+ "particle-simulation",
  "pollster",
  "rand",
  "wgpu",

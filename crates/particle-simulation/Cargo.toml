@@ -1,0 +1,12 @@
+[package]
+name = "particle-simulation"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+particle-physics = { path = "../particle-physics" }
+wgpu.workspace = true
+bytemuck.workspace = true
+glam.workspace = true

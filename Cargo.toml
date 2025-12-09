@@ -1,12 +1,19 @@
-[package]
-name = "particles"
+[workspace]
+members = [
+    "crates/particle-physics",
+    "crates/particle-simulation",
+    "crates/particle-renderer",
+]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
 license = "MIT OR Apache-2.0"
 
-[dependencies]
-# Core wgpu for GPU programming (latest)
+[workspace.dependencies]
+# Core wgpu for GPU programming
 wgpu = "27"
 # Window creation and event handling
 winit = "0.30"
@@ -20,6 +27,23 @@ rand = "0.9"
 bytemuck = { version = "1.24", features = ["derive"] }
 # Catppuccin color palette
 catppuccin = "2.6"
+
+[package]
+name = "particles"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+particle-physics = { path = "crates/particle-physics" }
+particle-simulation = { path = "crates/particle-simulation" }
+particle-renderer = { path = "crates/particle-renderer" }
+wgpu.workspace = true
+winit.workspace = true
+pollster.workspace = true
+glam.workspace = true
+rand.workspace = true
 
 [profile.dev]
 opt-level = 1

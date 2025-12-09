@@ -70,6 +70,12 @@ fn vertex(
 
     var out: VertexOutput;
     out.clip_position = camera.view_proj * vec4<f32>(world_pos, 1.0);
+
+    // // Add tiny depth offset based on instance index to prevent z-fighting
+    // // for particles at exactly the same position
+    // let depth_offset = f32(instance_index) * 0.00000001;
+    // out.clip_position.z += depth_offset;
+
     out.uv = uv;
     out.color = particle.color;
     out.alpha = particle.alpha;
