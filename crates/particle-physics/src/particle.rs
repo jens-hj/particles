@@ -71,7 +71,12 @@ impl Particle {
     pub fn new_down_quark(position: Vec3, color: ColorCharge) -> Self {
         let pos = position.to_array();
         Self {
-            position: [pos[0], pos[1], pos[2], ParticleType::QuarkDown as u32 as f32],
+            position: [
+                pos[0],
+                pos[1],
+                pos[2],
+                ParticleType::QuarkDown as u32 as f32,
+            ],
             velocity: [0.0, 0.0, 0.0, crate::constants::QUARK_DOWN_MASS],
             data: [-1.0 / 3.0, crate::constants::QUARK_SIZE, 0.0, 0.0], // charge, size, padding
             color_and_flags: [color as u32, 0, 0, 0], // color_charge, flags, padding
@@ -88,7 +93,7 @@ impl Particle {
             color_and_flags: [0, 0, 0, 0], // electrons don't have color charge
         }
     }
-    
+
     /// Get particle type (stored in position.w)
     pub fn get_type(&self) -> Option<ParticleType> {
         match self.position[3] as u32 {
@@ -101,7 +106,7 @@ impl Particle {
             _ => None,
         }
     }
-    
+
     /// Get color charge
     pub fn get_color(&self) -> Option<ColorCharge> {
         match self.color_and_flags[0] {
@@ -119,3 +124,22 @@ impl Particle {
 // Safety: Particle is repr(C) and all fields are Pod-safe types (f32, u32)
 // The padding fields are explicitly zeroed and don't affect safety
 unsafe impl bytemuck::Pod for Particle {}
+
+/// Hadron structure for visualization
+/// Represents a bound state of quarks (Baryon or Meson)
+#[repr(C)]
+#[derive(Clone, Copy, Zeroable)]
+pub struct Hadron {
+    /// Indices of constituent particles (up to 3)
+    pub p1: u32,
+    pub p2: u32,
+    pub p3: u32,
+
+    /// Type of hadron (0=Meson, 1=Proton, 2=Neutron, etc.)
+    pub type_id: u32,
+
+    /// Center of mass (xyz) and radius (w)
+    pub center: [f32; 4],
+}
+
+unsafe impl bytemuck::Pod for Hadron {}

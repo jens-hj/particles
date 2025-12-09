@@ -4,7 +4,7 @@
 
 use glam::Vec3;
 use particle_physics::{ColorCharge, Particle};
-use particle_renderer::{Camera, ParticleRenderer};
+use particle_renderer::{Camera, HadronRenderer, ParticleRenderer};
 use particle_simulation::ParticleSimulation;
 use rand::Rng;
 use std::sync::Arc;
@@ -85,6 +85,7 @@ struct GpuState {
 
     simulation: ParticleSimulation,
     renderer: ParticleRenderer,
+    hadron_renderer: HadronRenderer,
     camera: Camera,
 
     frame_times: Vec<f32>,
@@ -160,6 +161,14 @@ impl GpuState {
         let renderer = ParticleRenderer::new(&device, &config);
         log::info!("✓ Renderer initialized");
 
+        // Create hadron renderer
+        let dummy_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Dummy Layout"),
+            entries: &[],
+        });
+        let hadron_renderer = HadronRenderer::new(&device, config.format, &dummy_layout);
+        log::info!("✓ Hadron Renderer initialized");
+
         // Create camera
         let camera = Camera::new(size.width, size.height);
 
@@ -170,6 +179,7 @@ impl GpuState {
             config,
             simulation,
             renderer,
+            hadron_renderer,
             camera,
             frame_times: Vec::with_capacity(100),
             last_frame_time: Instant::now(),
@@ -218,6 +228,52 @@ impl GpuState {
             self.simulation.particle_count(),
             PARTICLE_SCALE,
         );
+
+        // Render Hadrons
+        {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Hadron Render Encoder"),
+                });
+
+            {
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Hadron Render Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.renderer.depth_texture,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                self.hadron_renderer.render(
+                    &self.device,
+                    &mut render_pass,
+                    &self.renderer.camera_buffer,
+                    self.simulation.hadron_buffer(),
+                    self.simulation.particle_buffer(),
+                    self.simulation.hadron_count_buffer(),
+                    self.simulation.particle_count(),
+                );
+            }
+
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
 
         output.present();
         Ok((fps, avg_frame_time))

@@ -68,7 +68,7 @@ pub const SOFTENING: f32 = 0.01;
 pub const QUARK_SIZE: f32 = 0.03;
 
 /// Electron size (~10^-15 m classical radius)
-pub const ELECTRON_SIZE: f32 = 0.8;
+pub const ELECTRON_SIZE: f32 = 0.1;
 
 /// Gluon size (force carrier, similar to photons)
 pub const GLUON_SIZE: f32 = 0.5;
