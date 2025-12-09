@@ -2,7 +2,10 @@
 //!
 //! Simulates quarks, electrons, and the four fundamental forces.
 
+mod gui;
+
 use glam::Vec3;
+use gui::{Gui, UiState};
 use particle_physics::{ColorCharge, Particle};
 use particle_renderer::{Camera, HadronRenderer, ParticleRenderer};
 use particle_simulation::ParticleSimulation;
@@ -17,7 +20,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-const PARTICLE_COUNT: usize = 1000;
+const PARTICLE_COUNT: usize = 10000;
 const SPAWN_RADIUS: f32 = 50.0;
 const PARTICLE_SCALE: f32 = 3.0; // Global scale multiplier for visibility
 
@@ -88,6 +91,10 @@ struct GpuState {
     hadron_renderer: HadronRenderer,
     camera: Camera,
 
+    gui: Gui,
+    ui_state: UiState,
+    hadron_count_staging_buffer: wgpu::Buffer,
+
     frame_times: Vec<f32>,
     last_frame_time: Instant,
 }
@@ -118,14 +125,15 @@ impl GpuState {
 
         // Create device and queue
         let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("Device"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: wgpu::MemoryHints::default(),
-                experimental_features: Default::default(),
-                trace: Default::default(),
-            })
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: Some("Device"),
+                    required_features: wgpu::Features::empty(),
+                    required_limits: wgpu::Limits::default(),
+                    memory_hints: wgpu::MemoryHints::default(),
+                },
+                None,
+            )
             .await
             .unwrap();
 
@@ -172,6 +180,18 @@ impl GpuState {
         // Create camera
         let camera = Camera::new(size.width, size.height);
 
+        // Create GUI
+        let gui = Gui::new(&device, config.format, &window);
+        let ui_state = UiState::default();
+
+        // Create staging buffer for reading hadron count
+        let hadron_count_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Hadron Count Staging Buffer"),
+            size: 4,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         Self {
             surface,
             device,
@@ -181,6 +201,9 @@ impl GpuState {
             renderer,
             hadron_renderer,
             camera,
+            gui,
+            ui_state,
+            hadron_count_staging_buffer,
             frame_times: Vec::with_capacity(100),
             last_frame_time: Instant::now(),
         }
@@ -196,7 +219,7 @@ impl GpuState {
         }
     }
 
-    fn render(&mut self) -> Result<(f32, f32), wgpu::SurfaceError> {
+    fn render(&mut self, window: &Window) -> Result<(f32, f32), wgpu::SurfaceError> {
         // Track frame time
         let now = Instant::now();
         let frame_time = (now - self.last_frame_time).as_secs_f32() * 1000.0;
@@ -210,8 +233,45 @@ impl GpuState {
         let avg_frame_time = self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32;
         let fps = 1000.0 / avg_frame_time;
 
+        // Update physics parameters from UI
+        self.simulation.update_params(&self.ui_state.physics_params);
+
         // Step simulation
         self.simulation.step();
+
+        // Read back hadron count
+        {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Readback Encoder"),
+                });
+
+            encoder.copy_buffer_to_buffer(
+                self.simulation.hadron_count_buffer(),
+                0,
+                &self.hadron_count_staging_buffer,
+                0,
+                4,
+            );
+
+            self.queue.submit(std::iter::once(encoder.finish()));
+
+            let slice = self.hadron_count_staging_buffer.slice(..);
+            slice.map_async(wgpu::MapMode::Read, |_| {});
+            self.device.poll(wgpu::Maintain::Wait);
+
+            {
+                let data = slice.get_mapped_range();
+                self.ui_state.hadron_count = *bytemuck::from_bytes::<u32>(&data);
+            }
+            self.hadron_count_staging_buffer.unmap();
+        }
+
+        // Update UI state
+        self.ui_state.fps = fps;
+        self.ui_state.frame_time = avg_frame_time;
+        self.ui_state.particle_count = PARTICLE_COUNT;
 
         // Render
         let output = self.surface.get_current_texture()?;
@@ -247,7 +307,6 @@ impl GpuState {
                             load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
                         },
-                        depth_slice: None,
                     })],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &self.renderer.depth_texture,
@@ -269,8 +328,30 @@ impl GpuState {
                     self.simulation.particle_buffer(),
                     self.simulation.hadron_count_buffer(),
                     self.simulation.particle_count(),
+                    self.ui_state.show_shells,
+                    self.ui_state.show_bonds,
                 );
             }
+
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
+
+        // Render GUI
+        {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("GUI Encoder"),
+                });
+
+            self.gui.render(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                window,
+                &view,
+                &mut self.ui_state,
+            );
 
             self.queue.submit(std::iter::once(encoder.finish()));
         }
@@ -306,6 +387,13 @@ impl ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        // Handle GUI events
+        if let (Some(gpu_state), Some(window)) = (&mut self.gpu_state, &self.window) {
+            if gpu_state.gui.handle_event(window, &event) {
+                return;
+            }
+        }
+
         match event {
             WindowEvent::CloseRequested
             | WindowEvent::KeyboardInput {
@@ -361,7 +449,7 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 if let (Some(window), Some(gpu_state)) = (&self.window, &mut self.gpu_state) {
-                    match gpu_state.render() {
+                    match gpu_state.render(window) {
                         Ok((fps, frame_time)) => {
                             window.set_title(&format!(
                                 "Particle Physics - {:.0} FPS ({:.2}ms) - {} particles",

@@ -14,7 +14,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 # Core wgpu for GPU programming
-wgpu = "27"
+wgpu = "24.0"
 # Window creation and event handling
 winit = "0.30"
 # Async runtime for wgpu initialization
@@ -30,6 +30,10 @@ catppuccin = "2.6"
 # Logging
 log = "0.4"
 env_logger = "0.11"
+# UI
+egui = "0.31"
+egui-wgpu = "0.31"
+egui-winit = "0.31"
 
 [package]
 name = "particles"
@@ -50,6 +54,9 @@ rand.workspace = true
 log.workspace = true
 env_logger.workspace = true
 bytemuck.workspace = true
+egui.workspace = true
+egui-wgpu.workspace = true
+egui-winit.workspace = true
 
 [profile.dev]
 opt-level = 1

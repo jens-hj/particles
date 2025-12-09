@@ -1,18 +1,15 @@
 // Compute shader for calculating forces between particles
 // Implements the four fundamental forces on GPU
 
-// Physical constants (matching constants.rs)
-const G: f32 = 6.674e-11;
-const K_ELECTRIC: f32 = 8.99;
-const STRONG_SHORT_RANGE: f32 = 0.5;
-const STRONG_CONFINEMENT: f32 = 1.0;
-const STRONG_RANGE: f32 = 3.0;      // Cutoff range for strong force
-const CORE_REPULSION: f32 = 150.0;  // Strength of short-range repulsion
-const CORE_RADIUS: f32 = 0.35;      // Radius for hard-core repulsion
-const G_WEAK: f32 = 1.0e-5;
-const WEAK_FORCE_RANGE: f32 = 0.1;
-const SOFTENING: f32 = 0.01; // Reduced softening to allow short-range repulsion
-const MAX_FORCE: f32 = 50.0; // Clamp maximum force to prevent explosions
+struct PhysicsParams {
+    constants: vec4<f32>,    // x: G, y: K_electric, z: G_weak, w: weak_force_range
+    strong_force: vec4<f32>, // x: strong_short_range, y: strong_confinement, z: strong_range, w: padding
+    repulsion: vec4<f32>,    // x: core_repulsion, y: core_radius, z: softening, w: max_force
+    integration: vec4<f32>,  // x: dt, y: damping, z: padding, w: padding
+}
+
+@group(0) @binding(2)
+var<uniform> params: PhysicsParams;
 
 // Particle structure (must match Rust struct)
 // Using vec4 for ALL fields to ensure perfect 16-byte alignment
@@ -55,15 +52,15 @@ fn color_charges_attract(c1: u32, c2: u32) -> bool {
 // Helper to clamp force magnitude
 fn clamp_force(f: vec3<f32>) -> vec3<f32> {
     let len = length(f);
-    if (len > MAX_FORCE) {
-        return normalize(f) * MAX_FORCE;
+    if (len > params.repulsion.w) {
+        return normalize(f) * params.repulsion.w;
     }
     return f;
 }
 
 // Calculate gravitational force
 fn gravitational_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f32> {
-    let force_mag = G * p1.velocity.w * p2.velocity.w / (r * r); // mass in .w
+    let force_mag = params.constants.x * p1.velocity.w * p2.velocity.w / (r * r); // mass in .w
     return normalize(r_vec) * force_mag;
 }
 
@@ -72,7 +69,7 @@ fn gravitational_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> 
 // Negative product (opposite charges) = attractive force (towards p2)
 fn electromagnetic_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f32> {
     let charge_product = p1.data.x * p2.data.x; // charge in data.x
-    let force_mag = K_ELECTRIC * abs(charge_product) / (r * r);
+    let force_mag = params.constants.y * abs(charge_product) / (r * r);
 
     // If charges have same sign (product > 0), repel (force away from p2)
     // If charges have opposite signs (product < 0), attract (force towards p2)
@@ -91,13 +88,13 @@ fn strong_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f3
     }
 
     // Short-range repulsion (Hard core)
-    if r < CORE_RADIUS {
-        let push = CORE_REPULSION * (1.0 - r / CORE_RADIUS);
+    if r < params.repulsion.y {
+        let push = params.repulsion.x * (1.0 - r / params.repulsion.y);
         return -normalize(r_vec) * push;
     }
 
     // Range cutoff
-    if r > STRONG_RANGE {
+    if r > params.strong_force.z {
         return vec3<f32>(0.0, 0.0, 0.0);
     }
 
@@ -109,8 +106,8 @@ fn strong_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f3
     }
 
     // Cornell potential: -a/r² + b
-    let short_range = STRONG_SHORT_RANGE / (r * r);
-    let confinement = STRONG_CONFINEMENT;
+    let short_range = params.strong_force.x / (r * r);
+    let confinement = params.strong_force.y;
     let force_mag = color_factor * (short_range + confinement);
 
     return normalize(r_vec) * force_mag;
@@ -118,12 +115,12 @@ fn strong_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f3
 
 // Calculate weak force (Yukawa potential)
 fn weak_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f32> {
-    if r > WEAK_FORCE_RANGE * 3.0 {
+    if r > params.constants.w * 3.0 {
         return vec3<f32>(0.0, 0.0, 0.0);
     }
 
-    let exp_term = exp(-r / WEAK_FORCE_RANGE);
-    let force_mag = G_WEAK * exp_term / (r * r);
+    let exp_term = exp(-r / params.constants.w);
+    let force_mag = params.constants.z * exp_term / (r * r);
 
     return normalize(r_vec) * force_mag;
 }
@@ -151,7 +148,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let r_sq = dot(r_vec, r_vec);
         let r = sqrt(r_sq);
 
-        if r < SOFTENING {
+        if r < params.repulsion.z {
             continue;
         }
 

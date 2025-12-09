@@ -10,3 +10,4 @@ particle-physics = { path = "../particle-physics" }
 wgpu.workspace = true
 bytemuck.workspace = true
 glam.workspace = true
+log.workspace = true

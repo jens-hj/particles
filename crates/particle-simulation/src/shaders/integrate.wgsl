@@ -1,8 +1,15 @@
 // Compute shader for integrating particle motion
 // Uses Velocity Verlet integration for better energy conservation
 
-const DAMPING: f32 = 0.995;
-const DT: f32 = 0.001; // Time step
+struct PhysicsParams {
+    constants: vec4<f32>,    // x: G, y: K_electric, z: G_weak, w: weak_force_range
+    strong_force: vec4<f32>, // x: strong_short_range, y: strong_confinement, z: strong_range, w: padding
+    repulsion: vec4<f32>,    // x: core_repulsion, y: core_radius, z: softening, w: max_force
+    integration: vec4<f32>,  // x: dt, y: damping, z: padding, w: padding
+}
+
+@group(0) @binding(2)
+var<uniform> params: PhysicsParams;
 
 struct Particle {
     position: vec4<f32>,        // xyz = position, w = particle_type
@@ -40,13 +47,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // Velocity Verlet integration
     // v(t + dt) = v(t) + a(t) * dt
-    let new_velocity = particle.velocity.xyz + acceleration * DT;
+    let new_velocity = particle.velocity.xyz + acceleration * params.integration.x;
 
     // Apply damping for numerical stability
-    let damped_velocity = new_velocity * DAMPING;
+    let damped_velocity = new_velocity * params.integration.y;
 
     // x(t + dt) = x(t) + v(t + dt) * dt
-    let new_position = particle.position.xyz + damped_velocity * DT;
+    let new_position = particle.position.xyz + damped_velocity * params.integration.x;
 
     // Update particle (preserve .w components)
     particle.position = vec4<f32>(new_position, particle.position.w);

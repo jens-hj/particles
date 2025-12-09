@@ -1,0 +1,54 @@
+//! Physics parameters for runtime tuning
+
+use bytemuck::{Pod, Zeroable};
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub struct PhysicsParams {
+    // Group 1: Fundamental constants
+    // x: G, y: K_electric, z: G_weak, w: weak_force_range
+    pub constants: [f32; 4],
+
+    // Group 2: Strong force
+    // x: strong_short_range, y: strong_confinement, z: strong_range, w: padding
+    pub strong_force: [f32; 4],
+
+    // Group 3: Repulsion & Limits
+    // x: core_repulsion, y: core_radius, z: softening, w: max_force
+    pub repulsion: [f32; 4],
+
+    // Group 4: Integration
+    // x: dt, y: damping, z: padding, w: padding
+    pub integration: [f32; 4],
+}
+
+impl Default for PhysicsParams {
+    fn default() -> Self {
+        Self {
+            constants: [
+                6.674e-11, // G
+                8.99,      // K_electric
+                1.0e-5,    // G_weak
+                0.1,       // weak_force_range
+            ],
+            strong_force: [
+                0.5, // strong_short_range
+                1.0, // strong_confinement
+                3.0, // strong_range
+                0.0, // padding
+            ],
+            repulsion: [
+                150.0, // core_repulsion
+                0.35,  // core_radius
+                0.01,  // softening
+                50.0,  // max_force
+            ],
+            integration: [
+                0.001, // dt
+                0.995, // damping
+                0.0,   // padding
+                0.0,   // padding
+            ],
+        }
+    }
+}

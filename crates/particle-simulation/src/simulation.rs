@@ -1,5 +1,6 @@
 //! GPU-based particle simulation manager
 
+use crate::PhysicsParams;
 use bytemuck::{Pod, Zeroable};
 use particle_physics::{Hadron, Particle};
 use wgpu::util::DeviceExt;
@@ -22,6 +23,7 @@ pub struct ParticleSimulation {
     _force_buffer: wgpu::Buffer,
     hadron_buffer: wgpu::Buffer,
     hadron_count_buffer: wgpu::Buffer,
+    params_buffer: wgpu::Buffer,
 
     // Compute pipelines
     force_pipeline: wgpu::ComputePipeline,
@@ -38,6 +40,7 @@ pub struct ParticleSimulation {
 
 impl ParticleSimulation {
     pub async fn new(device: wgpu::Device, queue: wgpu::Queue, particles: &[Particle]) -> Self {
+        log::info!("Initializing ParticleSimulation...");
         let particle_count = particles.len() as u32;
 
         // Create particle buffer
@@ -77,12 +80,21 @@ impl ParticleSimulation {
         // Create hadron counter buffer
         let hadron_count_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Hadron Count Buffer"),
-            size: 4, // u32
+            size: 32, // u32 + padding (32 bytes due to vec3 alignment rules)
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
+
+        // Create params buffer
+        let params = PhysicsParams::default();
+        let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Physics Params Buffer"),
+            contents: bytemuck::cast_slice(&[params]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        log::info!("Buffers created");
 
         // Load compute shaders
         let force_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -99,6 +111,7 @@ impl ParticleSimulation {
             label: Some("Hadron Detection Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/hadron_detection.wgsl").into()),
         });
+        log::info!("Shaders loaded");
 
         // Create bind group layout for force computation
         let force_bind_group_layout =
@@ -120,6 +133,16 @@ impl ParticleSimulation {
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -148,6 +171,16 @@ impl ParticleSimulation {
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -193,8 +226,10 @@ impl ParticleSimulation {
                     },
                 ],
             });
+        log::info!("Bind group layouts created");
 
         // Create compute pipelines
+        log::info!("Creating force pipeline layout...");
         let force_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Force Pipeline Layout"),
@@ -202,6 +237,7 @@ impl ParticleSimulation {
                 push_constant_ranges: &[],
             });
 
+        log::info!("Creating force pipeline...");
         let force_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Force Pipeline"),
             layout: Some(&force_pipeline_layout),
@@ -211,6 +247,7 @@ impl ParticleSimulation {
             cache: None,
         });
 
+        log::info!("Creating integrate pipeline layout...");
         let integrate_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Integration Pipeline Layout"),
@@ -218,6 +255,7 @@ impl ParticleSimulation {
                 push_constant_ranges: &[],
             });
 
+        log::info!("Creating integrate pipeline...");
         let integrate_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Integration Pipeline"),
             layout: Some(&integrate_pipeline_layout),
@@ -227,6 +265,7 @@ impl ParticleSimulation {
             cache: None,
         });
 
+        log::info!("Creating hadron pipeline layout...");
         let hadron_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Hadron Pipeline Layout"),
@@ -234,6 +273,7 @@ impl ParticleSimulation {
                 push_constant_ranges: &[],
             });
 
+        log::info!("Creating hadron pipeline...");
         let hadron_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Hadron Pipeline"),
             layout: Some(&hadron_pipeline_layout),
@@ -242,6 +282,7 @@ impl ParticleSimulation {
             compilation_options: Default::default(),
             cache: None,
         });
+        log::info!("Pipelines created");
 
         // Create bind groups
         let force_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -255,6 +296,10 @@ impl ParticleSimulation {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: force_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -270,6 +315,10 @@ impl ParticleSimulation {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: force_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -292,6 +341,7 @@ impl ParticleSimulation {
                 },
             ],
         });
+        log::info!("Bind groups created");
 
         Self {
             device,
@@ -300,6 +350,7 @@ impl ParticleSimulation {
             _force_buffer: force_buffer,
             hadron_buffer,
             hadron_count_buffer,
+            params_buffer,
             force_pipeline,
             integrate_pipeline,
             hadron_pipeline,
@@ -347,7 +398,7 @@ impl ParticleSimulation {
         {
             // Reset counter
             self.queue
-                .write_buffer(&self.hadron_count_buffer, 0, &[0u8; 4]);
+                .write_buffer(&self.hadron_count_buffer, 0, &[0u8; 32]);
 
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Hadron Detection Pass"),
@@ -379,5 +430,11 @@ impl ParticleSimulation {
     /// Get reference to hadron count buffer for rendering
     pub fn hadron_count_buffer(&self) -> &wgpu::Buffer {
         &self.hadron_count_buffer
+    }
+
+    /// Update physics parameters
+    pub fn update_params(&self, params: &PhysicsParams) {
+        self.queue
+            .write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[*params]));
     }
 }
