@@ -27,6 +27,9 @@ rand = "0.9"
 bytemuck = { version = "1.24", features = ["derive"] }
 # Catppuccin color palette
 catppuccin = "2.6"
+# Logging
+log = "0.4"
+env_logger = "0.11"
 
 [package]
 name = "particles"
@@ -44,6 +47,9 @@ winit.workspace = true
 pollster.workspace = true
 glam.workspace = true
 rand.workspace = true
+log.workspace = true
+env_logger.workspace = true
+bytemuck.workspace = true
 
 [profile.dev]
 opt-level = 1

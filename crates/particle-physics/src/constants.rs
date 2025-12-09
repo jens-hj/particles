@@ -24,6 +24,15 @@ pub const STRONG_CONFINEMENT: f32 = 1.0;
 /// Strong force short-range strength (Coulomb-like term)
 pub const STRONG_SHORT_RANGE: f32 = 0.5;
 
+/// Cutoff range for strong force
+pub const STRONG_RANGE: f32 = 3.0;
+
+/// Strength of short-range repulsion (hard core)
+pub const CORE_REPULSION: f32 = 150.0;
+
+/// Radius for hard-core repulsion
+pub const CORE_RADIUS: f32 = 0.35;
+
 /// Weak force coupling constant (much weaker than electromagnetic)
 pub const G_WEAK: f32 = 1.0e-5;
 
@@ -56,7 +65,7 @@ pub const SOFTENING: f32 = 0.01;
 
 // Particle sizes for visualization (scaled for visibility)
 /// Quark size (very small, ~10^-18 m in reality)
-pub const QUARK_SIZE: f32 = 0.3;
+pub const QUARK_SIZE: f32 = 0.03;
 
 /// Electron size (~10^-15 m classical radius)
 pub const ELECTRON_SIZE: f32 = 0.8;

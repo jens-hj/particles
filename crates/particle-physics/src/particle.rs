@@ -38,76 +38,60 @@ pub enum ParticleType {
 }
 
 /// GPU-compatible particle structure
-/// Aligned for WGSL struct compatibility
+/// Using vec4 for ALL fields to ensure perfect alignment with WGSL (16-byte aligned)
 #[repr(C)]
 #[derive(Clone, Copy, Zeroable)]
 pub struct Particle {
-    /// Position in 3D space
-    pub position: [f32; 3],
-    /// Particle type (as u32, maps to ParticleType enum)
-    pub particle_type: u32,
+    /// Position (xyz) and particle type (w component)
+    pub position: [f32; 4],
 
-    /// Velocity vector
-    pub velocity: [f32; 3],
-    /// Mass of the particle
-    pub mass: f32,
+    /// Velocity (xyz) and mass (w component)
+    pub velocity: [f32; 4],
 
-    /// Electric charge (in units of elementary charge e)
-    pub charge: f32,
-    /// Color charge (for quarks, 0-5 maps to ColorCharge enum)
-    pub color_charge: u32,
-    /// Flags and additional properties
-    pub flags: u32,
-    /// Size for rendering
-    pub size: f32,
+    /// Data: x = charge, y = size, z/w = unused padding
+    pub data: [f32; 4],
+
+    /// Color and flags: x = color_charge, y = flags, z/w = unused padding
+    pub color_and_flags: [u32; 4],
 }
 
 impl Particle {
     /// Create a new up quark
     pub fn new_up_quark(position: Vec3, color: ColorCharge) -> Self {
+        let pos = position.to_array();
         Self {
-            position: position.to_array(),
-            particle_type: ParticleType::QuarkUp as u32,
-            velocity: [0.0; 3],
-            mass: crate::constants::QUARK_UP_MASS,
-            charge: 2.0 / 3.0, // Up quark has +2/3 e charge
-            color_charge: color as u32,
-            flags: 0,
-            size: crate::constants::QUARK_SIZE,
+            position: [pos[0], pos[1], pos[2], ParticleType::QuarkUp as u32 as f32],
+            velocity: [0.0, 0.0, 0.0, crate::constants::QUARK_UP_MASS],
+            data: [2.0 / 3.0, crate::constants::QUARK_SIZE, 0.0, 0.0], // charge, size, padding
+            color_and_flags: [color as u32, 0, 0, 0], // color_charge, flags, padding
         }
     }
-    
+
     /// Create a new down quark
     pub fn new_down_quark(position: Vec3, color: ColorCharge) -> Self {
+        let pos = position.to_array();
         Self {
-            position: position.to_array(),
-            particle_type: ParticleType::QuarkDown as u32,
-            velocity: [0.0; 3],
-            mass: crate::constants::QUARK_DOWN_MASS,
-            charge: -1.0 / 3.0, // Down quark has -1/3 e charge
-            color_charge: color as u32,
-            flags: 0,
-            size: crate::constants::QUARK_SIZE,
+            position: [pos[0], pos[1], pos[2], ParticleType::QuarkDown as u32 as f32],
+            velocity: [0.0, 0.0, 0.0, crate::constants::QUARK_DOWN_MASS],
+            data: [-1.0 / 3.0, crate::constants::QUARK_SIZE, 0.0, 0.0], // charge, size, padding
+            color_and_flags: [color as u32, 0, 0, 0], // color_charge, flags, padding
         }
     }
-    
+
     /// Create a new electron
     pub fn new_electron(position: Vec3) -> Self {
+        let pos = position.to_array();
         Self {
-            position: position.to_array(),
-            particle_type: ParticleType::Electron as u32,
-            velocity: [0.0; 3],
-            mass: crate::constants::ELECTRON_MASS,
-            charge: -1.0, // Electron has -1 e charge
-            color_charge: 0, // Electrons don't have color charge
-            flags: 0,
-            size: crate::constants::ELECTRON_SIZE,
+            position: [pos[0], pos[1], pos[2], ParticleType::Electron as u32 as f32],
+            velocity: [0.0, 0.0, 0.0, crate::constants::ELECTRON_MASS],
+            data: [-1.0, crate::constants::ELECTRON_SIZE, 0.0, 0.0], // charge, size, padding
+            color_and_flags: [0, 0, 0, 0], // electrons don't have color charge
         }
     }
     
-    /// Get particle type
+    /// Get particle type (stored in position.w)
     pub fn get_type(&self) -> Option<ParticleType> {
-        match self.particle_type {
+        match self.position[3] as u32 {
             0 => Some(ParticleType::QuarkUp),
             1 => Some(ParticleType::QuarkDown),
             2 => Some(ParticleType::Electron),
@@ -120,7 +104,7 @@ impl Particle {
     
     /// Get color charge
     pub fn get_color(&self) -> Option<ColorCharge> {
-        match self.color_charge {
+        match self.color_and_flags[0] {
             0 => Some(ColorCharge::Red),
             1 => Some(ColorCharge::Green),
             2 => Some(ColorCharge::Blue),
