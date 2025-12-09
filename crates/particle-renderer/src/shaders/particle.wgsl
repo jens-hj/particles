@@ -51,7 +51,7 @@ fn particle_color(particle_type: u32, color_charge: u32) -> vec3<f32> {
             return quark_color(color_charge);
         }
         case 2u: {                                          // Electron
-            return srgb_to_linear(vec3<f32>(0.953, 0.545, 0.659)); // Red #f38ba8
+            return srgb_to_linear(vec3<f32>(0.796, 0.651, 0.969)); // Mauve #cba6f7
         }
         case 3u: {                                          // Gluon
             return srgb_to_linear(vec3<f32>(0.976, 0.890, 0.494)); // Yellow (yellow)
