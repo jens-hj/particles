@@ -4,7 +4,7 @@
 struct Camera {
     view_proj: mat4x4<f32>,
     position: vec3<f32>,
-    _padding: f32,
+    particle_size: f32,
 }
 
 @group(0) @binding(0)
@@ -12,28 +12,19 @@ var<uniform> camera: Camera;
 
 struct Particle {
     position: vec3<f32>,
-    _padding1: f32,
+    size: f32,
     color: vec3<f32>,
-    _padding2: f32,
+    alpha: f32,
 }
 
 @group(0) @binding(1)
 var<storage, read> particles: array<Particle>;
 
-struct ParticleSizeUniform {
-    size: f32,
-    _padding1: f32,
-    _padding2: f32,
-    _padding3: f32,
-}
-
-@group(0) @binding(2)
-var<uniform> particle_size: ParticleSizeUniform;
-
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) color: vec3<f32>,
+    @location(2) alpha: f32,
 }
 
 @vertex
@@ -73,13 +64,15 @@ fn vertex(
     let right = normalize(cross(up, to_camera));
     let billboard_up = cross(to_camera, right);
 
-    let size = particle_size.size;
+    // Combine global size with per-particle size multiplier
+    let size = camera.particle_size * particle.size;
     let world_pos = particle.position + (right * pos_offset.x + billboard_up * pos_offset.y) * size;
 
     var out: VertexOutput;
     out.clip_position = camera.view_proj * vec4<f32>(world_pos, 1.0);
     out.uv = uv;
     out.color = particle.color;
+    out.alpha = particle.alpha;
     return out;
 }
 
@@ -93,5 +86,5 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    return vec4<f32>(input.color, 1.0);
+    return vec4<f32>(input.color, input.alpha);
 }

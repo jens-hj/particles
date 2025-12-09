@@ -32,9 +32,9 @@ fn srgb_to_linear(value: u8) -> f64 {
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Particle {
     position: [f32; 3],
-    _padding1: f32,
+    size: f32,
     color: [f32; 3],
-    _padding2: f32,
+    alpha: f32,
 }
 
 // Camera uniform matching shaders
@@ -43,17 +43,7 @@ struct Particle {
 struct CameraUniform {
     view_proj: [[f32; 4]; 4],
     position: [f32; 3],
-    _padding: f32,
-}
-
-// Particle size uniform
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct ParticleSizeUniform {
-    size: f32,
-    _padding1: f32,
-    _padding2: f32,
-    _padding3: f32,
+    particle_size: f32,
 }
 
 struct Camera {
@@ -123,11 +113,11 @@ impl Camera {
         proj * view
     }
 
-    fn to_uniform(&self) -> CameraUniform {
+    fn to_uniform(&self, particle_size: f32) -> CameraUniform {
         CameraUniform {
             view_proj: self.build_view_projection_matrix().to_cols_array_2d(),
             position: self.position().to_array(),
-            _padding: 0.0,
+            particle_size,
         }
     }
 }
@@ -143,7 +133,6 @@ struct GpuState {
     // Buffers
     _particle_buffers: Vec<wgpu::Buffer>,
     camera_buffer: wgpu::Buffer,
-    _size_buffer: wgpu::Buffer,
 
     // Pipelines
     render_pipeline: wgpu::RenderPipeline,
@@ -276,9 +265,9 @@ impl GpuState {
 
                 Particle {
                     position: [x, y, z],
-                    _padding1: 0.0,
+                    size: rng.random_range(0.5f32..1.5f32),
                     color: [r_linear, g_linear, b_linear],
-                    _padding2: 0.0,
+                    alpha: rng.random_range(0.5f32..1.0f32),
                 }
             })
             .collect();
@@ -298,24 +287,11 @@ impl GpuState {
 
         // Create camera
         let camera = Camera::new(size.width, size.height);
-        let camera_uniform = camera.to_uniform();
+        let camera_uniform = camera.to_uniform(PARTICLE_SIZE);
 
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
             contents: bytemuck::cast_slice(&[camera_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        // Create size buffer
-        let size_uniform = ParticleSizeUniform {
-            size: PARTICLE_SIZE,
-            _padding1: 0.0,
-            _padding2: 0.0,
-            _padding3: 0.0,
-        };
-        let size_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Size Buffer"),
-            contents: bytemuck::cast_slice(&[size_uniform]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -351,17 +327,6 @@ impl GpuState {
                         visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    // Particle Size (uniform)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -433,10 +398,6 @@ impl GpuState {
                         binding: 1,
                         resource: buffer.as_entire_binding(),
                     },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: size_buffer.as_entire_binding(),
-                    },
                 ],
             });
             render_bind_groups.push(bind_group);
@@ -453,7 +414,6 @@ impl GpuState {
             depth_texture: depth_view,
             _particle_buffers: particle_buffers,
             camera_buffer,
-            _size_buffer: size_buffer,
             render_pipeline,
             render_bind_groups,
             camera,
@@ -508,7 +468,7 @@ impl GpuState {
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
-            bytemuck::cast_slice(&[self.camera.to_uniform()]),
+            bytemuck::cast_slice(&[self.camera.to_uniform(PARTICLE_SIZE)]),
         );
 
         let output = self.surface.get_current_texture()?;
