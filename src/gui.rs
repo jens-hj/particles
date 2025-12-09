@@ -164,6 +164,7 @@ impl Gui {
             .anchor(egui::Align2::LEFT_BOTTOM, [10.0, -10.0])
             .resizable(false)
             .collapsible(true)
+            .default_open(false)
             .show(ctx, |ui| {
                 ui.heading("Forces");
                 ui.add(
