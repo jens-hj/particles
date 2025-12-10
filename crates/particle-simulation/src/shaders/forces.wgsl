@@ -250,16 +250,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         f += gravitational_force(p1, p2, r_vec, r_sq);
         f += electromagnetic_force(p1, p2, r_vec, r_sq);
 
-        // Electron Exclusion (Pauli-like repulsion from nucleus)
-        if (is_electron(p1.position.w) && is_quark(p2.position.w)) ||
-           (is_quark(p1.position.w) && is_electron(p2.position.w)) {
-            if (r < params.electron.y) {
-                let overlap = params.electron.y - r;
-                let push = params.electron.x * overlap * overlap;
-                f -= normalize(r_vec) * push;
-            }
-        }
-
         let strong = strong_force(p1, p2, r_vec, r);
         f += strong.xyz;
         total_potential += strong.w;
@@ -267,6 +257,29 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         f += weak_force(p1, p2, r_vec, r, r_sq);
 
         total_force += clamp_force(f);
+    }
+
+    // Electron-Hadron Exclusion (electrons repelled from nucleus centers)
+    // This keeps electrons in shells AROUND nuclei, not between nucleons
+    if (is_electron(p1.position.w)) {
+        let num_hadrons = hadron_counter.count;
+
+        for (var h = 0u; h < num_hadrons; h++) {
+            let hadron = hadrons[h];
+            let r_vec_hadron = hadron.center.xyz - p1.position.xyz;
+            let r_sq_hadron = dot(r_vec_hadron, r_vec_hadron);
+            let r_hadron = sqrt(r_sq_hadron);
+
+            // Exclusion radius scales with hadron size
+            let exclusion_dist = hadron.center.w + params.electron.y;
+
+            if (r_hadron < exclusion_dist) {
+                let overlap = exclusion_dist - r_hadron;
+                // Strong quadratic repulsion to keep electrons out of nucleus
+                let push = params.electron.x * overlap * overlap;
+                total_force -= normalize(r_vec_hadron) * push;
+            }
+        }
     }
 
     // Nucleon Forces (Inter-Hadron)
