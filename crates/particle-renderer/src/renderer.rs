@@ -7,13 +7,13 @@ const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 pub struct ParticleRenderer {
     render_pipeline: wgpu::RenderPipeline,
     pub camera_buffer: wgpu::Buffer,
-    bind_group_layout: wgpu::BindGroupLayout,
+    bind_group: wgpu::BindGroup,
     pub depth_texture: wgpu::TextureView,
     surface_config: wgpu::SurfaceConfiguration,
 }
 
 impl ParticleRenderer {
-    pub fn new(device: &wgpu::Device, surface_config: &wgpu::SurfaceConfiguration) -> Self {
+    pub fn new(device: &wgpu::Device, surface_config: &wgpu::SurfaceConfiguration, particle_buffer: &wgpu::Buffer) -> Self {
         // Create camera buffer
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Camera Buffer"),
@@ -54,6 +54,22 @@ impl ParticleRenderer {
                         min_binding_size: None,
                     },
                     count: None,
+                },
+            ],
+        });
+
+        // Create bind group (cached for reuse every frame)
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Particle Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: particle_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -108,7 +124,7 @@ impl ParticleRenderer {
         Self {
             render_pipeline,
             camera_buffer,
-            bind_group_layout,
+            bind_group,
             depth_texture,
             surface_config: surface_config.clone(),
         }
@@ -146,7 +162,7 @@ impl ParticleRenderer {
         queue: &wgpu::Queue,
         surface_view: &wgpu::TextureView,
         camera: &Camera,
-        particle_buffer: &wgpu::Buffer,
+        _particle_buffer: &wgpu::Buffer,
         particle_count: u32,
         particle_size: f32,
         time: f32,
@@ -157,22 +173,6 @@ impl ParticleRenderer {
             0,
             bytemuck::cast_slice(&[camera.to_uniform(particle_size, time)]),
         );
-
-        // Create bind group
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Particle Bind Group"),
-            layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.camera_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: particle_buffer.as_entire_binding(),
-                },
-            ],
-        });
 
         // Render
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -209,7 +209,7 @@ impl ParticleRenderer {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
             render_pass.draw(0..6, 0..particle_count);
         }
 

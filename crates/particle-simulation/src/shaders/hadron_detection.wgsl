@@ -53,10 +53,15 @@ var<storage, read_write> counter: HadronCounter;
 @group(0) @binding(3)
 var<storage, read_write> locks: array<atomic<u32>>;
 
-fn get_dist(p1_idx: u32, p2_idx: u32) -> f32 {
+fn get_dist_sq(p1_idx: u32, p2_idx: u32) -> f32 {
     let pos1 = particles[p1_idx].position.xyz;
     let pos2 = particles[p2_idx].position.xyz;
-    return distance(pos1, pos2);
+    let diff = pos2 - pos1;
+    return dot(diff, diff);
+}
+
+fn get_dist(p1_idx: u32, p2_idx: u32) -> f32 {
+    return sqrt(get_dist_sq(p1_idx, p2_idx));
 }
 
 fn is_quark(p_idx: u32) -> bool {
@@ -123,25 +128,25 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if (my_color == COLOR_RED) {
         var closest_green = 0xFFFFFFFFu;
         var closest_blue = 0xFFFFFFFFu;
-        var min_dist_green = BINDING_DISTANCE;
-        var min_dist_blue = BINDING_DISTANCE;
+        var min_dist_sq_green = BINDING_DISTANCE * BINDING_DISTANCE;
+        var min_dist_sq_blue = BINDING_DISTANCE * BINDING_DISTANCE;
 
         // Find closest Green and Blue neighbors
         for (var i = 0u; i < num_particles; i++) {
             if (i == index || !is_quark(i)) { continue; }
 
-            let d = get_dist(index, i);
-            if (d > BINDING_DISTANCE) { continue; }
+            let d_sq = get_dist_sq(index, i);
+            if (d_sq > BINDING_DISTANCE * BINDING_DISTANCE) { continue; }
 
             let c = get_color(i);
             if (c == COLOR_GREEN) {
-                if (d < min_dist_green) {
-                    min_dist_green = d;
+                if (d_sq < min_dist_sq_green) {
+                    min_dist_sq_green = d_sq;
                     closest_green = i;
                 }
             } else if (c == COLOR_BLUE) {
-                if (d < min_dist_blue) {
-                    min_dist_blue = d;
+                if (d_sq < min_dist_sq_blue) {
+                    min_dist_sq_blue = d_sq;
                     closest_blue = i;
                 }
             }
@@ -149,8 +154,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
         // If both found, check if they are also close to each other
         if (closest_green != 0xFFFFFFFFu && closest_blue != 0xFFFFFFFFu) {
-            let d_gb = get_dist(closest_green, closest_blue);
-            if (d_gb < BINDING_DISTANCE) {
+            let d_gb_sq = get_dist_sq(closest_green, closest_blue);
+            if (d_gb_sq < BINDING_DISTANCE * BINDING_DISTANCE) {
                 // Try to acquire locks
                 let l1 = atomicCompareExchangeWeak(&locks[index], 0u, 1u).exchanged;
                 var l2 = false;
@@ -211,16 +216,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let target_anti = my_color + 3u; // Red(0)->AntiRed(3), etc.
 
         var closest_anti = 0xFFFFFFFFu;
-        var min_dist = BINDING_DISTANCE;
+        var min_dist_sq = BINDING_DISTANCE * BINDING_DISTANCE;
 
         for (var i = 0u; i < num_particles; i++) {
             if (i == index || !is_quark(i)) { continue; }
 
             let c = get_color(i);
             if (c == target_anti) {
-                let d = get_dist(index, i);
-                if (d < min_dist) {
-                    min_dist = d;
+                let d_sq = get_dist_sq(index, i);
+                if (d_sq < min_dist_sq) {
+                    min_dist_sq = d_sq;
                     closest_anti = i;
                 }
             }

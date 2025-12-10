@@ -55,7 +55,7 @@ impl Default for PhysicsParams {
                 0.0005, // dt
                 0.995,  // damping
                 0.0,    // time/seed
-                120.0,  // nucleon_damping
+                1.5,    // nucleon_damping
             ],
             nucleon: [
                 50.0,  // binding_strength

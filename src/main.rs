@@ -98,6 +98,7 @@ struct GpuState {
 
     frame_times: Vec<f32>,
     last_frame_time: Instant,
+    frame_counter: u32,
 }
 
 impl GpuState {
@@ -167,7 +168,7 @@ impl GpuState {
         log::info!("✓ Simulation initialized");
 
         // Create renderer
-        let renderer = ParticleRenderer::new(&device, &config);
+        let renderer = ParticleRenderer::new(&device, &config, simulation.particle_buffer());
         log::info!("✓ Renderer initialized");
 
         // Create hadron renderer
@@ -207,6 +208,7 @@ impl GpuState {
             hadron_count_staging_buffer,
             frame_times: Vec::with_capacity(100),
             last_frame_time: Instant::now(),
+            frame_counter: 0,
         }
     }
 
@@ -234,6 +236,8 @@ impl GpuState {
         let avg_frame_time = self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32;
         let fps = 1000.0 / avg_frame_time;
 
+        self.frame_counter += 1;
+
         // Update physics parameters from UI
         // Pass accumulated time to shader for random seeding (using integration.z padding)
         if !self.ui_state.is_paused || self.ui_state.step_one_frame {
@@ -247,8 +251,8 @@ impl GpuState {
             self.ui_state.step_one_frame = false;
         }
 
-        // Read back hadron count
-        {
+        // Read back hadron count (only every 10 frames to avoid blocking)
+        if self.frame_counter % 10 == 0 {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {

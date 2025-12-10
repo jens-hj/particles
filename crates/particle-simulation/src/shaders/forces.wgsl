@@ -88,17 +88,17 @@ fn clamp_force(f: vec3<f32>) -> vec3<f32> {
 }
 
 // Calculate gravitational force
-fn gravitational_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f32> {
-    let force_mag = params.constants.x * p1.velocity.w * p2.velocity.w / (r * r); // mass in .w
+fn gravitational_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r_sq: f32) -> vec3<f32> {
+    let force_mag = params.constants.x * p1.velocity.w * p2.velocity.w / r_sq; // mass in .w
     return normalize(r_vec) * force_mag;
 }
 
 // Calculate electromagnetic force
 // Positive product (like charges) = repulsive force (away from p2)
 // Negative product (opposite charges) = attractive force (towards p2)
-fn electromagnetic_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f32> {
+fn electromagnetic_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r_sq: f32) -> vec3<f32> {
     let charge_product = p1.data.x * p2.data.x; // charge in data.x
-    let force_mag = params.constants.y * abs(charge_product) / (r * r);
+    let force_mag = params.constants.y * abs(charge_product) / r_sq;
 
     // If charges have same sign (product > 0), repel (force away from p2)
     // If charges have opposite signs (product < 0), attract (force towards p2)
@@ -150,7 +150,7 @@ fn strong_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec4<f3
 }
 
 // Calculate weak force (Yukawa potential)
-fn weak_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f32> {
+fn weak_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32, r_sq: f32) -> vec3<f32> {
     // Gluons don't participate in weak force in this simulation (and are too light)
     if is_gluon(p1.position.w) || is_gluon(p2.position.w) {
         return vec3<f32>(0.0, 0.0, 0.0);
@@ -161,7 +161,7 @@ fn weak_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f32>
     }
 
     let exp_term = exp(-r / params.constants.w);
-    let force_mag = params.constants.z * exp_term / (r * r);
+    let force_mag = params.constants.z * exp_term / r_sq;
 
     return normalize(r_vec) * force_mag;
 }
@@ -238,16 +238,17 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let p2 = particles[i];
         let r_vec = p2.position.xyz - p1.position.xyz; // Use .xyz for position
         let r_sq = dot(r_vec, r_vec);
-        let r = sqrt(r_sq);
 
-        if r < params.repulsion.z {
+        if r_sq < params.repulsion.z * params.repulsion.z {
             continue;
         }
 
+        let r = sqrt(r_sq);
+
         // Sum all four fundamental forces
         var f = vec3<f32>(0.0, 0.0, 0.0);
-        f += gravitational_force(p1, p2, r_vec, r);
-        f += electromagnetic_force(p1, p2, r_vec, r);
+        f += gravitational_force(p1, p2, r_vec, r_sq);
+        f += electromagnetic_force(p1, p2, r_vec, r_sq);
 
         // Electron Exclusion (Pauli-like repulsion from nucleus)
         if (is_electron(p1.position.w) && is_quark(p2.position.w)) ||
@@ -263,7 +264,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         f += strong.xyz;
         total_potential += strong.w;
 
-        f += weak_force(p1, p2, r_vec, r);
+        f += weak_force(p1, p2, r_vec, r, r_sq);
 
         total_force += clamp_force(f);
     }

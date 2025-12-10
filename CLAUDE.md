@@ -4,3 +4,5 @@
 - Whenever you've implemented something make sure to check it with cargo check
 - Always keep in mind this should be as performant as possible. Make sure to use shaders for compute whenever it makes sense
 - Let's always make sure not to invoke warnings. If it's something we're not using yet, let's just make it proper with _ or similar
+- You can always read the current state of the project in README.md
+- Make sure to keep the README.md up to date
