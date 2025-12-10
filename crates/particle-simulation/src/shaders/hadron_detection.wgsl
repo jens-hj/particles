@@ -33,6 +33,7 @@ struct Particle {
 struct Hadron {
     indices_type: vec4<u32>, // x=p1, y=p2, z=p3, w=type_id
     center: vec4<f32>,       // xyz = center of mass, w = radius
+    velocity: vec4<f32>,     // xyz = velocity, w = padding
 }
 
 struct HadronCounter {
@@ -48,6 +49,9 @@ var<storage, read_write> hadrons: array<Hadron>;
 
 @group(0) @binding(2)
 var<storage, read_write> counter: HadronCounter;
+
+@group(0) @binding(3)
+var<storage, read_write> locks: array<atomic<u32>>;
 
 fn get_dist(p1_idx: u32, p2_idx: u32) -> f32 {
     let pos1 = particles[p1_idx].position.xyz;
@@ -147,34 +151,55 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         if (closest_green != 0xFFFFFFFFu && closest_blue != 0xFFFFFFFFu) {
             let d_gb = get_dist(closest_green, closest_blue);
             if (d_gb < BINDING_DISTANCE) {
-                // Found a Baryon!
-                let h_idx = atomicAdd(&counter.count, 1u);
-                if (h_idx < arrayLength(&hadrons)) {
-                    let p1 = particles[index];
-                    let p2 = particles[closest_green];
-                    let p3 = particles[closest_blue];
+                // Try to acquire locks
+                let l1 = atomicCompareExchangeWeak(&locks[index], 0u, 1u).exchanged;
+                var l2 = false;
+                var l3 = false;
 
-                    // Calculate center of mass (assuming equal mass for simplicity or use .w)
-                    let center = (p1.position.xyz + p2.position.xyz + p3.position.xyz) / 3.0;
-
-                    // Calculate radius (max distance from center)
-                    let r1 = distance(center, p1.position.xyz);
-                    let r2 = distance(center, p2.position.xyz);
-                    let r3 = distance(center, p3.position.xyz);
-                    let radius = max(r1, max(r2, r3)) + 0.2; // + padding
-
-                    var h: Hadron;
-                    h.indices_type = vec4<u32>(
-                        index,
-                        closest_green,
-                        closest_blue,
-                        identify_baryon(index, closest_green, closest_blue)
-                    );
-                    h.center = vec4<f32>(center, radius);
-
-                    hadrons[h_idx] = h;
+                if (l1) {
+                    l2 = atomicCompareExchangeWeak(&locks[closest_green], 0u, 1u).exchanged;
+                    if (l2) {
+                        l3 = atomicCompareExchangeWeak(&locks[closest_blue], 0u, 1u).exchanged;
+                    }
                 }
-                found_baryon = true;
+
+                if (l1 && l2 && l3) {
+                    // Found a Baryon!
+                    let h_idx = atomicAdd(&counter.count, 1u);
+                    if (h_idx < arrayLength(&hadrons)) {
+                        let p1 = particles[index];
+                        let p2 = particles[closest_green];
+                        let p3 = particles[closest_blue];
+
+                        // Calculate center of mass (assuming equal mass for simplicity or use .w)
+                        let center = (p1.position.xyz + p2.position.xyz + p3.position.xyz) / 3.0;
+                        let velocity = (p1.velocity.xyz + p2.velocity.xyz + p3.velocity.xyz) / 3.0;
+
+                        // Calculate radius (max distance from center)
+                        let r1 = distance(center, p1.position.xyz);
+                        let r2 = distance(center, p2.position.xyz);
+                        let r3 = distance(center, p3.position.xyz);
+                        let radius = max(r1, max(r2, r3)) + 0.2; // + padding
+
+                        var h: Hadron;
+                        h.indices_type = vec4<u32>(
+                            index,
+                            closest_green,
+                            closest_blue,
+                            identify_baryon(index, closest_green, closest_blue)
+                        );
+                        h.center = vec4<f32>(center, radius);
+                        h.velocity = vec4<f32>(velocity, 0.0);
+
+                        hadrons[h_idx] = h;
+                    }
+                    found_baryon = true;
+                } else {
+                    // Failed, release locks
+                    if (l1) { atomicStore(&locks[index], 0u); }
+                    if (l2) { atomicStore(&locks[closest_green], 0u); }
+                    if (l3) { atomicStore(&locks[closest_blue], 0u); }
+                }
             }
         }
     }
@@ -202,25 +227,41 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
 
         if (closest_anti != 0xFFFFFFFFu) {
-            // Found a Meson!
-            let h_idx = atomicAdd(&counter.count, 1u);
-            if (h_idx < arrayLength(&hadrons)) {
-                let p1 = particles[index];
-                let p2 = particles[closest_anti];
+            // Try to acquire locks
+            let l1 = atomicCompareExchangeWeak(&locks[index], 0u, 1u).exchanged;
+            var l2 = false;
 
-                let center = (p1.position.xyz + p2.position.xyz) / 2.0;
-                let radius = distance(center, p1.position.xyz) + 0.2;
+            if (l1) {
+                l2 = atomicCompareExchangeWeak(&locks[closest_anti], 0u, 1u).exchanged;
+            }
 
-                var h: Hadron;
-                h.indices_type = vec4<u32>(
-                    index,
-                    closest_anti,
-                    0xFFFFFFFFu,
-                    HADRON_MESON
-                );
-                h.center = vec4<f32>(center, radius);
+            if (l1 && l2) {
+                // Found a Meson!
+                let h_idx = atomicAdd(&counter.count, 1u);
+                if (h_idx < arrayLength(&hadrons)) {
+                    let p1 = particles[index];
+                    let p2 = particles[closest_anti];
 
-                hadrons[h_idx] = h;
+                    let center = (p1.position.xyz + p2.position.xyz) / 2.0;
+                    let velocity = (p1.velocity.xyz + p2.velocity.xyz) / 2.0;
+                    let radius = distance(center, p1.position.xyz) + 0.2;
+
+                    var h: Hadron;
+                    h.indices_type = vec4<u32>(
+                        index,
+                        closest_anti,
+                        0xFFFFFFFFu,
+                        HADRON_MESON
+                    );
+                    h.center = vec4<f32>(center, radius);
+                    h.velocity = vec4<f32>(velocity, 0.0);
+
+                    hadrons[h_idx] = h;
+                }
+            } else {
+                // Failed, release locks
+                if (l1) { atomicStore(&locks[index], 0u); }
+                if (l2) { atomicStore(&locks[closest_anti], 0u); }
             }
         }
     }

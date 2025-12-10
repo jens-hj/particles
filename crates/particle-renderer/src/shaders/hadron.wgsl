@@ -16,6 +16,7 @@ struct Particle {
 struct Hadron {
     indices_type: vec4<u32>, // x=p1, y=p2, z=p3, w=type_id
     center: vec4<f32>, // xyz, w=radius
+    velocity: vec4<f32>, // xyz, w=padding
 }
 
 struct HadronCounter {

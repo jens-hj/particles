@@ -151,6 +151,9 @@ pub struct Hadron {
 
     /// Center of mass (xyz) and radius (w)
     pub center: [f32; 4],
+
+    /// Velocity (xyz) and padding (w)
+    pub velocity: [f32; 4],
 }
 
 unsafe impl bytemuck::Pod for Hadron {}

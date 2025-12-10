@@ -5,7 +5,9 @@ struct PhysicsParams {
     constants: vec4<f32>,    // x: G, y: K_electric, z: G_weak, w: weak_force_range
     strong_force: vec4<f32>, // x: strong_short_range, y: strong_confinement, z: strong_range, w: padding
     repulsion: vec4<f32>,    // x: core_repulsion, y: core_radius, z: softening, w: max_force
-    integration: vec4<f32>,  // x: dt, y: damping, z: padding, w: padding
+    integration: vec4<f32>,  // x: dt, y: damping, z: time/seed, w: nucleon_damping
+    nucleon: vec4<f32>,      // x: binding_strength, y: binding_range, z: exclusion_strength, w: exclusion_radius
+    electron: vec4<f32>,     // x: exclusion_strength, y: exclusion_radius, z: padding, w: padding
 }
 
 @group(0) @binding(2)
@@ -32,6 +34,23 @@ var<storage, read> particles: array<Particle>;
 @group(0) @binding(1)
 var<storage, read_write> forces: array<Force>;
 
+struct Hadron {
+    indices_type: vec4<u32>, // x=p1, y=p2, z=p3, w=type_id
+    center: vec4<f32>,       // xyz = center of mass, w = radius
+    velocity: vec4<f32>,     // xyz = velocity, w = padding
+}
+
+struct HadronCounter {
+    count: u32,
+    _pad: vec3<u32>,
+}
+
+@group(0) @binding(3)
+var<storage, read> hadrons: array<Hadron>;
+
+@group(0) @binding(4)
+var<storage, read> hadron_counter: HadronCounter;
+
 // Check if particle is a quark
 fn is_quark(particle_type_f: f32) -> bool {
     let particle_type = u32(particle_type_f);
@@ -41,6 +60,11 @@ fn is_quark(particle_type_f: f32) -> bool {
 // Check if particle is a gluon
 fn is_gluon(particle_type_f: f32) -> bool {
     return u32(particle_type_f) == 3u;
+}
+
+// Check if particle is an electron
+fn is_electron(particle_type_f: f32) -> bool {
+    return u32(particle_type_f) == 2u;
 }
 
 // Check if two color charges attract
@@ -142,6 +166,54 @@ fn weak_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f32>
     return normalize(r_vec) * force_mag;
 }
 
+// Calculate nucleon-nucleon forces (Residual Strong + Exclusion)
+fn nucleon_force(h1: Hadron, h2: Hadron) -> vec3<f32> {
+    let r_vec = h2.center.xyz - h1.center.xyz;
+    let r_sq = dot(r_vec, r_vec);
+    let r = sqrt(r_sq);
+
+    if (r < 0.001) { return vec3<f32>(0.0); }
+
+    var f = vec3<f32>(0.0);
+    let dir = normalize(r_vec);
+
+    // 1. Exclusion Force (Hard Sphere / Pauli)
+    // Acts when hadrons overlap.
+    let combined_radius = h1.center.w + h2.center.w;
+    let exclusion_radius = combined_radius * params.nucleon.w;
+
+    if (r < exclusion_radius) {
+        let overlap = exclusion_radius - r;
+        // Quadratic repulsion for stiffness
+        let push = params.nucleon.z * overlap * (1.0 + overlap);
+        f -= dir * push;
+
+        // Damping during collision
+        let v_rel = h2.velocity.xyz - h1.velocity.xyz;
+        let v_closing = dot(v_rel, dir);
+        if (v_closing < 0.0) { // Moving towards each other
+            let damping_strength = params.integration.w;
+            f += dir * v_closing * damping_strength;
+        }
+    }
+
+    // 2. Residual Strong Force (Yukawa)
+    // Attractive at short range.
+    if (r < params.nucleon.y * 3.0) {
+        let exp_term = exp(-r / params.nucleon.y);
+        // Cap minimum distance for attraction calculation to avoid singularity
+        let eff_r_sq = max(r * r, 0.5);
+        let pull = params.nucleon.x * exp_term / eff_r_sq;
+
+        // Dampen attraction inside exclusion zone to prevent instability
+        let damp = smoothstep(exclusion_radius * 0.5, exclusion_radius, r);
+
+        f += dir * pull * damp;
+    }
+
+    return f;
+}
+
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let index = global_id.x;
@@ -175,6 +247,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         f += gravitational_force(p1, p2, r_vec, r);
         f += electromagnetic_force(p1, p2, r_vec, r);
 
+        // Electron Exclusion (Pauli-like repulsion from nucleus)
+        if (is_electron(p1.position.w) && is_quark(p2.position.w)) ||
+           (is_quark(p1.position.w) && is_electron(p2.position.w)) {
+            if (r < params.electron.y) {
+                let overlap = params.electron.y - r;
+                let push = params.electron.x * overlap * overlap;
+                f -= normalize(r_vec) * push;
+            }
+        }
+
         let strong = strong_force(p1, p2, r_vec, r);
         f += strong.xyz;
         total_potential += strong.w;
@@ -182,6 +264,43 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         f += weak_force(p1, p2, r_vec, r);
 
         total_force += clamp_force(f);
+    }
+
+    // Nucleon Forces (Inter-Hadron)
+    if (is_quark(p1.position.w)) {
+        let num_hadrons = hadron_counter.count;
+        var my_hadron_idx = -1;
+
+        // Find my hadron
+        for (var h = 0u; h < num_hadrons; h++) {
+            let hadron = hadrons[h];
+            if (hadron.indices_type.x == index ||
+                hadron.indices_type.y == index ||
+                hadron.indices_type.z == index) {
+                my_hadron_idx = i32(h);
+                break;
+            }
+        }
+
+        if (my_hadron_idx != -1) {
+            let my_hadron = hadrons[u32(my_hadron_idx)];
+            var hadron_force = vec3<f32>(0.0);
+
+            for (var h = 0u; h < num_hadrons; h++) {
+                if (i32(h) == my_hadron_idx) { continue; }
+
+                let other_hadron = hadrons[h];
+                hadron_force += nucleon_force(my_hadron, other_hadron);
+            }
+
+            // Distribute force to constituents
+            var num_constituents = 3.0;
+            if (my_hadron.indices_type.w == 0u) { // Meson
+                num_constituents = 2.0;
+            }
+
+            total_force += clamp_force(hadron_force / num_constituents);
+        }
     }
 
     forces[index].force = clamp_force(total_force);

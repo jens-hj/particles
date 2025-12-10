@@ -251,6 +251,40 @@ impl Gui {
                     egui::Slider::new(&mut state.physics_params.integration[1], 0.9..=1.0)
                         .text("Damping"),
                 );
+
+                ui.separator();
+                ui.heading("Nucleon Physics");
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.nucleon[0], 0.0..=100.0)
+                        .text("Binding Strength"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.nucleon[1], 0.1..=10.0)
+                        .text("Binding Range"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.nucleon[2], 0.0..=500.0)
+                        .text("Exclusion Strength"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.nucleon[3], 0.5..=3.0)
+                        .text("Exclusion Radius (x Hadron R)"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.integration[3], 0.0..=100.0)
+                        .text("Nucleon Damping"),
+                );
+
+                ui.separator();
+                ui.heading("Electron Physics");
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.electron[0], 0.0..=200.0)
+                        .text("Exclusion Strength"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.electron[1], 0.1..=5.0)
+                        .text("Exclusion Radius"),
+                );
             });
 
         // Time Controls (Bottom Right)

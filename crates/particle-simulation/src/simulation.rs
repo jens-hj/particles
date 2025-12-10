@@ -23,6 +23,7 @@ pub struct ParticleSimulation {
     _force_buffer: wgpu::Buffer,
     hadron_buffer: wgpu::Buffer,
     hadron_count_buffer: wgpu::Buffer,
+    locks_buffer: wgpu::Buffer,
     params_buffer: wgpu::Buffer,
 
     // Compute pipelines
@@ -87,6 +88,14 @@ impl ParticleSimulation {
             mapped_at_creation: false,
         });
 
+        // Create locks buffer
+        let locks_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Locks Buffer"),
+            size: (particles.len() * 4) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         // Create params buffer
         let params = PhysicsParams::default();
         let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -143,6 +152,26 @@ impl ParticleSimulation {
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -216,6 +245,16 @@ impl ParticleSimulation {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
@@ -301,6 +340,14 @@ impl ParticleSimulation {
                     binding: 2,
                     resource: params_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: hadron_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: hadron_count_buffer.as_entire_binding(),
+                },
             ],
         });
 
@@ -339,6 +386,10 @@ impl ParticleSimulation {
                     binding: 2,
                     resource: hadron_count_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: locks_buffer.as_entire_binding(),
+                },
             ],
         });
         log::info!("Bind groups created");
@@ -350,6 +401,7 @@ impl ParticleSimulation {
             _force_buffer: force_buffer,
             hadron_buffer,
             hadron_count_buffer,
+            locks_buffer,
             params_buffer,
             force_pipeline,
             integrate_pipeline,
@@ -397,8 +449,8 @@ impl ParticleSimulation {
         // Step 3: Detect Hadrons
         {
             // Reset counter
-            self.queue
-                .write_buffer(&self.hadron_count_buffer, 0, &[0u8; 32]);
+            encoder.clear_buffer(&self.hadron_count_buffer, 0, None);
+            encoder.clear_buffer(&self.locks_buffer, 0, None);
 
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Hadron Detection Pass"),

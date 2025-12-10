@@ -18,8 +18,16 @@ pub struct PhysicsParams {
     pub repulsion: [f32; 4],
 
     // Group 4: Integration
-    // x: dt, y: damping, z: padding, w: padding
+    // x: dt, y: damping, z: time/seed, w: nucleon_damping
     pub integration: [f32; 4],
+
+    // Group 5: Nucleon Physics
+    // x: binding_strength, y: binding_range, z: exclusion_strength, w: exclusion_radius
+    pub nucleon: [f32; 4],
+
+    // Group 6: Electron Physics
+    // x: exclusion_strength, y: exclusion_radius, z: padding, w: padding
+    pub electron: [f32; 4],
 }
 
 impl Default for PhysicsParams {
@@ -38,7 +46,7 @@ impl Default for PhysicsParams {
                 0.0, // padding
             ],
             repulsion: [
-                150.0, // core_repulsion
+                200.0, // core_repulsion
                 0.35,  // core_radius
                 0.01,  // softening
                 50.0,  // max_force
@@ -46,8 +54,20 @@ impl Default for PhysicsParams {
             integration: [
                 0.0005, // dt
                 0.995,  // damping
-                0.0,    // padding
-                0.0,    // padding
+                0.0,    // time/seed
+                50.0,   // nucleon_damping
+            ],
+            nucleon: [
+                30.0,  // binding_strength
+                2.0,   // binding_range
+                200.0, // exclusion_strength
+                1.2,   // exclusion_radius
+            ],
+            electron: [
+                100.0, // exclusion_strength
+                2.0,   // exclusion_radius
+                0.0,   // padding
+                0.0,   // padding
             ],
         }
     }
