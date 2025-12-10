@@ -46,7 +46,7 @@ fn initialize_particles() -> Vec<Particle> {
 
         // 80% quarks, 20% electrons
         let rand_val = rng.random::<f32>();
-        let particle = if rand_val < 0.8 {
+        let particle = if rand_val < 0.9 {
             let color = colors[rng.random_range(0..colors.len())];
             if rng.random::<bool>() {
                 Particle::new_up_quark(pos, color)
