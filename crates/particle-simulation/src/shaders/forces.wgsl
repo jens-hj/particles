@@ -187,8 +187,10 @@ fn nucleon_force(h1: Hadron, h2: Hadron) -> vec3<f32> {
         // Quadratic repulsion for stiffness
         let push = params.nucleon.z * overlap * (1.0 + overlap);
         f -= dir * push;
+    }
 
-        // Damping during collision
+    // Damping throughout binding range to stabilize nuclei
+    if (r < params.nucleon.y * 3.0) {
         let v_rel = h2.velocity.xyz - h1.velocity.xyz;
         let v_closing = dot(v_rel, dir);
         if (v_closing < 0.0) { // Moving towards each other
