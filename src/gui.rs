@@ -13,6 +13,10 @@ pub struct UiState {
     pub physics_params: PhysicsParams,
     pub show_shells: bool,
     pub show_bonds: bool,
+    pub is_paused: bool,
+    pub step_one_frame: bool,
+    pub steps_to_play: u32,
+    pub steps_remaining: u32,
 }
 
 impl Default for UiState {
@@ -25,6 +29,10 @@ impl Default for UiState {
             physics_params: PhysicsParams::default(),
             show_shells: true,
             show_bonds: true,
+            is_paused: false,
+            step_one_frame: false,
+            steps_to_play: 1,
+            steps_remaining: 0,
         }
     }
 }
@@ -132,6 +140,27 @@ impl Gui {
     }
 
     fn ui(&self, ctx: &Context, state: &mut UiState) {
+        // Handle keyboard shortcuts
+        if ctx.input(|i| i.key_pressed(egui::Key::Space)) {
+            state.is_paused = !state.is_paused;
+        }
+
+        if state.is_paused {
+            let step_pressed = ctx.input(|i| {
+                i.modifiers.ctrl
+                    && (i.key_pressed(egui::Key::ArrowRight) || i.key_pressed(egui::Key::D))
+            });
+            if step_pressed {
+                state.steps_remaining += 1;
+            }
+        }
+
+        // Drive simulation stepping
+        if state.steps_remaining > 0 {
+            state.step_one_frame = true;
+            state.steps_remaining -= 1;
+        }
+
         // Diagnostics Panel (Top Left)
         egui::Window::new("Diagnostics")
             .anchor(egui::Align2::LEFT_TOP, [10.0, 10.0])
@@ -222,6 +251,42 @@ impl Gui {
                     egui::Slider::new(&mut state.physics_params.integration[1], 0.9..=1.0)
                         .text("Damping"),
                 );
+            });
+
+        // Time Controls (Bottom Right)
+        egui::Window::new("Time Controls")
+            .anchor(egui::Align2::RIGHT_BOTTOM, [-10.0, -10.0])
+            .resizable(false)
+            .collapsible(true)
+            .default_open(true)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if ui
+                        .button(if state.is_paused {
+                            "▶ Resume (Space)"
+                        } else {
+                            "⏸ Pause (Space)"
+                        })
+                        .clicked()
+                    {
+                        state.is_paused = !state.is_paused;
+                    }
+                });
+
+                if state.is_paused {
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.label("Steps:");
+                        ui.add(
+                            egui::DragValue::new(&mut state.steps_to_play)
+                                .speed(1)
+                                .range(1..=1000),
+                        );
+                        if ui.button("Step ⏭ (Ctrl+Right/D)").clicked() {
+                            state.steps_remaining += state.steps_to_play;
+                        }
+                    });
+                }
             });
     }
 }

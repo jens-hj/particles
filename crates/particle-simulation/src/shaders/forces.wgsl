@@ -23,7 +23,7 @@ struct Particle {
 // Force accumulator
 struct Force {
     force: vec3<f32>,
-    _padding: f32,
+    potential: f32,
 }
 
 @group(0) @binding(0)
@@ -36,6 +36,11 @@ var<storage, read_write> forces: array<Force>;
 fn is_quark(particle_type_f: f32) -> bool {
     let particle_type = u32(particle_type_f);
     return particle_type == 0u || particle_type == 1u; // QuarkUp or QuarkDown
+}
+
+// Check if particle is a gluon
+fn is_gluon(particle_type_f: f32) -> bool {
+    return u32(particle_type_f) == 3u;
 }
 
 // Check if two color charges attract
@@ -81,21 +86,11 @@ fn electromagnetic_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -
 }
 
 // Calculate strong force (Cornell potential)
-fn strong_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f32> {
+// Returns vec4: xyz = force, w = potential energy (stress)
+fn strong_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec4<f32> {
     // Only applies to quarks (particle_type in position.w)
     if !is_quark(p1.position.w) || !is_quark(p2.position.w) {
-        return vec3<f32>(0.0, 0.0, 0.0);
-    }
-
-    // Short-range repulsion (Hard core)
-    if r < params.repulsion.y {
-        let push = params.repulsion.x * (1.0 - r / params.repulsion.y);
-        return -normalize(r_vec) * push;
-    }
-
-    // Range cutoff
-    if r > params.strong_force.z {
-        return vec3<f32>(0.0, 0.0, 0.0);
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
 
     // Color factor (color_charge in color_and_flags.x)
@@ -105,16 +100,38 @@ fn strong_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f3
         color_factor = 1.0;
     }
 
-    // Cornell potential: -a/r² + b
+    // Stability metric:
+    // Attracting (color_factor = 1.0) -> -1.0 (Stable)
+    // Repelling (color_factor = -1.0) -> +1.0 (Unstable)
+    let potential = -color_factor;
+
+    // Short-range repulsion (Hard core)
+    if r < params.repulsion.y {
+        let push = params.repulsion.x * (1.0 - r / params.repulsion.y);
+        // High potential at core overlap
+        return vec4<f32>(-normalize(r_vec) * push, potential);
+    }
+
+    // Range cutoff
+    if r > params.strong_force.z {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    }
+
+    // Cornell potential: -a/r² + b (Force magnitude)
     let short_range = params.strong_force.x / (r * r);
     let confinement = params.strong_force.y;
     let force_mag = color_factor * (short_range + confinement);
 
-    return normalize(r_vec) * force_mag;
+    return vec4<f32>(normalize(r_vec) * force_mag, potential);
 }
 
 // Calculate weak force (Yukawa potential)
 fn weak_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec3<f32> {
+    // Gluons don't participate in weak force in this simulation (and are too light)
+    if is_gluon(p1.position.w) || is_gluon(p2.position.w) {
+        return vec3<f32>(0.0, 0.0, 0.0);
+    }
+
     if r > params.constants.w * 3.0 {
         return vec3<f32>(0.0, 0.0, 0.0);
     }
@@ -136,6 +153,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let p1 = particles[index];
     var total_force = vec3<f32>(0.0, 0.0, 0.0);
+    var total_potential = 0.0;
 
     // Calculate forces from all other particles (N-body)
     for (var i = 0u; i < num_particles; i = i + 1u) {
@@ -156,11 +174,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         var f = vec3<f32>(0.0, 0.0, 0.0);
         f += gravitational_force(p1, p2, r_vec, r);
         f += electromagnetic_force(p1, p2, r_vec, r);
-        f += strong_force(p1, p2, r_vec, r);
+
+        let strong = strong_force(p1, p2, r_vec, r);
+        f += strong.xyz;
+        total_potential += strong.w;
+
         f += weak_force(p1, p2, r_vec, r);
 
         total_force += clamp_force(f);
     }
 
     forces[index].force = clamp_force(total_force);
+    forces[index].potential = total_potential;
 }

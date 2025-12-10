@@ -44,18 +44,21 @@ pub const WEAK_FORCE_RANGE: f32 = 0.1;
 pub const E_CHARGE: f32 = 1.0;
 
 /// Quark mass (simplified - in reality up ~2.3 MeV, down ~4.8 MeV)
-/// Using simulation-friendly values
-pub const QUARK_UP_MASS: f32 = 0.002;
-pub const QUARK_DOWN_MASS: f32 = 0.005;
+/// Using simulation-friendly values (scaled: 1.0 = 1000 MeV approx)
+pub const QUARK_UP_MASS: f32 = 0.0023;
+pub const QUARK_DOWN_MASS: f32 = 0.0048;
 
 /// Electron mass (in simulation units)
-pub const ELECTRON_MASS: f32 = 0.511;
+/// ~0.511 MeV
+pub const ELECTRON_MASS: f32 = 0.000511;
 
 /// Proton mass (should emerge from quark binding, but used for reference)
-pub const PROTON_MASS: f32 = 938.0;
+/// ~938 MeV
+pub const PROTON_MASS: f32 = 0.938;
 
 /// Neutron mass
-pub const NEUTRON_MASS: f32 = 940.0;
+/// ~940 MeV
+pub const NEUTRON_MASS: f32 = 0.940;
 
 /// Damping factor for numerical stability
 pub const DAMPING: f32 = 0.995;
@@ -70,8 +73,13 @@ pub const QUARK_SIZE: f32 = 0.03;
 /// Electron size (~10^-15 m classical radius)
 pub const ELECTRON_SIZE: f32 = 0.03;
 
+/// Gluon mass (simulation units)
+/// Theoretically massless, but small non-zero value for integration stability
+pub const GLUON_MASS: f32 = 0.0001;
+
 /// Gluon size (force carrier, similar to photons)
-pub const GLUON_SIZE: f32 = 0.5;
+/// Point-like particle
+pub const GLUON_SIZE: f32 = 0.04;
 
 /// Proton size (~10^-15 m, 1 femtometer)
 pub const PROTON_SIZE: f32 = 2.0;

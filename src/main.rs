@@ -20,7 +20,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-const PARTICLE_COUNT: usize = 10000;
+const PARTICLE_COUNT: usize = 5000;
 const SPAWN_RADIUS: f32 = 50.0;
 const PARTICLE_SCALE: f32 = 3.0; // Global scale multiplier for visibility
 
@@ -44,8 +44,9 @@ fn initialize_particles() -> Vec<Particle> {
         let z = r * cos_phi;
         let pos = Vec3::new(x, y, z);
 
-        // 80% quarks (equal mix of up/down), 20% electrons
-        let particle = if rng.random::<f32>() < 0.8 {
+        // 80% quarks, 20% electrons
+        let rand_val = rng.random::<f32>();
+        let particle = if rand_val < 0.8 {
             let color = colors[rng.random_range(0..colors.len())];
             if rng.random::<bool>() {
                 Particle::new_up_quark(pos, color)
@@ -234,10 +235,17 @@ impl GpuState {
         let fps = 1000.0 / avg_frame_time;
 
         // Update physics parameters from UI
+        // Pass accumulated time to shader for random seeding (using integration.z padding)
+        if !self.ui_state.is_paused || self.ui_state.step_one_frame {
+            self.ui_state.physics_params.integration[2] += frame_time * 0.001;
+        }
         self.simulation.update_params(&self.ui_state.physics_params);
 
         // Step simulation
-        self.simulation.step();
+        if !self.ui_state.is_paused || self.ui_state.step_one_frame {
+            self.simulation.step();
+            self.ui_state.step_one_frame = false;
+        }
 
         // Read back hadron count
         {
@@ -287,6 +295,7 @@ impl GpuState {
             self.simulation.particle_buffer(),
             self.simulation.particle_count(),
             PARTICLE_SCALE,
+            self.ui_state.physics_params.integration[2],
         );
 
         // Render Hadrons

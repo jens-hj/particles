@@ -44,10 +44,10 @@ impl Default for PhysicsParams {
                 50.0,  // max_force
             ],
             integration: [
-                0.001, // dt
-                0.995, // damping
-                0.0,   // padding
-                0.0,   // padding
+                0.0005, // dt
+                0.995,  // damping
+                0.0,    // padding
+                0.0,    // padding
             ],
         }
     }

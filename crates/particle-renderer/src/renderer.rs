@@ -149,12 +149,13 @@ impl ParticleRenderer {
         particle_buffer: &wgpu::Buffer,
         particle_count: u32,
         particle_size: f32,
+        time: f32,
     ) {
         // Update camera
         queue.write_buffer(
             &self.camera_buffer,
             0,
-            bytemuck::cast_slice(&[camera.to_uniform(particle_size)]),
+            bytemuck::cast_slice(&[camera.to_uniform(particle_size, time)]),
         );
 
         // Create bind group

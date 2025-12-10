@@ -10,6 +10,8 @@ pub struct CameraUniform {
     pub view_proj: [[f32; 4]; 4],
     pub position: [f32; 3],
     pub particle_size: f32,
+    pub time: f32,
+    pub _padding: [f32; 3],
 }
 
 /// Camera for 3D scene navigation
@@ -26,7 +28,7 @@ pub struct Camera {
 impl Camera {
     pub fn new(width: u32, height: u32) -> Self {
         let rotation = Quat::from_rotation_x(0.3);
-        
+
         Self {
             distance: 200.0,
             rotation,
@@ -37,27 +39,27 @@ impl Camera {
             zfar: 100000.0,
         }
     }
-    
+
     pub fn position(&self) -> Vec3 {
         let offset = self.rotation * Vec3::new(0.0, 0.0, self.distance);
         self.target + offset
     }
-    
+
     pub fn rotate(&mut self, delta_x: f32, delta_y: f32) {
         let up = self.rotation * Vec3::Y;
         let yaw_rotation = Quat::from_axis_angle(up, delta_x);
-        
+
         let right = self.rotation * Vec3::X;
         let pitch_rotation = Quat::from_axis_angle(right, -delta_y);
-        
+
         self.rotation = yaw_rotation * pitch_rotation * self.rotation;
         self.rotation = self.rotation.normalize();
     }
-    
+
     pub fn zoom(&mut self, delta: f32) {
         self.distance = (self.distance + delta).clamp(1.0, 50000.0);
     }
-    
+
     pub fn build_view_projection_matrix(&self) -> Mat4 {
         let position = self.position();
         let rotation_matrix = Mat4::from_quat(self.rotation.conjugate());
@@ -66,15 +68,17 @@ impl Camera {
         let proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
         proj * view
     }
-    
-    pub fn to_uniform(&self, particle_size: f32) -> CameraUniform {
+
+    pub fn to_uniform(&self, particle_size: f32, time: f32) -> CameraUniform {
         CameraUniform {
             view_proj: self.build_view_projection_matrix().to_cols_array_2d(),
             position: self.position().to_array(),
             particle_size,
+            time,
+            _padding: [0.0; 3],
         }
     }
-    
+
     pub fn resize(&mut self, width: u32, height: u32) {
         self.aspect = width as f32 / height as f32;
     }

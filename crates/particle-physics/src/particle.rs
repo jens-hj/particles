@@ -94,6 +94,17 @@ impl Particle {
         }
     }
 
+    /// Create a new gluon
+    pub fn new_gluon(position: Vec3, color: ColorCharge) -> Self {
+        let pos = position.to_array();
+        Self {
+            position: [pos[0], pos[1], pos[2], ParticleType::Gluon as u32 as f32],
+            velocity: [0.0, 0.0, 0.0, crate::constants::GLUON_MASS],
+            data: [0.0, crate::constants::GLUON_SIZE, 0.0, 0.0], // charge, size, padding
+            color_and_flags: [color as u32, 0, 0, 0],            // gluons carry color
+        }
+    }
+
     /// Get particle type (stored in position.w)
     pub fn get_type(&self) -> Option<ParticleType> {
         match self.position[3] as u32 {
