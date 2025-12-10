@@ -58,10 +58,10 @@ impl Default for PhysicsParams {
                 1.5,    // nucleon_damping
             ],
             nucleon: [
-                50.0,  // binding_strength
+                100.0, // binding_strength
                 2.2,   // binding_range
-                200.0, // exclusion_strength
-                1.2,   // exclusion_radius
+                130.0, // exclusion_strength
+                1.5,   // exclusion_radius
             ],
             electron: [
                 100.0, // exclusion_strength

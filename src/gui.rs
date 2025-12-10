@@ -255,7 +255,7 @@ impl Gui {
                 ui.separator();
                 ui.heading("Nucleon Physics");
                 ui.add(
-                    egui::Slider::new(&mut state.physics_params.nucleon[0], 0.0..=100.0)
+                    egui::Slider::new(&mut state.physics_params.nucleon[0], 0.0..=200.0)
                         .text("Binding Strength"),
                 );
                 ui.add(
@@ -263,7 +263,7 @@ impl Gui {
                         .text("Binding Range"),
                 );
                 ui.add(
-                    egui::Slider::new(&mut state.physics_params.nucleon[2], 0.0..=500.0)
+                    egui::Slider::new(&mut state.physics_params.nucleon[2], 0.0..=300.0)
                         .text("Exclusion Strength"),
                 );
                 ui.add(
