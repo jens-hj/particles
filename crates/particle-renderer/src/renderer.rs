@@ -7,13 +7,13 @@ const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 pub struct ParticleRenderer {
     render_pipeline: wgpu::RenderPipeline,
     pub camera_buffer: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
+    bind_group_layout: wgpu::BindGroupLayout,
     pub depth_texture: wgpu::TextureView,
     surface_config: wgpu::SurfaceConfiguration,
 }
 
 impl ParticleRenderer {
-    pub fn new(device: &wgpu::Device, surface_config: &wgpu::SurfaceConfiguration, particle_buffer: &wgpu::Buffer) -> Self {
+    pub fn new(device: &wgpu::Device, surface_config: &wgpu::SurfaceConfiguration) -> Self {
         // Create camera buffer
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Camera Buffer"),
@@ -35,9 +35,10 @@ impl ParticleRenderer {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Particle Bind Group Layout"),
             entries: &[
+                // Camera (Uniform) - Binding 0
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -45,6 +46,7 @@ impl ParticleRenderer {
                     },
                     count: None,
                 },
+                // Particles (Storage) - Binding 1
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::VERTEX,
@@ -55,21 +57,27 @@ impl ParticleRenderer {
                     },
                     count: None,
                 },
-            ],
-        });
-
-        // Create bind group (cached for reuse every frame)
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Particle Bind Group"),
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding(),
+                // Hadrons (Storage) - Binding 2
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: particle_buffer.as_entire_binding(),
+                // Hadron Counter (Storage) - Binding 3
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
             ],
         });
@@ -124,7 +132,7 @@ impl ParticleRenderer {
         Self {
             render_pipeline,
             camera_buffer,
-            bind_group,
+            bind_group_layout,
             depth_texture,
             surface_config: surface_config.clone(),
         }
@@ -162,17 +170,58 @@ impl ParticleRenderer {
         queue: &wgpu::Queue,
         surface_view: &wgpu::TextureView,
         camera: &Camera,
-        _particle_buffer: &wgpu::Buffer,
+        particle_buffer: &wgpu::Buffer,
+        hadron_buffer: &wgpu::Buffer,
+        hadron_count_buffer: &wgpu::Buffer,
         particle_count: u32,
         particle_size: f32,
         time: f32,
+        lod_shell_fade_start: f32,
+        lod_shell_fade_end: f32,
+        lod_bond_fade_start: f32,
+        lod_bond_fade_end: f32,
+        lod_quark_fade_start: f32,
+        lod_quark_fade_end: f32,
     ) {
         // Update camera
         queue.write_buffer(
             &self.camera_buffer,
             0,
-            bytemuck::cast_slice(&[camera.to_uniform(particle_size, time)]),
+            bytemuck::cast_slice(&[camera.to_uniform(
+                particle_size,
+                time,
+                lod_shell_fade_start,
+                lod_shell_fade_end,
+                lod_bond_fade_start,
+                lod_bond_fade_end,
+                lod_quark_fade_start,
+                lod_quark_fade_end,
+            )]),
         );
+
+        // Create bind group for this frame
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Particle Bind Group"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.camera_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: particle_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: hadron_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: hadron_count_buffer.as_entire_binding(),
+                },
+            ],
+        });
 
         // Render
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -209,7 +258,7 @@ impl ParticleRenderer {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.bind_group, &[]);
+            render_pass.set_bind_group(0, &bind_group, &[]);
             render_pass.draw(0..6, 0..particle_count);
         }
 

@@ -5,6 +5,12 @@ struct Camera {
     position: vec3<f32>,
     particle_size: f32,
     time: f32,
+    lod_shell_fade_start: f32,
+    lod_shell_fade_end: f32,
+    lod_bond_fade_start: f32,
+    lod_bond_fade_end: f32,
+    lod_quark_fade_start: f32,
+    lod_quark_fade_end: f32,
 }
 
 @group(0) @binding(0)
@@ -20,11 +26,29 @@ struct Particle {
 @group(0) @binding(1)
 var<storage, read> particles: array<Particle>;
 
+struct Hadron {
+    indices_type: vec4<u32>, // x=p1, y=p2, z=p3, w=type_id
+    center: vec4<f32>, // xyz, w=radius
+    velocity: vec4<f32>, // xyz, w=padding
+}
+
+struct HadronCounter {
+    count: u32,
+    _pad: vec3<u32>,
+}
+
+@group(0) @binding(2)
+var<storage, read> hadrons: array<Hadron>;
+
+@group(0) @binding(3)
+var<storage, read> hadron_counter: HadronCounter;
+
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) color: vec3<f32>,
     @location(2) @interpolate(flat) particle_type: u32,
+    @location(3) hadron_distance: f32,
 }
 
 // Catppuccin Mocha colors (in linear RGB, converted from sRGB)
@@ -69,12 +93,46 @@ fn particle_color(particle_type: u32, color_charge: u32) -> vec3<f32> {
     }
 }
 
+// Get the distance to the hadron this particle belongs to (for LOD)
+// Returns -1.0 if not part of a hadron or not a quark
+fn get_hadron_distance(particle_index: u32, particle_type: u32) -> f32 {
+    // Only quarks (types 0 and 1) can be part of hadrons
+    if (particle_type != 0u && particle_type != 1u) {
+        return -1.0;
+    }
+
+    // Check all hadrons to see if this particle is part of one
+    let num_hadrons = hadron_counter.count;
+    for (var i = 0u; i < num_hadrons; i++) {
+        let hadron = hadrons[i];
+
+        // Check if this particle is part of this hadron
+        if (hadron.indices_type.x == particle_index ||
+            hadron.indices_type.y == particle_index ||
+            hadron.indices_type.z == particle_index) {
+
+            // Found the hadron this particle belongs to
+            // Return distance from camera to hadron center
+            return distance(camera.position, hadron.center.xyz);
+        }
+    }
+
+    return -1.0;
+}
+
 @vertex
 fn vertex(
     @builtin(vertex_index) vertex_index: u32,
     @builtin(instance_index) instance_index: u32
 ) -> VertexOutput {
     let particle = particles[instance_index];
+
+    // Extract particle type and color charge
+    let particle_type = u32(particle.position.w);
+    let color_charge = particle.color_and_flags.x;
+
+    // Get hadron distance for LOD
+    let hadron_dist = get_hadron_distance(instance_index, particle_type);
 
     // Generate quad vertices
     var uv = vec2<f32>(0.0, 0.0);
@@ -110,15 +168,12 @@ fn vertex(
     let size = camera.particle_size * particle.data.y; // size in data.y
     let world_pos = particle_pos + (right * pos_offset.x + billboard_up * pos_offset.y) * size;
 
-    // Extract particle type and color charge
-    let particle_type = u32(particle.position.w);
-    let color_charge = particle.color_and_flags.x;
-
     var out: VertexOutput;
     out.clip_position = camera.view_proj * vec4<f32>(world_pos, 1.0);
     out.uv = uv;
     out.color = particle_color(particle_type, color_charge);
     out.particle_type = particle_type;
+    out.hadron_distance = hadron_dist;
     return out;
 }
 
@@ -151,5 +206,20 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
 
     let final_color = input.color * lighting;
 
-    return vec4<f32>(final_color, 1.0);
+    // LOD: Fade out quarks that are part of hadrons (controlled by quark sliders)
+    // Free quarks (not part of hadrons) remain fully opaque
+    // < quark_fade_start: Fully visible (alpha = 1)
+    // quark_fade_start to quark_fade_end: Fade from 1 to 0
+    // > quark_fade_end: Invisible (alpha = 0)
+    var alpha = 1.0;
+    if (input.hadron_distance >= 0.0) {
+        // This quark is part of a hadron - apply fade OUT
+        alpha = 1.0 - smoothstep(camera.lod_quark_fade_start, camera.lod_quark_fade_end, input.hadron_distance);
+        if (alpha < 0.01) {
+            discard;
+        }
+    }
+    // Free quarks keep alpha = 1.0 (no fading)
+
+    return vec4<f32>(final_color, alpha);
 }

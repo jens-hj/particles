@@ -6,3 +6,4 @@
 - Let's always make sure not to invoke warnings. If it's something we're not using yet, let's just make it proper with _ or similar
 - You can always read the current state of the project in README.md
 - Make sure to keep the README.md up to date
+- Always run `cargo run` before committing so I can inspect the result

@@ -20,7 +20,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-const PARTICLE_COUNT: usize = 5000;
+const PARTICLE_COUNT: usize = 1000;
 const SPAWN_RADIUS: f32 = 50.0;
 const PARTICLE_SCALE: f32 = 3.0; // Global scale multiplier for visibility
 
@@ -168,7 +168,7 @@ impl GpuState {
         log::info!("✓ Simulation initialized");
 
         // Create renderer
-        let renderer = ParticleRenderer::new(&device, &config, simulation.particle_buffer());
+        let renderer = ParticleRenderer::new(&device, &config);
         log::info!("✓ Renderer initialized");
 
         // Create hadron renderer
@@ -297,9 +297,17 @@ impl GpuState {
             &view,
             &self.camera,
             self.simulation.particle_buffer(),
+            self.simulation.hadron_buffer(),
+            self.simulation.hadron_count_buffer(),
             self.simulation.particle_count(),
             PARTICLE_SCALE,
             self.ui_state.physics_params.integration[2],
+            self.ui_state.lod_shell_fade_start,
+            self.ui_state.lod_shell_fade_end,
+            self.ui_state.lod_bond_fade_start,
+            self.ui_state.lod_bond_fade_end,
+            self.ui_state.lod_quark_fade_start,
+            self.ui_state.lod_quark_fade_end,
         );
 
         // Render Hadrons

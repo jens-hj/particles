@@ -11,7 +11,13 @@ pub struct CameraUniform {
     pub position: [f32; 3],
     pub particle_size: f32,
     pub time: f32,
-    pub _padding: [f32; 3],
+    pub lod_shell_fade_start: f32,
+    pub lod_shell_fade_end: f32,
+    pub lod_bond_fade_start: f32,
+    pub lod_bond_fade_end: f32,
+    pub lod_quark_fade_start: f32,
+    pub lod_quark_fade_end: f32,
+    pub _padding: f32,
 }
 
 /// Camera for 3D scene navigation
@@ -69,13 +75,29 @@ impl Camera {
         proj * view
     }
 
-    pub fn to_uniform(&self, particle_size: f32, time: f32) -> CameraUniform {
+    pub fn to_uniform(
+        &self,
+        particle_size: f32,
+        time: f32,
+        lod_shell_fade_start: f32,
+        lod_shell_fade_end: f32,
+        lod_bond_fade_start: f32,
+        lod_bond_fade_end: f32,
+        lod_quark_fade_start: f32,
+        lod_quark_fade_end: f32,
+    ) -> CameraUniform {
         CameraUniform {
             view_proj: self.build_view_projection_matrix().to_cols_array_2d(),
             position: self.position().to_array(),
             particle_size,
             time,
-            _padding: [0.0; 3],
+            lod_shell_fade_start,
+            lod_shell_fade_end,
+            lod_bond_fade_start,
+            lod_bond_fade_end,
+            lod_quark_fade_start,
+            lod_quark_fade_end,
+            _padding: 0.0,
         }
     }
 

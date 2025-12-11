@@ -17,6 +17,12 @@ pub struct UiState {
     pub step_one_frame: bool,
     pub steps_to_play: u32,
     pub steps_remaining: u32,
+    pub lod_shell_fade_start: f32,
+    pub lod_shell_fade_end: f32,
+    pub lod_bond_fade_start: f32,
+    pub lod_bond_fade_end: f32,
+    pub lod_quark_fade_start: f32,
+    pub lod_quark_fade_end: f32,
 }
 
 impl Default for UiState {
@@ -33,6 +39,12 @@ impl Default for UiState {
             step_one_frame: false,
             steps_to_play: 1,
             steps_remaining: 0,
+            lod_shell_fade_start: 10.0,
+            lod_shell_fade_end: 30.0,
+            lod_bond_fade_start: 10.0,
+            lod_bond_fade_end: 30.0,
+            lod_quark_fade_start: 10.0,
+            lod_quark_fade_end: 30.0,
         }
     }
 }
@@ -186,6 +198,54 @@ impl Gui {
                 ui.heading("Rendering");
                 ui.checkbox(&mut state.show_shells, "Show Shells");
                 ui.checkbox(&mut state.show_bonds, "Show Bonds");
+                ui.separator();
+                ui.label("Shell LOD (Fade In):");
+                ui.add(
+                    egui::Slider::new(&mut state.lod_shell_fade_start, 5.0..=200.0)
+                        .text("Shell Start")
+                        .step_by(5.0),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.lod_shell_fade_end, 5.0..=200.0)
+                        .text("Shell End")
+                        .step_by(5.0),
+                );
+                // Ensure end is always >= start
+                if state.lod_shell_fade_end < state.lod_shell_fade_start {
+                    state.lod_shell_fade_end = state.lod_shell_fade_start;
+                }
+
+                ui.separator();
+                ui.label("Bond LOD (Fade Out):");
+                ui.add(
+                    egui::Slider::new(&mut state.lod_bond_fade_start, 5.0..=200.0)
+                        .text("Bond Start")
+                        .step_by(5.0),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.lod_bond_fade_end, 5.0..=200.0)
+                        .text("Bond End")
+                        .step_by(5.0),
+                );
+                if state.lod_bond_fade_end < state.lod_bond_fade_start {
+                    state.lod_bond_fade_end = state.lod_bond_fade_start;
+                }
+
+                ui.separator();
+                ui.label("Quark LOD (Fade Out):");
+                ui.add(
+                    egui::Slider::new(&mut state.lod_quark_fade_start, 5.0..=200.0)
+                        .text("Quark Start")
+                        .step_by(5.0),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.lod_quark_fade_end, 5.0..=200.0)
+                        .text("Quark End")
+                        .step_by(5.0),
+                );
+                if state.lod_quark_fade_end < state.lod_quark_fade_start {
+                    state.lod_quark_fade_end = state.lod_quark_fade_start;
+                }
             });
 
         // Physics Controls (Bottom Left)

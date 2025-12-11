@@ -103,8 +103,8 @@ impl HadronRenderer {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: false, // Transparent shells don't write depth
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_write_enabled: true, // Write depth so hadrons depth-test correctly against each other
+                depth_compare: wgpu::CompareFunction::Less, // Proper depth testing between hadrons
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),

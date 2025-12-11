@@ -4,6 +4,13 @@ struct Camera {
     view_proj: mat4x4<f32>,
     position: vec3<f32>,
     particle_size: f32,
+    time: f32,
+    lod_shell_fade_start: f32,
+    lod_shell_fade_end: f32,
+    lod_bond_fade_start: f32,
+    lod_bond_fade_end: f32,
+    lod_quark_fade_start: f32,
+    lod_quark_fade_end: f32,
 }
 
 struct Particle {
@@ -117,12 +124,12 @@ fn fs_shell(in: VertexOutput) -> @location(0) vec4<f32> {
     let light_dir = normalize(vec3<f32>(0.5, 0.5, 1.0));
     let diffuse = max(dot(normal, light_dir), 0.0);
 
-    // LOD: Fade in shell when far away
-    // < 5.0: Invisible (show lines)
-    // > 10.0: Fully opaque
-    let alpha_factor = smoothstep(5.0, 10.0, in.dist_to_cam);
+    // LOD: Fade in shells from transparent to opaque (controlled by shell sliders)
+    // < shell_fade_start: Don't render (alpha = 0)
+    // shell_fade_start to shell_fade_end: Fade from 0 to 1
+    // > shell_fade_end: Fully opaque (alpha = 1)
+    let final_alpha = smoothstep(camera.lod_shell_fade_start, camera.lod_shell_fade_end, in.dist_to_cam);
 
-    let final_alpha = in.color.a * alpha_factor;
     if (final_alpha < 0.01) {
         discard;
     }
@@ -189,10 +196,11 @@ fn vs_bond(
 
 @fragment
 fn fs_bond(in: VertexOutput) -> @location(0) vec4<f32> {
-    // LOD: Fade out lines when far away
-    // < 5.0: Fully visible
-    // > 10.0: Invisible
-    let alpha_factor = 1.0 - smoothstep(5.0, 10.0, in.dist_to_cam);
+    // LOD: Fade out bonds when far away (controlled by bond sliders)
+    // < bond_fade_start: Fully visible (alpha = 1)
+    // bond_fade_start to bond_fade_end: Fade from 1 to 0
+    // > bond_fade_end: Invisible (alpha = 0)
+    let alpha_factor = 1.0 - smoothstep(camera.lod_bond_fade_start, camera.lod_bond_fade_end, in.dist_to_cam);
 
     if (alpha_factor < 0.01) {
         discard;
