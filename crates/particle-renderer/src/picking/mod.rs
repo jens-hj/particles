@@ -12,8 +12,9 @@ pub mod renderer;
 
 pub use renderer::PickingRenderer;
 
-pub mod overlay;
-pub use overlay::PickingOverlay;
+// Picking overlay visualization removed from the public API (debug-only; keep internal as needed).
+// pub mod overlay;
+// pub use overlay::PickingOverlay;
 
 use wgpu::util::DeviceExt;
 

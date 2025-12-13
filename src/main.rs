@@ -7,9 +7,7 @@ mod gui;
 use glam::Vec3;
 use gui::{Gui, UiState};
 use particle_physics::{ColorCharge, Particle};
-use particle_renderer::{
-    Camera, GpuPicker, HadronRenderer, ParticleRenderer, PickingOverlay, PickingRenderer,
-};
+use particle_renderer::{Camera, GpuPicker, HadronRenderer, ParticleRenderer, PickingRenderer};
 use particle_simulation::ParticleSimulation;
 use rand::Rng;
 use std::sync::Arc;
@@ -153,12 +151,7 @@ struct GpuState {
     picker: GpuPicker,
     picking_renderer: PickingRenderer,
 
-    // Debug: visualize what the picking pass rasterizes
-    show_picking_overlay: bool,
-    picking_overlay_opacity: f32,
-    picking_overlay: PickingOverlay,
-
-    // Debug: record last sampled pick pixel (+ mirrored-y candidate) to correlate with overlay.
+    // NOTE: picking overlay/crosshair debug removed for perf (it required an extra pick render pass).
     pick_debug: PickDebug,
 
     // Camera lock (follow selected entity)
@@ -313,10 +306,6 @@ impl GpuState {
             config.height,
         );
 
-        // Debug overlay to visualize the picking ID buffer
-        let picking_overlay = PickingOverlay::new(&device, config.format);
-
-        // Debug: track the last sampled pixel (and mirrored-y candidate)
         let pick_debug = PickDebug::new();
 
         // Create staging buffer for reading hadron counters:
@@ -351,10 +340,6 @@ impl GpuState {
 
             picker,
             picking_renderer,
-
-            show_picking_overlay: false,
-            picking_overlay_opacity: 0.35,
-            picking_overlay,
 
             pick_debug,
 
@@ -533,63 +518,6 @@ impl GpuState {
             self.ui_state.lod_quark_fade_end,
         );
 
-        // Feed pick-debug info into the UI so egui can draw crosshairs in screen space.
-        self.ui_state.show_picking_overlay = self.show_picking_overlay;
-        self.ui_state.pick_px = self.pick_debug.last_px;
-        self.ui_state.pick_py = self.pick_debug.last_py;
-        self.ui_state.pick_tex_w = self.pick_debug.last_w;
-        self.ui_state.pick_tex_h = self.pick_debug.last_h;
-
-        // Only show the crosshair after the first click updates `pick_debug`.
-        // This prevents drawing a bogus marker at (0,0) on startup.
-        //
-        // NOTE: we're inside `GpuState::render`, so use `self.pick_debug` (not `gpu_state`).
-        self.ui_state.has_pick_px = self.pick_debug.last_w != 0 && self.pick_debug.last_h != 0;
-
-        // Debug: visualize what the picking pass rasterized.
-        // We run a picking pass each frame only when the overlay is enabled.
-        if self.show_picking_overlay {
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Picking Overlay Encoder"),
-                });
-
-            // Render IDs into the pick texture.
-
-            self.picking_renderer.render(
-                &self.device,
-                &self.queue,
-                &mut encoder,
-                &self.picker.id_texture_view,
-                &self.camera,
-                self.simulation.particle_buffer(),
-                self.simulation.hadron_buffer(),
-                self.simulation.hadron_count_buffer(),
-                self.simulation.particle_count(),
-                self.simulation.particle_count(),
-                self.picking_particle_size,
-                self.ui_state.physics_params.integration[2],
-                self.ui_state.lod_shell_fade_start,
-                self.ui_state.lod_shell_fade_end,
-                self.ui_state.lod_bond_fade_start,
-                self.ui_state.lod_bond_fade_end,
-                self.ui_state.lod_quark_fade_start,
-                self.ui_state.lod_quark_fade_end,
-            );
-
-            // Blend the ID visualization over the scene.
-            self.picking_overlay.render(
-                &self.device,
-                &mut encoder,
-                &view,
-                &self.picker.id_texture_view,
-                self.picking_overlay_opacity,
-            );
-
-            self.queue.submit(std::iter::once(encoder.finish()));
-        }
-
         // Render Hadrons
         {
             let mut encoder = self
@@ -748,12 +676,8 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
-                if let Some(gpu_state) = &mut self.gpu_state {
-                    gpu_state.show_picking_overlay = !gpu_state.show_picking_overlay;
-                    log::info!(
-                        "picking overlay toggled: {}",
-                        gpu_state.show_picking_overlay
-                    );
+                if let Some(_gpu_state) = &mut self.gpu_state {
+                    log::info!("picking overlay toggled: (disabled/removed)");
                 }
             }
 
