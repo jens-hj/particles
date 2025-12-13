@@ -69,7 +69,11 @@ impl Gui {
             Some(device.limits().max_texture_dimension_2d as usize),
         );
 
-        let renderer = Renderer::new(device, output_color_format, None, 1, false);
+        let renderer = Renderer::new(
+            device,
+            output_color_format,
+            egui_wgpu::RendererOptions::default(),
+        );
 
         Self {
             context,
@@ -133,6 +137,7 @@ impl Gui {
                     load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,
                 },
+                depth_slice: None,
             })],
             depth_stencil_attachment: None,
             timestamp_writes: None,
