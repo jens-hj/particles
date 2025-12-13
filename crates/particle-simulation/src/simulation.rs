@@ -1,4 +1,9 @@
 //! GPU-based particle simulation manager
+//!
+//! NOTE: Hadron detection/validation uses `type_id == 0xFFFFFFFF` as the sentinel for an invalid hadron slot.
+//! The buffer is zero-initialized, so without explicitly seeding all slots as invalid, `find_free_slot()` will
+//! never find reusable slots and may treat untouched slots as valid hadrons. We initialize all hadron slots as
+//! invalid on startup to make slot reuse reliable.
 
 use crate::PhysicsParams;
 use bytemuck::{Pod, Zeroable};
@@ -68,15 +73,31 @@ impl ParticleSimulation {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
-        // Create hadron buffer (zero-initialized)
-        // We allocate enough space for every particle to potentially be a hadron leader (overkill but safe)
+        // Create hadron buffer.
+        //
+        // Important: The WGSL side treats `indices_type.w == 0xFFFFFFFFu` as "invalid hadron slot".
+        // A newly created buffer is zero-initialized, which would look like a *valid* Meson (type_id=0)
+        // unless we explicitly seed all slots as invalid.
+        //
+        // We allocate enough space for every particle to potentially be a hadron leader (overkill but safe).
         let hadron_size = std::mem::size_of::<Hadron>() as u64;
-        let hadron_buffer_size = hadron_size * particles.len() as u64;
-        let hadron_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let _hadron_buffer_size = hadron_size * particles.len() as u64;
+
+        let invalid_hadrons: Vec<Hadron> = (0..particles.len())
+            .map(|_| Hadron {
+                p1: 0,
+                p2: 0,
+                p3: 0,
+                type_id: 0xFFFF_FFFF,
+                center: [0.0; 4],
+                velocity: [0.0; 4],
+            })
+            .collect();
+
+        let hadron_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Hadron Buffer"),
-            size: hadron_buffer_size,
+            contents: bytemuck::cast_slice(&invalid_hadrons),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
         });
 
         // Create hadron counter buffer
@@ -329,14 +350,15 @@ impl ParticleSimulation {
             });
 
         log::info!("Creating hadron validation pipeline...");
-        let hadron_validation_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Hadron Validation Pipeline"),
-            layout: Some(&hadron_pipeline_layout),
-            module: &hadron_validation_shader,
-            entry_point: Some("main"),
-            compilation_options: Default::default(),
-            cache: None,
-        });
+        let hadron_validation_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Hadron Validation Pipeline"),
+                layout: Some(&hadron_pipeline_layout),
+                module: &hadron_validation_shader,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
 
         log::info!("Creating hadron pipeline...");
         let hadron_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {

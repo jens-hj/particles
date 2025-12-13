@@ -30,7 +30,7 @@ struct PhysicsParams {
     integration: vec4<f32>,
     nucleon: vec4<f32>,
     electron: vec4<f32>,
-    hadron: vec4<f32>, // x: binding_distance, y: breakup_distance, z: quark_electron_repulsion, w: quark_electron_radius
+    hadron: vec4<f32>, // x: binding_distance, y: breakup_distance, z: confinement_range_mult, w: confinement_strength_mult
 }
 
 @group(0) @binding(0)
@@ -102,7 +102,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let p1 = h.indices_type.x;
     let p2 = h.indices_type.y;
     let p3 = h.indices_type.z;
-    let is_meson = (p3 == 0xFFFFFFFFu);
+    let is_meson = (h.indices_type.w == 0u);
 
     // Bounds check
     let num_particles = arrayLength(&particles);
