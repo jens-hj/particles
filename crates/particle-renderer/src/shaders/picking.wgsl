@@ -197,10 +197,26 @@ fn vs_pick_hadron(
         return out;
     }
 
-    out.id = 0x80000000u | (instance_index + 1u);
-
     let center = h.center.xyz;
     let radius = h.center.w;
+
+    // Match visual shell LOD: if the shell would be fully transparent (alpha=0),
+    // it should not be pickable at all.
+    //
+    // Visual shader uses:
+    //   final_alpha = smoothstep(lod_shell_fade_start, lod_shell_fade_end, dist_to_cam)
+    // and discards when final_alpha < 0.01.
+    // Here we apply the stricter requirement you asked for:
+    //   if within lod_shell_fade_start of the camera, it shouldn't be pickable.
+    let dist_to_cam = distance(camera.position, center);
+    if (dist_to_cam < camera.lod_shell_fade_start) {
+        out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        out.id = 0u;
+        out.uv = vec2<f32>(0.0, 0.0);
+        return out;
+    }
+
+    out.id = 0x80000000u | (instance_index + 1u);
 
     let local = quad_vertex(vertex_index);
     let uv = quad_uv(local);
