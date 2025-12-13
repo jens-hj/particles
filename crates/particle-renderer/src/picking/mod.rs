@@ -12,6 +12,9 @@ pub mod renderer;
 
 pub use renderer::PickingRenderer;
 
+pub mod overlay;
+pub use overlay::PickingOverlay;
+
 use wgpu::util::DeviceExt;
 
 /// Result of a pick, as returned by the GPU readback.
@@ -30,7 +33,7 @@ impl PickResult {
 
 /// Offscreen resources used for GPU picking.
 pub struct GpuPicker {
-    /// 1x1 (or small) texture view used as the render target for ID rendering.
+    /// Picking render target view used for ID rendering.
     pub id_texture_view: wgpu::TextureView,
     id_texture: wgpu::Texture,
 
@@ -73,7 +76,9 @@ impl GpuPicker {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
 
@@ -126,7 +131,9 @@ impl GpuPicker {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: self.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
 
@@ -206,5 +213,24 @@ impl GpuPicker {
     /// Access the staging buffer for mapping control (caller-driven).
     pub fn staging_buffer(&self) -> &wgpu::Buffer {
         &self.staging
+    }
+
+    /// Debug: expose the underlying picking ID texture.
+    ///
+    /// This is useful for visualizing the picking layer by sampling from this texture in a
+    /// debug render pass. Prefer using `id_texture_view` for most cases; this is only needed
+    /// if you need to copy/inspect the raw texture.
+    pub fn id_texture(&self) -> &wgpu::Texture {
+        &self.id_texture
+    }
+
+    /// Debug: expose the picking texture format.
+    pub fn format(&self) -> wgpu::TextureFormat {
+        self.format
+    }
+
+    /// Debug: expose current picking texture dimensions.
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
     }
 }

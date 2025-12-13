@@ -93,6 +93,20 @@ fn quad_uv(p: vec2<f32>) -> vec2<f32> {
     return p * 0.5 + vec2<f32>(0.5, 0.5);
 }
 
+// Robust billboard basis:
+// Avoid degeneracy when `to_cam` is near-parallel to the chosen up axis.
+fn billboard_basis(to_cam: vec3<f32>) -> array<vec3<f32>, 2> {
+    // Prefer world-up, but switch to a safe axis if nearly parallel.
+    var up_axis = vec3<f32>(0.0, 1.0, 0.0);
+    if (abs(dot(to_cam, up_axis)) > 0.99) {
+        up_axis = vec3<f32>(1.0, 0.0, 0.0);
+    }
+
+    let right = normalize(cross(up_axis, to_cam));
+    let up = cross(to_cam, right);
+    return array<vec3<f32>, 2>(right, up);
+}
+
 // -------------------- Particle picking --------------------
 
 @vertex
@@ -112,14 +126,21 @@ fn vs_pick_particle(
     let local = quad_vertex(vertex_index);
     let uv = quad_uv(local);
 
-    // Camera-facing basis
+    // Camera-facing basis (robust)
     let to_cam = normalize(camera.position - world_center);
-    let right = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), to_cam));
-    let up = cross(to_cam, right);
+    let basis = billboard_basis(to_cam);
+    let right = basis[0];
+    let up = basis[1];
 
-    // Scale by particle size
-    let radius = camera.particle_size * 0.5;
-    let world_pos = world_center + (right * local.x + up * local.y) * radius;
+    // Match visual particle size exactly:
+    // Visual shader uses:
+    //   let size = camera.particle_size * particle.data.y;
+    //   world_pos = particle_pos + (right * pos_offset.x + billboard_up * pos_offset.y) * size;
+    //
+    // Here, `local` is the same as `pos_offset` in the visual shader (values in [-1, 1]),
+    // so we must multiply by `size` (NOT a "radius") to match the rendered quad footprint.
+    let size = camera.particle_size * p.data.y;
+    let world_pos = world_center + (right * local.x + up * local.y) * size;
 
     out.clip_position = camera.view_proj * vec4<f32>(world_pos, 1.0);
     out.uv = uv;
@@ -176,9 +197,11 @@ fn vs_pick_hadron(
     let local = quad_vertex(vertex_index);
     let uv = quad_uv(local);
 
+    // Camera-facing basis (robust)
     let to_cam = normalize(camera.position - center);
-    let right = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), to_cam));
-    let up = cross(to_cam, right);
+    let basis = billboard_basis(to_cam);
+    let right = basis[0];
+    let up = basis[1];
 
     let world_pos = center + (right * local.x + up * local.y) * radius;
     out.clip_position = camera.view_proj * vec4<f32>(world_pos, 1.0);

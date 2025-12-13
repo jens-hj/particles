@@ -7,7 +7,9 @@ mod gui;
 use glam::Vec3;
 use gui::{Gui, UiState};
 use particle_physics::{ColorCharge, Particle};
-use particle_renderer::{Camera, GpuPicker, HadronRenderer, ParticleRenderer, PickingRenderer};
+use particle_renderer::{
+    Camera, GpuPicker, HadronRenderer, ParticleRenderer, PickingOverlay, PickingRenderer,
+};
 use particle_simulation::ParticleSimulation;
 use rand::Rng;
 use std::sync::Arc;
@@ -99,6 +101,11 @@ struct GpuState {
     // GPU picking (ID render + 1px readback)
     picker: GpuPicker,
     picking_renderer: PickingRenderer,
+
+    // Debug: visualize what the picking pass rasterizes
+    show_picking_overlay: bool,
+    picking_overlay_opacity: f32,
+    picking_overlay: PickingOverlay,
 
     // Camera lock (follow selected entity)
     camera_lock: Option<CameraLock>,
@@ -242,6 +249,9 @@ impl GpuState {
             config.height,
         );
 
+        // Debug overlay to visualize the picking ID buffer
+        let picking_overlay = PickingOverlay::new(&device, config.format);
+
         // Create staging buffer for reading hadron counters:
         // [total_hadrons, protons, neutrons, other]
         let hadron_count_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -274,6 +284,11 @@ impl GpuState {
 
             picker,
             picking_renderer,
+
+            show_picking_overlay: false,
+            picking_overlay_opacity: 0.35,
+            picking_overlay,
+
             camera_lock: None,
 
             selection_target_staging_buffer,
@@ -426,6 +441,50 @@ impl GpuState {
             self.ui_state.lod_quark_fade_end,
         );
 
+        // Debug: visualize what the picking pass rasterized.
+        // We run a picking pass each frame only when the overlay is enabled.
+        if self.show_picking_overlay {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Picking Overlay Encoder"),
+                });
+
+            // Render IDs into the pick texture.
+            // Use the same particle size as the normal render for now.
+            self.picking_renderer.render(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                &self.picker.id_texture_view,
+                &self.camera,
+                self.simulation.particle_buffer(),
+                self.simulation.hadron_buffer(),
+                self.simulation.hadron_count_buffer(),
+                self.simulation.particle_count(),
+                self.simulation.particle_count(),
+                PARTICLE_SCALE,
+                self.ui_state.physics_params.integration[2],
+                self.ui_state.lod_shell_fade_start,
+                self.ui_state.lod_shell_fade_end,
+                self.ui_state.lod_bond_fade_start,
+                self.ui_state.lod_bond_fade_end,
+                self.ui_state.lod_quark_fade_start,
+                self.ui_state.lod_quark_fade_end,
+            );
+
+            // Blend the ID visualization over the scene.
+            self.picking_overlay.render(
+                &self.device,
+                &mut encoder,
+                &view,
+                &self.picker.id_texture_view,
+                self.picking_overlay_opacity,
+            );
+
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
+
         // Render Hadrons
         {
             let mut encoder = self
@@ -571,6 +630,25 @@ impl ApplicationHandler for App {
                 }
             }
 
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::KeyP),
+                        state: ElementState::Pressed,
+                        repeat: false,
+                        ..
+                    },
+                ..
+            } => {
+                if let Some(gpu_state) = &mut self.gpu_state {
+                    gpu_state.show_picking_overlay = !gpu_state.show_picking_overlay;
+                    log::info!(
+                        "picking overlay toggled: {}",
+                        gpu_state.show_picking_overlay
+                    );
+                }
+            }
+
             WindowEvent::MouseInput { state, button, .. } => {
                 if button == winit::event::MouseButton::Right {
                     self.mouse_pressed = state == ElementState::Pressed;
@@ -594,13 +672,43 @@ impl ApplicationHandler for App {
                             return;
                         };
 
+                        // IMPORTANT: winit cursor positions are in logical pixels.
+                        // `inner_size()` and our swapchain/config are in physical pixels.
+                        // If we don't apply the window scale factor, pick coordinates will be wrong
+                        // (often "about half the time" depending on DPI, window moves, etc).
+                        let scale = window.scale_factor();
+                        let physical_x = (x * scale).round();
+                        let physical_y = (y * scale).round();
+
                         let size = window.inner_size();
                         let w = size.width.max(1) as f64;
                         let h = size.height.max(1) as f64;
 
-                        // Convert window-space -> texture pixel coords (origin top-left in winit).
-                        let px = ((x / w) * gpu_state.config.width as f64) as u32;
-                        let py = ((y / h) * gpu_state.config.height as f64) as u32;
+                        // Convert physical window-space -> texture pixel coords (origin top-left).
+                        // Clamp to the valid render target range.
+                        let px = ((physical_x / w) * gpu_state.config.width as f64)
+                            .floor()
+                            .clamp(0.0, (gpu_state.config.width.saturating_sub(1)) as f64)
+                            as u32;
+                        let py = ((physical_y / h) * gpu_state.config.height as f64)
+                            .floor()
+                            .clamp(0.0, (gpu_state.config.height.saturating_sub(1)) as f64)
+                            as u32;
+
+                        log::info!(
+                            "pick click: cursor_logical=({:.1},{:.1}) scale={:.3} cursor_physical=({:.1},{:.1}) window_physical=({}x{}) cfg=({}x{}) pick_px=({}, {})",
+                            x,
+                            y,
+                            scale,
+                            physical_x,
+                            physical_y,
+                            size.width,
+                            size.height,
+                            gpu_state.config.width,
+                            gpu_state.config.height,
+                            px,
+                            py
+                        );
 
                         let mut encoder = gpu_state.device.create_command_encoder(
                             &wgpu::CommandEncoderDescriptor {
@@ -609,6 +717,18 @@ impl ApplicationHandler for App {
                         );
 
                         // Render IDs into offscreen target
+                        // IMPORTANT:
+                        // The visual particle shader scales billboards by `camera.particle_size * particle.data.y`.
+                        // For quarks, `particle.data.y` is very small (~0.03), which makes the visible/on-screen
+                        // footprint extremely tiny unless `camera.particle_size` is large enough.
+                        //
+                        // If the picking pass uses too small a `particle_size`, most clicks will hit background (id=0),
+                        // and picking will appear angle-dependent / unreliable.
+                        //
+                        // For now, we use a higher `particle_size` for picking so the pick collider matches what you
+                        // can realistically hit on-screen.
+                        let picking_particle_size = PARTICLE_SCALE * 8.0;
+
                         gpu_state.picking_renderer.render(
                             &gpu_state.device,
                             &gpu_state.queue,
@@ -620,7 +740,7 @@ impl ApplicationHandler for App {
                             gpu_state.simulation.hadron_count_buffer(),
                             gpu_state.simulation.particle_count(),
                             gpu_state.simulation.particle_count(), // max_hadrons == particle_count allocation
-                            PARTICLE_SCALE,
+                            picking_particle_size,
                             gpu_state.ui_state.physics_params.integration[2],
                             gpu_state.ui_state.lod_shell_fade_start,
                             gpu_state.ui_state.lod_shell_fade_end,
@@ -649,9 +769,16 @@ impl ApplicationHandler for App {
                         let pick = gpu_state.picker.read_mapped();
                         gpu_state.picker.staging_buffer().unmap();
 
+                        let decoded = decode_pick_id(pick.id);
+                        log::info!(
+                            "pick readback: raw_id=0x{pick_id:08x} ({pick_id}) decoded={decoded:?}",
+                            pick_id = pick.id,
+                            decoded = decoded
+                        );
+
                         // Update selection ID in the simulation and resolve it to a world-space target.
                         gpu_state.simulation.set_selected_id(pick.id);
-                        gpu_state.camera_lock = decode_pick_id(pick.id);
+                        gpu_state.camera_lock = decoded;
 
                         // Resolve selection -> target position (GPU compute), then read back vec4<f32>.
                         if gpu_state.camera_lock.is_some() {
@@ -697,6 +824,14 @@ impl ApplicationHandler for App {
                                 let w = f32::from_le_bytes(bytes[12..16].try_into().unwrap());
 
                                 gpu_state.selection_target_cached = Some([x, y, z, w]);
+
+                                log::info!(
+                                    "pick resolve: target=({:.3},{:.3},{:.3}) kind_w={:.1}",
+                                    x,
+                                    y,
+                                    z,
+                                    w
+                                );
 
                                 // Do NOT snap the camera on click.
                                 // We only update `selection_target_cached` here; the per-frame camera
