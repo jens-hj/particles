@@ -539,7 +539,9 @@ impl ParticleSimulation {
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    /// Get reference to particle buffer for rendering
+    /// Get reference to particle buffer (read-only usage is up to the caller).
+    ///
+    /// This is also used by GPU picking to render IDs.
     pub fn particle_buffer(&self) -> &wgpu::Buffer {
         &self.particle_buffer
     }
@@ -549,12 +551,16 @@ impl ParticleSimulation {
         self.particle_count
     }
 
-    /// Get reference to hadron buffer for rendering
+    /// Get reference to hadron buffer.
+    ///
+    /// This is also used by GPU picking to render IDs for hadron shells.
     pub fn hadron_buffer(&self) -> &wgpu::Buffer {
         &self.hadron_buffer
     }
 
-    /// Get reference to hadron count buffer for rendering
+    /// Get reference to hadron count buffer.
+    ///
+    /// This is also used by GPU picking to know how many hadrons are valid.
     pub fn hadron_count_buffer(&self) -> &wgpu::Buffer {
         &self.hadron_count_buffer
     }

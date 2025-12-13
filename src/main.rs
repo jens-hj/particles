@@ -7,7 +7,7 @@ mod gui;
 use glam::Vec3;
 use gui::{Gui, UiState};
 use particle_physics::{ColorCharge, Particle};
-use particle_renderer::{Camera, HadronRenderer, ParticleRenderer};
+use particle_renderer::{Camera, GpuPicker, HadronRenderer, ParticleRenderer, PickingRenderer};
 use particle_simulation::ParticleSimulation;
 use rand::Rng;
 use std::sync::Arc;
@@ -96,9 +96,45 @@ struct GpuState {
     ui_state: UiState,
     hadron_count_staging_buffer: wgpu::Buffer,
 
+    // GPU picking (ID render + 1px readback)
+    picker: GpuPicker,
+    picking_renderer: PickingRenderer,
+
+    // Camera lock (follow selected entity)
+    camera_lock: Option<CameraLock>,
+
     frame_times: Vec<f32>,
     last_frame_time: Instant,
     frame_counter: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CameraLock {
+    Particle { particle_index: u32 },
+    Hadron { hadron_index: u32 },
+}
+
+fn decode_pick_id(raw: u32) -> Option<CameraLock> {
+    if raw == 0 {
+        return None;
+    }
+
+    let is_hadron = (raw & 0x8000_0000) != 0;
+    let idx_1 = raw & 0x7FFF_FFFF;
+
+    if idx_1 == 0 {
+        return None;
+    }
+
+    let idx0 = idx_1 - 1;
+
+    if is_hadron {
+        Some(CameraLock::Hadron { hadron_index: idx0 })
+    } else {
+        Some(CameraLock::Particle {
+            particle_index: idx0,
+        })
+    }
 }
 
 impl GpuState {
@@ -185,6 +221,23 @@ impl GpuState {
         let gui = Gui::new(&device, config.format, &window);
         let ui_state = UiState::default();
 
+        // GPU picking:
+        // - ID target is RGBA8 (packed u32 ID)
+        // - Depth for occlusion
+        let picker = GpuPicker::new(
+            &device,
+            config.width,
+            config.height,
+            wgpu::TextureFormat::Rgba8Unorm,
+        );
+        let picking_renderer = PickingRenderer::new(
+            &device,
+            wgpu::TextureFormat::Rgba8Unorm,
+            wgpu::TextureFormat::Depth32Float,
+            config.width,
+            config.height,
+        );
+
         // Create staging buffer for reading hadron counters:
         // [total_hadrons, protons, neutrons, other]
         let hadron_count_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -206,6 +259,11 @@ impl GpuState {
             gui,
             ui_state,
             hadron_count_staging_buffer,
+
+            picker,
+            picking_renderer,
+            camera_lock: None,
+
             frame_times: Vec::with_capacity(100),
             last_frame_time: Instant::now(),
             frame_counter: 0,
@@ -219,6 +277,11 @@ impl GpuState {
             self.surface.configure(&self.device, &self.config);
             self.renderer.resize(&self.device, &self.config);
             self.camera.resize(new_size.width, new_size.height);
+
+            self.picker
+                .resize(&self.device, self.config.width, self.config.height);
+            self.picking_renderer
+                .resize(&self.device, self.config.width, self.config.height);
         }
     }
 
@@ -227,6 +290,21 @@ impl GpuState {
         let now = Instant::now();
         let frame_time = (now - self.last_frame_time).as_secs_f32() * 1000.0;
         self.last_frame_time = now;
+
+        // Camera lock: keep camera.target following the selected entity every frame.
+        if let Some(lock) = self.camera_lock {
+            match lock {
+                CameraLock::Particle { particle_index } => {
+                    // NOTE: Proper implementation will read the particle position from GPU picking
+                    // selection context. For now, keep the target as-is; selection plumbing is
+                    // implemented in the event handler and uses GPU picking readback.
+                    let _ = particle_index;
+                }
+                CameraLock::Hadron { hadron_index } => {
+                    let _ = hadron_index;
+                }
+            }
+        }
 
         self.frame_times.push(frame_time);
         if self.frame_times.len() > 100 {
@@ -405,6 +483,10 @@ struct App {
     gpu_state: Option<GpuState>,
     mouse_pressed: bool,
     last_mouse_pos: Option<(f64, f64)>,
+
+    // Picking
+    left_mouse_pressed: bool,
+    last_cursor_pos: Option<(f64, f64)>,
 }
 
 impl ApplicationHandler for App {
@@ -444,6 +526,22 @@ impl ApplicationHandler for App {
                 ..
             } => event_loop.exit(),
 
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::KeyC),
+                        state: ElementState::Pressed,
+                        repeat: false,
+                        ..
+                    },
+                ..
+            } => {
+                if let Some(gpu_state) = &mut self.gpu_state {
+                    gpu_state.camera.target = Vec3::ZERO;
+                    gpu_state.camera_lock = None;
+                }
+            }
+
             WindowEvent::Resized(physical_size) => {
                 if let Some(gpu_state) = &mut self.gpu_state {
                     gpu_state.resize(physical_size);
@@ -457,9 +555,85 @@ impl ApplicationHandler for App {
                         self.last_mouse_pos = None;
                     }
                 }
+
+                if button == winit::event::MouseButton::Left {
+                    self.left_mouse_pressed = state == ElementState::Pressed;
+
+                    // GPU picking: render IDs into an offscreen target then read back the clicked pixel.
+                    if state == ElementState::Pressed {
+                        let Some((x, y)) = self.last_cursor_pos else {
+                            return;
+                        };
+                        let Some(gpu_state) = &mut self.gpu_state else {
+                            return;
+                        };
+                        let Some(window) = &self.window else {
+                            return;
+                        };
+
+                        let size = window.inner_size();
+                        let w = size.width.max(1) as f64;
+                        let h = size.height.max(1) as f64;
+
+                        // Convert window-space -> texture pixel coords (origin top-left in winit).
+                        let px = ((x / w) * gpu_state.config.width as f64) as u32;
+                        let py = ((y / h) * gpu_state.config.height as f64) as u32;
+
+                        let mut encoder = gpu_state.device.create_command_encoder(
+                            &wgpu::CommandEncoderDescriptor {
+                                label: Some("Picking Encoder"),
+                            },
+                        );
+
+                        // Render IDs into offscreen target
+                        gpu_state.picking_renderer.render(
+                            &gpu_state.device,
+                            &gpu_state.queue,
+                            &mut encoder,
+                            &gpu_state.picker.id_texture_view,
+                            &gpu_state.camera,
+                            gpu_state.simulation.particle_buffer(),
+                            gpu_state.simulation.hadron_buffer(),
+                            gpu_state.simulation.hadron_count_buffer(),
+                            gpu_state.simulation.particle_count(),
+                            gpu_state.simulation.particle_count(), // max_hadrons == particle_count allocation
+                            PARTICLE_SCALE,
+                            gpu_state.ui_state.physics_params.integration[2],
+                            gpu_state.ui_state.lod_shell_fade_start,
+                            gpu_state.ui_state.lod_shell_fade_end,
+                            gpu_state.ui_state.lod_bond_fade_start,
+                            gpu_state.ui_state.lod_bond_fade_end,
+                            gpu_state.ui_state.lod_quark_fade_start,
+                            gpu_state.ui_state.lod_quark_fade_end,
+                        );
+
+                        // Copy clicked pixel into staging buffer
+                        gpu_state.picker.encode_read_pixel(&mut encoder, px, py);
+
+                        gpu_state.queue.submit(std::iter::once(encoder.finish()));
+
+                        // Map + blockingly poll for the readback (clicks are rare so this is OK).
+                        let slice = gpu_state.picker.staging_buffer().slice(..);
+                        slice.map_async(wgpu::MapMode::Read, |_| {});
+                        gpu_state
+                            .device
+                            .poll(wgpu::PollType::Wait {
+                                submission_index: None,
+                                timeout: None,
+                            })
+                            .unwrap();
+
+                        let pick = gpu_state.picker.read_mapped();
+                        gpu_state.picker.staging_buffer().unmap();
+
+                        gpu_state.camera_lock = decode_pick_id(pick.id);
+                    }
+                }
             }
 
             WindowEvent::CursorMoved { position, .. } => {
+                self.last_cursor_pos = Some((position.x, position.y));
+
                 if self.mouse_pressed {
                     if let Some(last_pos) = self.last_mouse_pos {
                         let delta_x = (position.x - last_pos.0) as f32;
@@ -525,6 +699,9 @@ fn main() {
         gpu_state: None,
         mouse_pressed: false,
         last_mouse_pos: None,
+
+        left_mouse_pressed: false,
+        last_cursor_pos: None,
     };
 
     event_loop.run_app(&mut app).unwrap();
