@@ -386,5 +386,30 @@ impl Gui {
                     ui.label("Step: Ctrl+→ or Ctrl+D");
                 }
             });
+
+        // Time controls (Bottom Right)
+        egui::Window::new("Time Controls")
+            .anchor(egui::Align2::RIGHT_BOTTOM, [-10.0, -10.0])
+            .resizable(false)
+            .collapsible(true)
+            .show(ctx, |ui| {
+                ui.label("Time");
+                ui.checkbox(&mut state.is_paused, "Pause (Space)");
+
+                if state.is_paused {
+                    ui.horizontal(|ui| {
+                        if ui.button("Step").clicked() {
+                            state.steps_remaining += 1;
+                        }
+                        ui.label("Ctrl+→ / Ctrl+D");
+                    });
+                }
+
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.integration[0], 0.0001..=0.01)
+                        .text("Time Step (dt)")
+                        .step_by(0.0001),
+                );
+            });
     }
 }
