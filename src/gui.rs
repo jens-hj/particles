@@ -182,7 +182,7 @@ impl Gui {
                     && (i.key_pressed(egui::Key::ArrowRight) || i.key_pressed(egui::Key::D))
             });
             if step_pressed {
-                state.steps_remaining += 1;
+                state.steps_remaining += state.steps_to_play;
             }
         }
 
