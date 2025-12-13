@@ -103,6 +103,10 @@ struct GpuState {
     // Camera lock (follow selected entity)
     camera_lock: Option<CameraLock>,
 
+    // Selection resolve (GPU -> CPU readback for camera target)
+    selection_target_staging_buffer: wgpu::Buffer,
+    selection_target_cached: Option<[f32; 4]>,
+
     frame_times: Vec<f32>,
     last_frame_time: Instant,
     frame_counter: u32,
@@ -247,6 +251,14 @@ impl GpuState {
             mapped_at_creation: false,
         });
 
+        // Selection target readback (vec4<f32> = 16 bytes)
+        let selection_target_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Selection Target Staging Buffer"),
+            size: 16,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         Self {
             surface,
             device,
@@ -263,6 +275,9 @@ impl GpuState {
             picker,
             picking_renderer,
             camera_lock: None,
+
+            selection_target_staging_buffer,
+            selection_target_cached: None,
 
             frame_times: Vec::with_capacity(100),
             last_frame_time: Instant::now(),
@@ -292,16 +307,14 @@ impl GpuState {
         self.last_frame_time = now;
 
         // Camera lock: keep camera.target following the selected entity every frame.
-        if let Some(lock) = self.camera_lock {
-            match lock {
-                CameraLock::Particle { particle_index } => {
-                    // NOTE: Proper implementation will read the particle position from GPU picking
-                    // selection context. For now, keep the target as-is; selection plumbing is
-                    // implemented in the event handler and uses GPU picking readback.
-                    let _ = particle_index;
-                }
-                CameraLock::Hadron { hadron_index } => {
-                    let _ = hadron_index;
+        //
+        // We use the cached selection target produced by the selection-resolve compute pass.
+        // Only update the camera target when we have a valid resolved target.
+        if self.camera_lock.is_some() {
+            if let Some(target) = self.selection_target_cached {
+                // target.w = kind (0 none, 1 particle, 2 hadron)
+                if target[3] != 0.0 {
+                    self.camera.target = Vec3::new(target[0], target[1], target[2]);
                 }
             }
         }
@@ -539,6 +552,8 @@ impl ApplicationHandler for App {
                 if let Some(gpu_state) = &mut self.gpu_state {
                     gpu_state.camera.target = Vec3::ZERO;
                     gpu_state.camera_lock = None;
+                    gpu_state.selection_target_cached = None;
+                    gpu_state.simulation.set_selected_id(0);
                 }
             }
 
@@ -626,7 +641,66 @@ impl ApplicationHandler for App {
                         let pick = gpu_state.picker.read_mapped();
                         gpu_state.picker.staging_buffer().unmap();
 
+                        // Update selection ID in the simulation and resolve it to a world-space target.
+                        gpu_state.simulation.set_selected_id(pick.id);
                         gpu_state.camera_lock = decode_pick_id(pick.id);
+
+                        // Resolve selection -> target position (GPU compute), then read back vec4<f32>.
+                        if gpu_state.camera_lock.is_some() {
+                            let mut resolve_encoder = gpu_state.device.create_command_encoder(
+                                &wgpu::CommandEncoderDescriptor {
+                                    label: Some("Selection Resolve Encoder"),
+                                },
+                            );
+
+                            gpu_state
+                                .simulation
+                                .encode_selection_resolve(&mut resolve_encoder);
+
+                            resolve_encoder.copy_buffer_to_buffer(
+                                gpu_state.simulation.selection_target_buffer(),
+                                0,
+                                &gpu_state.selection_target_staging_buffer,
+                                0,
+                                16,
+                            );
+
+                            gpu_state
+                                .queue
+                                .submit(std::iter::once(resolve_encoder.finish()));
+
+                            let slice = gpu_state.selection_target_staging_buffer.slice(..);
+                            slice.map_async(wgpu::MapMode::Read, |_| {});
+                            gpu_state
+                                .device
+                                .poll(wgpu::PollType::Wait {
+                                    submission_index: None,
+                                    timeout: None,
+                                })
+                                .unwrap();
+
+                            {
+                                let data = slice.get_mapped_range();
+                                let bytes: &[u8] = &data;
+
+                                let x = f32::from_le_bytes(bytes[0..4].try_into().unwrap());
+                                let y = f32::from_le_bytes(bytes[4..8].try_into().unwrap());
+                                let z = f32::from_le_bytes(bytes[8..12].try_into().unwrap());
+                                let w = f32::from_le_bytes(bytes[12..16].try_into().unwrap());
+
+                                gpu_state.selection_target_cached = Some([x, y, z, w]);
+
+                                // Immediately move camera to target on click.
+                                if w != 0.0 {
+                                    gpu_state.camera.target = Vec3::new(x, y, z);
+                                }
+                            }
+
+                            gpu_state.selection_target_staging_buffer.unmap();
+                        } else {
+                            // Cleared selection
+                            gpu_state.selection_target_cached = None;
+                        }
                     }
                 }
             }

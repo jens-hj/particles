@@ -31,6 +31,12 @@ pub struct ParticleSimulation {
     locks_buffer: wgpu::Buffer,
     params_buffer: wgpu::Buffer,
 
+    // Selection (GPU resolve)
+    selection_id_buffer: wgpu::Buffer,
+    selection_target_buffer: wgpu::Buffer,
+    selection_pipeline: wgpu::ComputePipeline,
+    selection_bind_group: wgpu::BindGroup,
+
     // Compute pipelines
     force_pipeline: wgpu::ComputePipeline,
     integrate_pipeline: wgpu::ComputePipeline,
@@ -134,6 +140,26 @@ impl ParticleSimulation {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
+        // Selection resolve buffers (CPU writes selected ID; GPU resolves to world-space center)
+        //
+        // selection_id_buffer layout: 16 bytes (u32 + padding) to match WGSL `Selection` uniform.
+        let selection_id_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Selection ID Buffer"),
+            contents: bytemuck::cast_slice(&[0u32, 0u32, 0u32, 0u32]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // selection_target_buffer layout: vec4<f32> (16 bytes)
+        // xyz = selected center, w = kind (0 none, 1 particle, 2 hadron)
+        let selection_target_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Selection Target Buffer"),
+            size: 16,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         log::info!("Buffers created");
 
         // Load compute shaders
@@ -156,6 +182,12 @@ impl ParticleSimulation {
             label: Some("Hadron Detection Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/hadron_detection.wgsl").into()),
         });
+
+        let selection_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Selection Resolve Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/selection_resolve.wgsl").into()),
+        });
+
         log::info!("Shaders loaded");
 
         // Create bind group layout for force computation
@@ -256,6 +288,58 @@ impl ParticleSimulation {
                 ],
             });
 
+        // Bind group layout for selection resolve compute:
+        // 0: selection id (uniform)
+        // 1: particles (storage, read)
+        // 2: hadrons (storage, read)
+        // 3: selection target (storage, write)
+        let selection_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Selection Bind Group Layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+
         // Create bind group layout for hadron detection and validation
         let hadron_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -329,6 +413,24 @@ impl ParticleSimulation {
             label: Some("Force Pipeline"),
             layout: Some(&force_pipeline_layout),
             module: &force_shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        log::info!("Creating selection pipeline layout...");
+        let selection_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Selection Pipeline Layout"),
+                bind_group_layouts: &[&selection_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        log::info!("Creating selection pipeline...");
+        let selection_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Selection Pipeline"),
+            layout: Some(&selection_pipeline_layout),
+            module: &selection_shader,
             entry_point: Some("main"),
             compilation_options: Default::default(),
             cache: None,
@@ -410,6 +512,29 @@ impl ParticleSimulation {
             ],
         });
 
+        let selection_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Selection Bind Group"),
+            layout: &selection_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: selection_id_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: particle_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: hadron_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: selection_target_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
         let integrate_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Integration Bind Group"),
             layout: &integrate_bind_group_layout,
@@ -466,6 +591,11 @@ impl ParticleSimulation {
             hadron_count_buffer,
             locks_buffer,
             params_buffer,
+
+            selection_id_buffer,
+            selection_target_buffer,
+            selection_pipeline,
+            selection_bind_group,
 
             force_pipeline,
             integrate_pipeline,
@@ -544,6 +674,36 @@ impl ParticleSimulation {
     /// This is also used by GPU picking to render IDs.
     pub fn particle_buffer(&self) -> &wgpu::Buffer {
         &self.particle_buffer
+    }
+
+    /// Update the currently selected packed ID (written by GPU picking).
+    ///
+    /// The ID encoding convention must match the picking shader:
+    /// - 0 => none
+    /// - (particle_index + 1) => particle
+    /// - 0x80000000 | (hadron_index + 1) => hadron
+    pub fn set_selected_id(&self, id: u32) {
+        let data = [id, 0u32, 0u32, 0u32];
+        self.queue
+            .write_buffer(&self.selection_id_buffer, 0, bytemuck::cast_slice(&data));
+    }
+
+    /// Run the selection resolve compute pass (1 invocation).
+    ///
+    /// This writes the selected entity center into `selection_target_buffer`.
+    pub fn encode_selection_resolve(&self, encoder: &mut wgpu::CommandEncoder) {
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Selection Resolve Pass"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&self.selection_pipeline);
+        pass.set_bind_group(0, &self.selection_bind_group, &[]);
+        pass.dispatch_workgroups(1, 1, 1);
+    }
+
+    /// Get the selection target buffer for readback.
+    pub fn selection_target_buffer(&self) -> &wgpu::Buffer {
+        &self.selection_target_buffer
     }
 
     /// Get particle count
