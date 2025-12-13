@@ -24,57 +24,6 @@ const PARTICLE_COUNT: usize = 8000;
 const SPAWN_RADIUS: f32 = 50.0;
 const PARTICLE_SCALE: f32 = 3.0; // Global scale multiplier for visibility
 
-#[derive(Debug, Clone, Copy)]
-struct PickDebug {
-    enabled: bool,
-
-    // Last sampled pixel in the picking ID texture (absolute texel coords).
-    last_px: u32,
-    last_py: u32,
-
-    // Cached dimensions at the time of the click (for mirrored-y computation).
-    last_w: u32,
-    last_h: u32,
-}
-
-impl PickDebug {
-    fn new() -> Self {
-        Self {
-            enabled: true,
-            last_px: 0,
-            last_py: 0,
-            last_w: 1,
-            last_h: 1,
-        }
-    }
-
-    fn update(&mut self, px: u32, py: u32, w: u32, h: u32) {
-        self.last_px = px;
-        self.last_py = py;
-        self.last_w = w.max(1);
-        self.last_h = h.max(1);
-    }
-
-    fn mirrored_y(&self) -> u32 {
-        self.last_h.saturating_sub(1).saturating_sub(self.last_py)
-    }
-
-    fn log_snapshot(&self) {
-        if !self.enabled {
-            return;
-        }
-        log::info!(
-            "pick debug: sampled_px=({}, {}) mirrored_y_px=({}, {}) tex=({}x{})",
-            self.last_px,
-            self.last_py,
-            self.last_px,
-            self.mirrored_y(),
-            self.last_w,
-            self.last_h
-        );
-    }
-}
-
 /// Initialize particles with quarks and electrons
 fn initialize_particles() -> Vec<Particle> {
     let mut rng = rand::rng();
@@ -150,9 +99,6 @@ struct GpuState {
     // GPU picking (ID render + 1px readback)
     picker: GpuPicker,
     picking_renderer: PickingRenderer,
-
-    // NOTE: picking overlay/crosshair debug removed for perf (it required an extra pick render pass).
-    pick_debug: PickDebug,
 
     // Camera lock (follow selected entity)
     camera_lock: Option<CameraLock>,
@@ -306,8 +252,6 @@ impl GpuState {
             config.height,
         );
 
-        let pick_debug = PickDebug::new();
-
         // Create staging buffer for reading hadron counters:
         // [total_hadrons, protons, neutrons, other]
         let hadron_count_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -340,8 +284,6 @@ impl GpuState {
 
             picker,
             picking_renderer,
-
-            pick_debug,
 
             camera_lock: None,
 
@@ -677,7 +619,7 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 if let Some(_gpu_state) = &mut self.gpu_state {
-                    log::info!("picking overlay toggled: (disabled/removed)");
+                    log::debug!("picking overlay toggled: (disabled/removed)");
                 }
             }
 
@@ -727,15 +669,7 @@ impl ApplicationHandler for App {
                             .clamp(0.0, (gpu_state.config.height.saturating_sub(1)) as f64)
                             as u32;
 
-                        gpu_state.pick_debug.update(
-                            px,
-                            py,
-                            gpu_state.config.width,
-                            gpu_state.config.height,
-                        );
-                        gpu_state.pick_debug.log_snapshot();
-
-                        log::info!(
+                        log::debug!(
                             "pick click: cursor_logical=({:.1},{:.1}) scale={:.3} cursor_physical=({:.1},{:.1}) window_physical=({}x{}) cfg=({}x{}) pick_px=({}, {})",
                             x,
                             y,
