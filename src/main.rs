@@ -107,6 +107,9 @@ struct GpuState {
     selection_target_staging_buffer: wgpu::Buffer,
     selection_target_cached: Option<[f32; 4]>,
 
+    // Smooth distance target when locking onto a selection.
+    camera_distance_target: Option<f32>,
+
     // Smooth reset target when pressing `C` (avoid snapping).
     camera_reset_target: Option<Vec3>,
 
@@ -290,6 +293,7 @@ impl GpuState {
             selection_target_staging_buffer,
             selection_target_cached: None,
 
+            camera_distance_target: None,
             camera_reset_target: None,
 
             // Default: match the normal render scale.
@@ -347,6 +351,9 @@ impl GpuState {
         if self.camera_lock.is_some() {
             if let Some(target) = self.selection_target_cached {
                 // target.w = kind (0 none, 1 particle, 2 hadron)
+                // NOTE: The selection-resolve pass only tells us the kind, not the exact radius.
+                // We approximate desired camera distance based on kind. This can be refined later
+                // by adding a resolved "size/radius" output from the compute pass.
                 if target[3] != 0.0 {
                     let desired = Vec3::new(target[0], target[1], target[2]);
 
@@ -357,7 +364,30 @@ impl GpuState {
                     let t = 1.0 - (-follow_rate * dt).exp();
 
                     self.camera.target = self.camera.target.lerp(desired, t);
+
+                    // Smooth distance: zoom in for particles/quarks; stay further for hadrons.
+                    let desired_distance = match target[3].round() as i32 {
+                        1 => 12.0, // particle/quark: close-up
+                        2 => 45.0, // hadron shell: larger, keep more distance
+                        _ => self.camera.distance,
+                    };
+                    self.camera_distance_target = Some(desired_distance);
                 }
+            }
+        }
+
+        // Apply camera zoom smoothing if requested (selection or other systems).
+        if let Some(desired_distance) = self.camera_distance_target {
+            let zoom_rate: f32 = 10.0;
+            let dt = (frame_time * 0.001).max(0.0);
+            let t = 1.0 - (-zoom_rate * dt).exp();
+
+            self.camera.distance =
+                self.camera.distance + (desired_distance - self.camera.distance) * t;
+
+            if (self.camera.distance - desired_distance).abs() < 0.01 {
+                self.camera.distance = desired_distance;
+                self.camera_distance_target = None;
             }
         }
 
@@ -598,6 +628,7 @@ impl ApplicationHandler for App {
                     // Clear selection/lock state so follow doesn't fight the reset.
                     gpu_state.camera_lock = None;
                     gpu_state.selection_target_cached = None;
+                    gpu_state.camera_distance_target = None;
                     gpu_state.simulation.set_selected_id(0);
                 }
             }
@@ -814,6 +845,7 @@ impl ApplicationHandler for App {
                         } else {
                             // Cleared selection
                             gpu_state.selection_target_cached = None;
+                            gpu_state.camera_distance_target = None;
                         }
                     }
                 }
