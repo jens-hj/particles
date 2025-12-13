@@ -29,6 +29,7 @@ pub struct ParticleSimulation {
     // Compute pipelines
     force_pipeline: wgpu::ComputePipeline,
     integrate_pipeline: wgpu::ComputePipeline,
+    hadron_validation_pipeline: wgpu::ComputePipeline,
     hadron_pipeline: wgpu::ComputePipeline,
 
     // Bind groups
@@ -114,6 +115,11 @@ impl ParticleSimulation {
         let integrate_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Integration Compute Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/integrate.wgsl").into()),
+        });
+
+        let hadron_validation_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Hadron Validation Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/hadron_validation.wgsl").into()),
         });
 
         let hadron_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -218,7 +224,7 @@ impl ParticleSimulation {
                 ],
             });
 
-        // Create bind group layout for hadron detection
+        // Create bind group layout for hadron detection and validation
         let hadron_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Hadron Bind Group Layout"),
@@ -227,7 +233,7 @@ impl ParticleSimulation {
                         binding: 0,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -258,6 +264,16 @@ impl ParticleSimulation {
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -311,6 +327,16 @@ impl ParticleSimulation {
                 bind_group_layouts: &[&hadron_bind_group_layout],
                 push_constant_ranges: &[],
             });
+
+        log::info!("Creating hadron validation pipeline...");
+        let hadron_validation_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Hadron Validation Pipeline"),
+            layout: Some(&hadron_pipeline_layout),
+            module: &hadron_validation_shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
 
         log::info!("Creating hadron pipeline...");
         let hadron_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -390,6 +416,10 @@ impl ParticleSimulation {
                     binding: 3,
                     resource: locks_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: params_buffer.as_entire_binding(),
+                },
             ],
         });
         log::info!("Bind groups created");
@@ -405,6 +435,7 @@ impl ParticleSimulation {
             params_buffer,
             force_pipeline,
             integrate_pipeline,
+            hadron_validation_pipeline,
             hadron_pipeline,
             force_bind_group,
             integrate_bind_group,
@@ -446,10 +477,20 @@ impl ParticleSimulation {
             compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
         }
 
-        // Step 3: Detect Hadrons
+        // Step 3: Validate existing hadrons
         {
-            // Reset counter
-            encoder.clear_buffer(&self.hadron_count_buffer, 0, None);
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Hadron Validation Pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(&self.hadron_validation_pipeline);
+            compute_pass.set_bind_group(0, &self.hadron_bind_group, &[]);
+            compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
+        }
+
+        // Step 4: Detect new hadrons
+        {
+            // Reset locks (hadron count persists now)
             encoder.clear_buffer(&self.locks_buffer, 0, None);
 
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {

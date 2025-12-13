@@ -3,7 +3,6 @@
 
 // Constants (must match Rust and other shaders)
 const STRONG_RANGE: f32 = 3.0;
-const BINDING_DISTANCE: f32 = 1.5; // Slightly tighter than max range for stable detection
 
 // Particle Types
 const TYPE_QUARK_UP: u32 = 0u;
@@ -27,7 +26,7 @@ struct Particle {
     position: vec4<f32>,        // xyz = position, w = particle_type
     velocity: vec4<f32>,        // xyz = velocity, w = mass
     data: vec4<f32>,            // x = charge, y = size
-    color_and_flags: vec4<u32>, // x = color_charge
+    color_and_flags: vec4<u32>, // x = color_charge, y = flags, z = hadron_id, w = padding
 }
 
 struct Hadron {
@@ -41,8 +40,18 @@ struct HadronCounter {
     _pad: vec3<u32>,
 }
 
+struct PhysicsParams {
+    constants: vec4<f32>,
+    strong_force: vec4<f32>,
+    repulsion: vec4<f32>,
+    integration: vec4<f32>,
+    nucleon: vec4<f32>,
+    electron: vec4<f32>,
+    hadron: vec4<f32>, // x: binding_distance, y: breakup_distance, z: quark_electron_repulsion, w: quark_electron_radius
+}
+
 @group(0) @binding(0)
-var<storage, read> particles: array<Particle>;
+var<storage, read_write> particles: array<Particle>;
 
 @group(0) @binding(1)
 var<storage, read_write> hadrons: array<Hadron>;
@@ -52,6 +61,9 @@ var<storage, read_write> counter: HadronCounter;
 
 @group(0) @binding(3)
 var<storage, read_write> locks: array<atomic<u32>>;
+
+@group(0) @binding(4)
+var<uniform> params: PhysicsParams;
 
 fn get_dist_sq(p1_idx: u32, p2_idx: u32) -> f32 {
     let pos1 = particles[p1_idx].position.xyz;
@@ -75,6 +87,31 @@ fn get_color(p_idx: u32) -> u32 {
 
 fn get_type(p_idx: u32) -> u32 {
     return u32(particles[p_idx].position.w);
+}
+
+fn is_bound(p_idx: u32) -> bool {
+    return particles[p_idx].color_and_flags.z != 0u;
+}
+
+// Find a free hadron slot (either beyond current count or an invalid slot)
+fn find_free_slot() -> u32 {
+    let current_count = atomicLoad(&counter.count);
+    let max_hadrons = arrayLength(&hadrons);
+
+    // First, look for invalid slots to reuse
+    for (var i = 0u; i < current_count; i++) {
+        if (hadrons[i].indices_type.w == 0xFFFFFFFFu) {
+            return i;
+        }
+    }
+
+    // No invalid slots found, try to allocate new one
+    if (current_count < max_hadrons) {
+        return atomicAdd(&counter.count, 1u);
+    }
+
+    // No space available
+    return 0xFFFFFFFFu;
 }
 
 // Determine baryon type based on quark composition
@@ -113,6 +150,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
+    // Skip quarks that are already bound to a hadron
+    if (is_bound(index)) {
+        return;
+    }
+
     let my_color = get_color(index);
 
     // STRATEGY:
@@ -128,15 +170,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if (my_color == COLOR_RED) {
         var closest_green = 0xFFFFFFFFu;
         var closest_blue = 0xFFFFFFFFu;
-        var min_dist_sq_green = BINDING_DISTANCE * BINDING_DISTANCE;
-        var min_dist_sq_blue = BINDING_DISTANCE * BINDING_DISTANCE;
+        let binding_dist = params.hadron.x;
+        var min_dist_sq_green = binding_dist * binding_dist;
+        var min_dist_sq_blue = binding_dist * binding_dist;
 
-        // Find closest Green and Blue neighbors
+        // Find closest Green and Blue neighbors (only unbound quarks)
         for (var i = 0u; i < num_particles; i++) {
-            if (i == index || !is_quark(i)) { continue; }
+            if (i == index || !is_quark(i) || is_bound(i)) { continue; }
 
             let d_sq = get_dist_sq(index, i);
-            if (d_sq > BINDING_DISTANCE * BINDING_DISTANCE) { continue; }
+            if (d_sq > binding_dist * binding_dist) { continue; }
 
             let c = get_color(i);
             if (c == COLOR_GREEN) {
@@ -155,7 +198,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         // If both found, check if they are also close to each other
         if (closest_green != 0xFFFFFFFFu && closest_blue != 0xFFFFFFFFu) {
             let d_gb_sq = get_dist_sq(closest_green, closest_blue);
-            if (d_gb_sq < BINDING_DISTANCE * BINDING_DISTANCE) {
+            if (d_gb_sq < binding_dist * binding_dist) {
                 // Try to acquire locks
                 let l1 = atomicCompareExchangeWeak(&locks[index], 0u, 1u).exchanged;
                 var l2 = false;
@@ -169,9 +212,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 }
 
                 if (l1 && l2 && l3) {
-                    // Found a Baryon!
-                    let h_idx = atomicAdd(&counter.count, 1u);
-                    if (h_idx < arrayLength(&hadrons)) {
+                    // Found a Baryon! Find a free hadron slot
+                    let h_idx = find_free_slot();
+                    if (h_idx != 0xFFFFFFFFu) {
                         let p1 = particles[index];
                         let p2 = particles[closest_green];
                         let p3 = particles[closest_blue];
@@ -197,6 +240,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                         h.velocity = vec4<f32>(velocity, 0.0);
 
                         hadrons[h_idx] = h;
+
+                        // Set hadron_id on constituent particles (1-indexed)
+                        particles[index].color_and_flags.z = h_idx + 1u;
+                        particles[closest_green].color_and_flags.z = h_idx + 1u;
+                        particles[closest_blue].color_and_flags.z = h_idx + 1u;
                     }
                     found_baryon = true;
                 } else {
@@ -214,12 +262,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Leaders: Red, Green, Blue (looking for AntiRed, AntiGreen, AntiBlue)
     if (!found_baryon && my_color <= COLOR_BLUE) {
         let target_anti = my_color + 3u; // Red(0)->AntiRed(3), etc.
+        let binding_dist = params.hadron.x;
 
         var closest_anti = 0xFFFFFFFFu;
-        var min_dist_sq = BINDING_DISTANCE * BINDING_DISTANCE;
+        var min_dist_sq = binding_dist * binding_dist;
 
         for (var i = 0u; i < num_particles; i++) {
-            if (i == index || !is_quark(i)) { continue; }
+            if (i == index || !is_quark(i) || is_bound(i)) { continue; }
 
             let c = get_color(i);
             if (c == target_anti) {
@@ -241,9 +290,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             }
 
             if (l1 && l2) {
-                // Found a Meson!
-                let h_idx = atomicAdd(&counter.count, 1u);
-                if (h_idx < arrayLength(&hadrons)) {
+                // Found a Meson! Find a free hadron slot
+                let h_idx = find_free_slot();
+                if (h_idx != 0xFFFFFFFFu) {
                     let p1 = particles[index];
                     let p2 = particles[closest_anti];
 
@@ -262,6 +311,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                     h.velocity = vec4<f32>(velocity, 0.0);
 
                     hadrons[h_idx] = h;
+
+                    // Set hadron_id on constituent particles (1-indexed)
+                    particles[index].color_and_flags.z = h_idx + 1u;
+                    particles[closest_anti].color_and_flags.z = h_idx + 1u;
                 }
             } else {
                 // Failed, release locks

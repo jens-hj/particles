@@ -350,6 +350,32 @@ impl Gui {
                     egui::Slider::new(&mut state.physics_params.electron[1], 0.1..=5.0)
                         .text("Exclusion Radius"),
                 );
+
+                ui.separator();
+                ui.heading("Hadron Formation");
+                ui.label("⚠ Breakup must be > Binding for stability!");
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.hadron[0], 0.5..=3.0)
+                        .text("Binding Distance (form)")
+                        .step_by(0.1),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.hadron[1], 1.0..=5.0)
+                        .text("Breakup Distance (break)")
+                        .step_by(0.1),
+                );
+
+                ui.separator();
+                ui.label("Quark-Electron Separation:");
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.hadron[2], 0.0..=2000.0)
+                        .text("Repulsion Strength"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.hadron[3], 0.3..=2.5)
+                        .text("Repulsion Radius")
+                        .step_by(0.1),
+                );
             });
 
         // Time Controls (Bottom Right)

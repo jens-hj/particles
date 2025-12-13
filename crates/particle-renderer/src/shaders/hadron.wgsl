@@ -77,6 +77,12 @@ fn vs_shell(
 
     let hadron = hadrons[instance_index];
 
+    // Skip invalid hadrons (broken/invalidated hadrons)
+    if (hadron.indices_type.w == 0xFFFFFFFFu) {
+        out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        return out;
+    }
+
     // Generate quad vertices
     var uv = vec2<f32>(0.0, 0.0);
     var pos_offset = vec2<f32>(0.0, 0.0);
@@ -155,6 +161,12 @@ fn vs_bond(
     }
 
     let hadron = hadrons[hadron_idx];
+
+    // Skip invalid hadrons (broken/invalidated hadrons)
+    if (hadron.indices_type.w == 0xFFFFFFFFu) {
+        out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        return out;
+    }
     var pos = vec3<f32>(0.0, 0.0, 0.0);
 
     // Determine which particle position to use

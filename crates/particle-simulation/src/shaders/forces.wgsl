@@ -8,6 +8,7 @@ struct PhysicsParams {
     integration: vec4<f32>,  // x: dt, y: damping, z: time/seed, w: nucleon_damping
     nucleon: vec4<f32>,      // x: binding_strength, y: binding_range, z: exclusion_strength, w: exclusion_radius
     electron: vec4<f32>,     // x: exclusion_strength, y: exclusion_radius, z: padding, w: padding
+    hadron: vec4<f32>,       // x: binding_distance, y: breakup_distance, z: quark_electron_repulsion, w: quark_electron_radius
 }
 
 @group(0) @binding(2)
@@ -19,7 +20,7 @@ struct Particle {
     position: vec4<f32>,        // xyz = position, w = particle_type (as f32)
     velocity: vec4<f32>,        // xyz = velocity, w = mass
     data: vec4<f32>,            // x = charge, y = size, z/w = padding
-    color_and_flags: vec4<u32>, // x = color_charge, y = flags, z/w = padding
+    color_and_flags: vec4<u32>, // x = color_charge, y = flags, z = hadron_id, w = padding
 }
 
 // Force accumulator
@@ -96,9 +97,16 @@ fn gravitational_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r_sq: f32) 
 // Calculate electromagnetic force
 // Positive product (like charges) = repulsive force (away from p2)
 // Negative product (opposite charges) = attractive force (towards p2)
+// Uses smooth saturation to prevent singularities and locked pairs
 fn electromagnetic_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r_sq: f32) -> vec3<f32> {
     let charge_product = p1.data.x * p2.data.x; // charge in data.x
-    let force_mag = params.constants.y * abs(charge_product) / r_sq;
+
+    // Smooth saturation using Yukawa-like modification: r_eff = sqrt(r^2 + r_sat^2)
+    // This prevents discontinuities and oscillations at close range
+    let saturation_dist = 0.2; // Smaller value for tighter saturation
+    let effective_r_sq = r_sq + saturation_dist * saturation_dist;
+
+    let force_mag = params.constants.y * abs(charge_product) / effective_r_sq;
 
     // If charges have same sign (product > 0), repel (force away from p2)
     // If charges have opposite signs (product < 0), attract (force towards p2)
@@ -244,6 +252,23 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
 
         let r = sqrt(r_sq);
+
+        // Electron-Quark core repulsion (prevents unphysical singularities)
+        // Quarks should be confined in hadrons; free quark-electron pairing is unphysical
+        let p1_is_electron = is_electron(p1.position.w);
+        let p2_is_electron = is_electron(p2.position.w);
+        let p1_is_quark = is_quark(p1.position.w);
+        let p2_is_quark = is_quark(p2.position.w);
+
+        if ((p1_is_electron && p2_is_quark) || (p1_is_quark && p2_is_electron)) {
+            let repulsion_radius = params.hadron.w;
+            if (r < repulsion_radius) {
+                let overlap = repulsion_radius - r;
+                // Strong quadratic repulsion simulating quantum mechanical exclusion
+                let push = params.hadron.z * overlap * overlap;
+                total_force -= normalize(r_vec) * push;
+            }
+        }
 
         // Sum all four fundamental forces
         var f = vec3<f32>(0.0, 0.0, 0.0);

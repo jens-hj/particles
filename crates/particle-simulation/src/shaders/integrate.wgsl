@@ -15,7 +15,7 @@ struct Particle {
     position: vec4<f32>,        // xyz = position, w = particle_type
     velocity: vec4<f32>,        // xyz = velocity, w = mass
     data: vec4<f32>,            // x = charge, y = size, z/w = padding
-    color_and_flags: vec4<u32>, // x = color_charge, y = flags, z/w = padding
+    color_and_flags: vec4<u32>, // x = color_charge, y = flags, z = hadron_id, w = padding
 }
 
 struct Force {
@@ -60,7 +60,22 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let new_velocity = particle.velocity.xyz + acceleration * params.integration.x;
 
     // Apply damping for numerical stability
-    let damped_velocity = new_velocity * params.integration.y;
+    var damped_velocity = new_velocity * params.integration.y;
+
+    // Electromagnetic radiation damping (Larmor formula approximation)
+    // Accelerating charges radiate energy, causing velocity-dependent damping
+    // This prevents locked pairs and helps systems settle into bound states
+    let charge = particle.data.x;
+    let accel_magnitude = length(acceleration);
+    let velocity_magnitude = length(damped_velocity);
+
+    // Enhanced damping for high-speed charged particles (prevents jitter)
+    // Radiation damping proportional to charge² and (acceleration + velocity)
+    let base_damping = 0.02 * abs(charge) * accel_magnitude;
+    let velocity_damping = 0.005 * abs(charge) * velocity_magnitude;
+    let total_radiation_damping = base_damping + velocity_damping;
+
+    damped_velocity *= (1.0 - min(total_radiation_damping, 0.15)); // Cap at 15% per step
 
     // x(t + dt) = x(t) + v(t + dt) * dt
     let new_position = particle.position.xyz + damped_velocity * params.integration.x;

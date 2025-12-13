@@ -20,7 +20,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-const PARTICLE_COUNT: usize = 1000;
+const PARTICLE_COUNT: usize = 8000;
 const SPAWN_RADIUS: f32 = 50.0;
 const PARTICLE_SCALE: f32 = 3.0; // Global scale multiplier for visibility
 
