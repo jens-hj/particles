@@ -306,7 +306,7 @@ impl GpuState {
         let frame_time = (now - self.last_frame_time).as_secs_f32() * 1000.0;
         self.last_frame_time = now;
 
-        // Camera lock: keep camera.target following the selected entity every frame.
+        // Camera lock: smoothly follow the selected entity every frame.
         //
         // We use the cached selection target produced by the selection-resolve compute pass.
         // Only update the camera target when we have a valid resolved target.
@@ -314,7 +314,15 @@ impl GpuState {
             if let Some(target) = self.selection_target_cached {
                 // target.w = kind (0 none, 1 particle, 2 hadron)
                 if target[3] != 0.0 {
-                    self.camera.target = Vec3::new(target[0], target[1], target[2]);
+                    let desired = Vec3::new(target[0], target[1], target[2]);
+
+                    // Exponential smoothing (frame-rate independent).
+                    // Higher values -> snappier camera.
+                    let follow_rate: f32 = 12.0;
+                    let dt = (frame_time * 0.001).max(0.0);
+                    let t = 1.0 - (-follow_rate * dt).exp();
+
+                    self.camera.target = self.camera.target.lerp(desired, t);
                 }
             }
         }
@@ -690,10 +698,9 @@ impl ApplicationHandler for App {
 
                                 gpu_state.selection_target_cached = Some([x, y, z, w]);
 
-                                // Immediately move camera to target on click.
-                                if w != 0.0 {
-                                    gpu_state.camera.target = Vec3::new(x, y, z);
-                                }
+                                // Do NOT snap the camera on click.
+                                // We only update `selection_target_cached` here; the per-frame camera
+                                // follow logic will smoothly lerp `camera.target` toward this value.
                             }
 
                             gpu_state.selection_target_staging_buffer.unmap();
