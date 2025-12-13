@@ -366,12 +366,17 @@ impl GpuState {
                     self.camera.target = self.camera.target.lerp(desired, t);
 
                     // Smooth distance: zoom in for particles/quarks; stay further for hadrons.
-                    let desired_distance = match target[3].round() as i32 {
-                        1 => 12.0, // particle/quark: close-up
-                        2 => 45.0, // hadron shell: larger, keep more distance
-                        _ => self.camera.distance,
-                    };
-                    self.camera_distance_target = Some(desired_distance);
+                    //
+                    // IMPORTANT: only set this ONCE per selection acquisition, so once we're
+                    // focused you can manually zoom without the follow system fighting you.
+                    if self.camera_distance_target.is_none() {
+                        let desired_distance = match target[3].round() as i32 {
+                            1 => 5.0,  // particle/quark: close-up
+                            2 => 15.0, // hadron shell: larger, keep more distance
+                            _ => self.camera.distance,
+                        };
+                        self.camera_distance_target = Some(desired_distance);
+                    }
                 }
             }
         }
@@ -782,6 +787,9 @@ impl ApplicationHandler for App {
                         // Update selection ID in the simulation and resolve it to a world-space target.
                         gpu_state.simulation.set_selected_id(pick.id);
                         gpu_state.camera_lock = decoded;
+
+                        // Reset zoom target on new selection so the initial auto-zoom runs again.
+                        gpu_state.camera_distance_target = None;
 
                         // Resolve selection -> target position (GPU compute), then read back vec4<f32>.
                         if gpu_state.camera_lock.is_some() {
