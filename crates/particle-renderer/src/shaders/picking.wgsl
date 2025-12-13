@@ -120,19 +120,21 @@ fn billboard_basis(to_cam: vec3<f32>) -> array<vec3<f32>, 2> {
     return array<vec3<f32>, 2>(right, up);
 }
 
-// Approximate whether this particle should be pickable, based on the same quark LOD fade-out
-// semantics as `particle.wgsl`.
+// Determine whether this particle should be pickable with respect to quark LOD.
 //
-// In the visual shader, quarks that are part of hadrons fade OUT based on their distance to the
-// hadron center (input.hadron_distance), using:
-//   alpha = 1 - smoothstep(lod_quark_fade_start, lod_quark_fade_end, hadron_distance)
-// and are discarded when alpha < 0.01.
+// User expectation / UX semantics:
+// - When quarks have faded out due to the quark LOD slider (based on CAMERA distance),
+//   they should not be pickable.
+// - Free quarks (not part of a hadron) remain pickable.
+// - Non-quark particle types are unaffected.
 //
-// Here we mimic that: only for quarks (types 0 and 1) that are part of a hadron (hadron_id != 0).
+// NOTE: The visual shader (`particle.wgsl`) fades out in-hadron quarks based on their distance
+// to the hadron center. That is good for rendering density control, but for picking we want the
+// more intuitive behavior: "if it's far enough (past quark fade end), you can't pick it".
 fn quark_pickable(p: Particle) -> bool {
     let particle_type = u32(p.position.w);
 
-    // Only quarks can fade out due to quark LOD.
+    // Only quarks (types 0 and 1) participate in quark LOD.
     if (particle_type != 0u && particle_type != 1u) {
         return true;
     }
@@ -143,15 +145,13 @@ fn quark_pickable(p: Particle) -> bool {
         return true;
     }
 
-    // For in-hadron quarks, approximate hadron_distance by comparing to the hadron center.
-    // (We don't have the full scan used by `particle.wgsl` here; the selected hadron_id gives
-    // us a direct mapping.)
-    let hadron_index = hadron_id_1 - 1u;
-    let center = hadrons[hadron_index].center.xyz;
-    let hadron_distance = distance(p.position.xyz, center);
-
-    // Visual alpha computation:
-    let alpha = 1.0 - smoothstep(camera.lod_quark_fade_start, camera.lod_quark_fade_end, hadron_distance);
+    // In-hadron quark: apply quark LOD based on distance to camera.
+    // Match the "fade out with distance" semantics:
+    // < quark_fade_start: fully pickable
+    // quark_fade_start..quark_fade_end: transitioning
+    // > quark_fade_end: not pickable
+    let dist_to_cam = distance(camera.position, p.position.xyz);
+    let alpha = 1.0 - smoothstep(camera.lod_quark_fade_start, camera.lod_quark_fade_end, dist_to_cam);
     return alpha >= 0.01;
 }
 
