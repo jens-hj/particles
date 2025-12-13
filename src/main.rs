@@ -882,6 +882,12 @@ impl ApplicationHandler for App {
                 };
 
                 if let Some(gpu_state) = &mut self.gpu_state {
+                    // If the user manually zooms while locked onto a selection, cancel any
+                    // in-progress auto-zoom so we don't fight user input.
+                    if gpu_state.camera_lock.is_some() {
+                        gpu_state.camera_distance_target = None;
+                    }
+
                     gpu_state
                         .camera
                         .zoom(-scroll * gpu_state.camera.distance / 100.0);
