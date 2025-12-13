@@ -742,7 +742,7 @@ impl ApplicationHandler for App {
                         gpu_state.picker.staging_buffer().unmap();
 
                         let decoded = decode_pick_id(pick.id);
-                        log::info!(
+                        log::debug!(
                             "pick readback: raw_id=0x{pick_id:08x} ({pick_id}) decoded={decoded:?}",
                             pick_id = pick.id,
                             decoded = decoded
@@ -797,7 +797,7 @@ impl ApplicationHandler for App {
 
                                 gpu_state.selection_target_cached = Some([x, y, z, w]);
 
-                                log::info!(
+                                log::debug!(
                                     "pick resolve: target=({:.3},{:.3},{:.3}) kind_w={:.1}",
                                     x,
                                     y,
