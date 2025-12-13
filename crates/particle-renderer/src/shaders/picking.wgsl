@@ -16,6 +16,11 @@
 //
 // NOTE: This shader is intentionally minimal and independent from the visual shaders.
 // It shares buffer layouts with `particle.wgsl` / `hadron.wgsl` for compatibility.
+//
+// LOD behavior (important for correctness):
+// - Hadron shells should not be pickable when their visual alpha is 0.
+// - Quarks that are part of hadrons should not be pickable once they have faded out due to
+//   quark LOD (same logic as `particle.wgsl`: fade out based on hadron distance).
 
 struct Camera {
     view_proj: mat4x4<f32>,
@@ -115,6 +120,41 @@ fn billboard_basis(to_cam: vec3<f32>) -> array<vec3<f32>, 2> {
     return array<vec3<f32>, 2>(right, up);
 }
 
+// Approximate whether this particle should be pickable, based on the same quark LOD fade-out
+// semantics as `particle.wgsl`.
+//
+// In the visual shader, quarks that are part of hadrons fade OUT based on their distance to the
+// hadron center (input.hadron_distance), using:
+//   alpha = 1 - smoothstep(lod_quark_fade_start, lod_quark_fade_end, hadron_distance)
+// and are discarded when alpha < 0.01.
+//
+// Here we mimic that: only for quarks (types 0 and 1) that are part of a hadron (hadron_id != 0).
+fn quark_pickable(p: Particle) -> bool {
+    let particle_type = u32(p.position.w);
+
+    // Only quarks can fade out due to quark LOD.
+    if (particle_type != 0u && particle_type != 1u) {
+        return true;
+    }
+
+    // Free quarks (not part of a hadron) remain pickable.
+    let hadron_id_1 = p.color_and_flags.z; // 1-indexed, 0 means "none"
+    if (hadron_id_1 == 0u) {
+        return true;
+    }
+
+    // For in-hadron quarks, approximate hadron_distance by comparing to the hadron center.
+    // (We don't have the full scan used by `particle.wgsl` here; the selected hadron_id gives
+    // us a direct mapping.)
+    let hadron_index = hadron_id_1 - 1u;
+    let center = hadrons[hadron_index].center.xyz;
+    let hadron_distance = distance(p.position.xyz, center);
+
+    // Visual alpha computation:
+    let alpha = 1.0 - smoothstep(camera.lod_quark_fade_start, camera.lod_quark_fade_end, hadron_distance);
+    return alpha >= 0.01;
+}
+
 // -------------------- Particle picking --------------------
 
 @vertex
@@ -124,10 +164,21 @@ fn vs_pick_particle(
 ) -> VsOut {
     var out: VsOut;
 
+    let p = particles[instance_index];
+
+    // Respect quark LOD fade-out:
+    // if a quark is visually discarded due to LOD (alpha ~ 0), it should not be pickable.
+    if (!quark_pickable(p)) {
+        // Push off-screen and emit id=0 so it can't be selected.
+        out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        out.id = 0u;
+        out.uv = vec2<f32>(0.0, 0.0);
+        return out;
+    }
+
     // ID: particle index + 1 (0 reserved for "no hit")
     out.id = instance_index + 1u;
 
-    let p = particles[instance_index];
     let world_center = p.position.xyz;
 
     // Billboard quad in world space
