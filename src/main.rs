@@ -110,6 +110,10 @@ struct GpuState {
     // Smooth distance target when locking onto a selection.
     camera_distance_target: Option<f32>,
 
+    // If true, the user has manually zoomed while locked. We should not re-arm auto-zoom
+    // until a new selection is made (otherwise we fight the user).
+    camera_zoom_user_override: bool,
+
     // Smooth reset target when pressing `C` (avoid snapping).
     camera_reset_target: Option<Vec3>,
 
@@ -294,6 +298,7 @@ impl GpuState {
             selection_target_cached: None,
 
             camera_distance_target: None,
+            camera_zoom_user_override: false,
             camera_reset_target: None,
 
             // Default: match the normal render scale.
@@ -367,9 +372,11 @@ impl GpuState {
 
                     // Smooth distance: zoom in for particles/quarks; stay further for hadrons.
                     //
-                    // IMPORTANT: only set this ONCE per selection acquisition, so once we're
-                    // focused you can manually zoom without the follow system fighting you.
-                    if self.camera_distance_target.is_none() {
+                    // IMPORTANT:
+                    // - only set this ONCE per selection acquisition
+                    // - and never re-arm it after the user manually zooms while locked
+                    //   (otherwise we fight user input).
+                    if self.camera_distance_target.is_none() && !self.camera_zoom_user_override {
                         let desired_distance = match target[3].round() as i32 {
                             1 => 5.0,  // particle/quark: close-up
                             2 => 15.0, // hadron shell: larger, keep more distance
@@ -634,6 +641,7 @@ impl ApplicationHandler for App {
                     gpu_state.camera_lock = None;
                     gpu_state.selection_target_cached = None;
                     gpu_state.camera_distance_target = None;
+                    gpu_state.camera_zoom_user_override = false;
                     gpu_state.simulation.set_selected_id(0);
                 }
             }
@@ -790,6 +798,7 @@ impl ApplicationHandler for App {
 
                         // Reset zoom target on new selection so the initial auto-zoom runs again.
                         gpu_state.camera_distance_target = None;
+                        gpu_state.camera_zoom_user_override = false;
 
                         // Resolve selection -> target position (GPU compute), then read back vec4<f32>.
                         if gpu_state.camera_lock.is_some() {
@@ -854,6 +863,7 @@ impl ApplicationHandler for App {
                             // Cleared selection
                             gpu_state.selection_target_cached = None;
                             gpu_state.camera_distance_target = None;
+                            gpu_state.camera_zoom_user_override = false;
                         }
                     }
                 }
@@ -882,10 +892,12 @@ impl ApplicationHandler for App {
                 };
 
                 if let Some(gpu_state) = &mut self.gpu_state {
-                    // If the user manually zooms while locked onto a selection, cancel any
-                    // in-progress auto-zoom so we don't fight user input.
+                    // If the user manually zooms while locked onto a selection:
+                    // - cancel any in-progress auto-zoom
+                    // - and prevent it from re-arming until a new selection is made.
                     if gpu_state.camera_lock.is_some() {
                         gpu_state.camera_distance_target = None;
+                        gpu_state.camera_zoom_user_override = true;
                     }
 
                     gpu_state
