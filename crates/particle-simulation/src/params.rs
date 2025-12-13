@@ -76,7 +76,7 @@ impl Default for PhysicsParams {
             hadron: [
                 0.8, // binding_distance (quarks form hadrons when closer than this)
                 1.0, // breakup_distance (hadrons break when quarks exceed this distance)
-                2.0, // confinement_range_mult (range multiplier for free quarks, default 1.2x)
+                5.0, // confinement_range_mult (range multiplier for free quarks, default 1.2x)
                 2.0, // confinement_strength_mult (strength multiplier for free quarks, default 1.5x)
             ],
         }

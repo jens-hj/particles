@@ -333,8 +333,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                             particles[index].color_and_flags.z = h_idx + 1u;
                             particles[closest_1].color_and_flags.z = h_idx + 1u;
                             particles[closest_2].color_and_flags.z = h_idx + 1u;
+
+                            found_baryon = true;
+                        } else {
+                            // Slot allocation failed: release locks to avoid "stuck" quarks.
+                            atomicStore(&locks[index], 0u);
+                            atomicStore(&locks[closest_1], 0u);
+                            atomicStore(&locks[closest_2], 0u);
                         }
-                        found_baryon = true;
                     } else {
                         if (l1) { atomicStore(&locks[index], 0u); }
                         if (l2) { atomicStore(&locks[closest_1], 0u); }
@@ -407,6 +413,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                     // Set hadron_id on constituent particles (1-indexed)
                     particles[index].color_and_flags.z = h_idx + 1u;
                     particles[closest_anti].color_and_flags.z = h_idx + 1u;
+                } else {
+                    // Slot allocation failed: release locks to avoid "stuck" quarks.
+                    atomicStore(&locks[index], 0u);
+                    atomicStore(&locks[closest_anti], 0u);
                 }
             } else {
                 // Failed, release locks
