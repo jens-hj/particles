@@ -366,14 +366,16 @@ impl Gui {
                 );
 
                 ui.separator();
-                ui.label("Quark-Electron Separation:");
+                ui.heading("Quark Confinement");
+                ui.label("Free quarks seek partners more strongly:");
                 ui.add(
-                    egui::Slider::new(&mut state.physics_params.hadron[2], 0.0..=2000.0)
-                        .text("Repulsion Strength"),
+                    egui::Slider::new(&mut state.physics_params.hadron[2], 1.0..=5.0)
+                        .text("Range Multiplier")
+                        .step_by(0.1),
                 );
                 ui.add(
-                    egui::Slider::new(&mut state.physics_params.hadron[3], 0.3..=2.5)
-                        .text("Repulsion Radius")
+                    egui::Slider::new(&mut state.physics_params.hadron[3], 1.0..=5.0)
+                        .text("Strength Multiplier")
                         .step_by(0.1),
                 );
             });

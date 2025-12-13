@@ -106,6 +106,11 @@ fn get_hadron_distance(particle_index: u32, particle_type: u32) -> f32 {
     for (var i = 0u; i < num_hadrons; i++) {
         let hadron = hadrons[i];
 
+        // Skip invalid hadrons (broken/invalidated hadrons)
+        if (hadron.indices_type.w == 0xFFFFFFFFu) {
+            continue;
+        }
+
         // Check if this particle is part of this hadron
         if (hadron.indices_type.x == particle_index ||
             hadron.indices_type.y == particle_index ||

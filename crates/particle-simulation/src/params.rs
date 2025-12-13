@@ -29,8 +29,8 @@ pub struct PhysicsParams {
     // x: exclusion_strength, y: exclusion_radius, z: padding, w: padding
     pub electron: [f32; 4],
 
-    // Group 7: Hadron Formation
-    // x: binding_distance, y: breakup_distance, z: quark_electron_repulsion, w: quark_electron_radius
+    // Group 7: Hadron Formation & Confinement
+    // x: binding_distance, y: breakup_distance, z: confinement_range_mult, w: confinement_strength_mult
     pub hadron: [f32; 4],
 }
 
@@ -65,7 +65,7 @@ impl Default for PhysicsParams {
                 100.0, // binding_strength
                 2.2,   // binding_range
                 130.0, // exclusion_strength
-                1.5,   // exclusion_radius
+                1.3,   // exclusion_radius
             ],
             electron: [
                 100.0, // exclusion_strength
@@ -74,10 +74,10 @@ impl Default for PhysicsParams {
                 0.0,   // padding
             ],
             hadron: [
-                1.5,    // binding_distance (quarks form hadrons when closer than this)
-                2.5,    // breakup_distance (hadrons break when quarks exceed this distance)
-                800.0,  // quark_electron_repulsion (prevents electron-quark singularities) - INCREASED
-                1.2,    // quark_electron_radius (distance where repulsion activates) - INCREASED
+                0.8, // binding_distance (quarks form hadrons when closer than this)
+                1.0, // breakup_distance (hadrons break when quarks exceed this distance)
+                2.0, // confinement_range_mult (range multiplier for free quarks, default 1.2x)
+                2.0, // confinement_strength_mult (strength multiplier for free quarks, default 1.5x)
             ],
         }
     }

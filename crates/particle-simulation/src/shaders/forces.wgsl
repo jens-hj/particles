@@ -8,7 +8,7 @@ struct PhysicsParams {
     integration: vec4<f32>,  // x: dt, y: damping, z: time/seed, w: nucleon_damping
     nucleon: vec4<f32>,      // x: binding_strength, y: binding_range, z: exclusion_strength, w: exclusion_radius
     electron: vec4<f32>,     // x: exclusion_strength, y: exclusion_radius, z: padding, w: padding
-    hadron: vec4<f32>,       // x: binding_distance, y: breakup_distance, z: quark_electron_repulsion, w: quark_electron_radius
+    hadron: vec4<f32>,       // x: binding_distance, y: breakup_distance, z: confinement_range_mult, w: confinement_strength_mult
 }
 
 @group(0) @binding(2)
@@ -56,6 +56,25 @@ var<storage, read> hadron_counter: HadronCounter;
 fn is_quark(particle_type_f: f32) -> bool {
     let particle_type = u32(particle_type_f);
     return particle_type == 0u || particle_type == 1u; // QuarkUp or QuarkDown
+}
+
+// Returns the hadron's net electric charge based on constituent particle charges.
+// Meson: uses x/y, Baryon: uses x/y/z.
+fn hadron_net_charge(h: Hadron) -> f32 {
+    var q = 0.0;
+
+    let p1 = particles[h.indices_type.x];
+    let p2 = particles[h.indices_type.y];
+    q += p1.data.x;
+    q += p2.data.x;
+
+    // type_id: 0u = Meson, otherwise Baryon (3 constituents)
+    if (h.indices_type.w != 0u) {
+        let p3 = particles[h.indices_type.z];
+        q += p3.data.x;
+    }
+
+    return q;
 }
 
 // Check if particle is a gluon
@@ -125,11 +144,37 @@ fn strong_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec4<f3
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
 
+    // Color confinement: Strong force only applies when:
+    // 1. Both quarks are free (forming hadrons), OR
+    // 2. Both quarks are in the SAME hadron (keeping it together)
+    // Free quarks should NOT pull on bound quarks!
+    // NOTE: hadron_id on particles is 1-indexed (0u means "not in a hadron")
+    let p1_hadron_id = p1.color_and_flags.z;
+    let p2_hadron_id = p2.color_and_flags.z;
+    let p1_is_free = p1_hadron_id == 0u;
+    let p2_is_free = p2_hadron_id == 0u;
+    let both_free = p1_is_free && p2_is_free;
+    let same_hadron = p1_hadron_id == p2_hadron_id && p1_hadron_id != 0u;
+
+    // Only allow strong force when both free OR in same hadron
+    if !both_free && !same_hadron {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    }
+
     // Color factor (color_charge in color_and_flags.x)
     // 1.0 = attract, -1.0 = repel
+    // Color confinement (QCD): Only color-neutral (colorless) combinations can exist
+    // Same colors STRONGLY repel (prevents non-neutral clumps)
     var color_factor = -1.0;
     if color_charges_attract(p1.color_and_flags.x, p2.color_and_flags.x) {
         color_factor = 1.0;
+    }
+
+    // Extra repulsion for same-color quarks (color neutrality enforcement)
+    // In QCD, non-colorless configurations have infinite energy
+    let same_color = p1.color_and_flags.x == p2.color_and_flags.x;
+    if same_color && p1.color_and_flags.x < 3u {
+        color_factor = -2.0; // Stronger repulsion for same colors
     }
 
     // Stability metric:
@@ -144,15 +189,38 @@ fn strong_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec4<f3
         return vec4<f32>(-normalize(r_vec) * push, potential);
     }
 
-    // Range cutoff
-    if r > params.strong_force.z {
+    // Use the hadron_id checks from above for confinement logic
+    let any_free = p1_is_free || p2_is_free;
+
+    // Color confinement: Free quarks experience stronger force at longer range
+    // This models the confinement potential that makes free quarks energetically unfavorable
+    var range_multiplier = 1.0;
+    var strength_multiplier = 1.0;
+
+    if any_free && color_factor > 0.0 {
+        // Apply confinement multipliers from parameters
+        // Both free: full strength, One free: half strength
+        if (p1_is_free && p2_is_free) {
+            range_multiplier = params.hadron.z;
+            strength_multiplier = params.hadron.w;
+        } else {
+            range_multiplier = 1.0 + (params.hadron.z - 1.0) * 0.5;
+            strength_multiplier = 1.0 + (params.hadron.w - 1.0) * 0.5;
+        }
+    }
+
+    let effective_range = params.strong_force.z * range_multiplier;
+
+    // Range cutoff (extended for free quarks)
+    if r > effective_range {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
 
     // Cornell potential: -a/r² + b (Force magnitude)
+    // Significantly enhanced for free quarks to model confinement
     let short_range = params.strong_force.x / (r * r);
     let confinement = params.strong_force.y;
-    let force_mag = color_factor * (short_range + confinement);
+    let force_mag = color_factor * (short_range + confinement) * strength_multiplier;
 
     return vec4<f32>(normalize(r_vec) * force_mag, potential);
 }
@@ -253,27 +321,40 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
         let r = sqrt(r_sq);
 
-        // Electron-Quark core repulsion (prevents unphysical singularities)
-        // Quarks should be confined in hadrons; free quark-electron pairing is unphysical
         let p1_is_electron = is_electron(p1.position.w);
         let p2_is_electron = is_electron(p2.position.w);
         let p1_is_quark = is_quark(p1.position.w);
         let p2_is_quark = is_quark(p2.position.w);
 
-        if ((p1_is_electron && p2_is_quark) || (p1_is_quark && p2_is_electron)) {
-            let repulsion_radius = params.hadron.w;
-            if (r < repulsion_radius) {
-                let overlap = repulsion_radius - r;
-                // Strong quadratic repulsion simulating quantum mechanical exclusion
-                let push = params.hadron.z * overlap * overlap;
-                total_force -= normalize(r_vec) * push;
-            }
-        }
-
         // Sum all four fundamental forces
         var f = vec3<f32>(0.0, 0.0, 0.0);
         f += gravitational_force(p1, p2, r_vec, r_sq);
-        f += electromagnetic_force(p1, p2, r_vec, r_sq);
+
+        // Electromagnetic force: Complex shielding rules
+        var skip_em = false;
+
+        // Skip electron-quark interactions (electrons only see hadrons)
+        if ((p1_is_electron && p2_is_quark) || (p1_is_quark && p2_is_electron)) {
+            skip_em = true;
+        }
+
+        // Skip quark-quark EM unless both free or in same hadron
+        // Quarks in hadrons are shielded - only the hadron's net charge matters
+        if (p1_is_quark && p2_is_quark) {
+            // NOTE: hadron_id on particles is 1-indexed (0u means "not in a hadron")
+            let p1_hadron_id = p1.color_and_flags.z;
+            let p2_hadron_id = p2.color_and_flags.z;
+            let both_free = (p1_hadron_id == 0u) && (p2_hadron_id == 0u);
+            let same_hadron = (p1_hadron_id == p2_hadron_id) && (p1_hadron_id != 0u);
+
+            if (!both_free && !same_hadron) {
+                skip_em = true; // Skip if in different hadrons or one free + one bound
+            }
+        }
+
+        if (!skip_em) {
+            f += electromagnetic_force(p1, p2, r_vec, r_sq);
+        }
 
         let strong = strong_force(p1, p2, r_vec, r);
         f += strong.xyz;
@@ -286,6 +367,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // Electron-Hadron Exclusion (electrons repelled from nucleus centers)
     // This keeps electrons in shells AROUND nuclei, not between nucleons
+    // Electron-Hadron Electromagnetism + Exclusion
+    // - Electrons do NOT interact electromagnetically with individual quarks (shielded within hadrons)
+    // - Electrons DO interact with hadrons via hadron net charge (e.g. proton +1, neutron 0)
+    // - Exclusion keeps electrons out of the nucleus center so they form shells around it
     if (is_electron(p1.position.w)) {
         let num_hadrons = hadron_counter.count;
 
@@ -293,9 +378,30 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             let hadron = hadrons[h];
             let r_vec_hadron = hadron.center.xyz - p1.position.xyz;
             let r_sq_hadron = dot(r_vec_hadron, r_vec_hadron);
+
+            if (r_sq_hadron < params.repulsion.z * params.repulsion.z) {
+                continue;
+            }
+
             let r_hadron = sqrt(r_sq_hadron);
 
             // Exclusion radius scales with hadron size
+            // 1) Electromagnetic attraction/repulsion to the hadron's net charge.
+            // We model the hadron as a point charge at its center of mass.
+            let q_hadron = hadron_net_charge(hadron);
+
+            // Skip near-neutral hadrons (e.g. neutrons) for stability/perf.
+            if (abs(q_hadron) > 0.01) {
+                var hadron_particle: Particle;
+                hadron_particle.position = vec4<f32>(hadron.center.xyz, 0.0);
+                hadron_particle.velocity = vec4<f32>(hadron.velocity.xyz, 0.0);
+                hadron_particle.data = vec4<f32>(q_hadron, 0.0, 0.0, 0.0);
+                hadron_particle.color_and_flags = vec4<u32>(0u, 0u, 0u, 0u);
+
+                total_force += electromagnetic_force(p1, hadron_particle, r_vec_hadron, r_sq_hadron);
+            }
+
+            // 2) Exclusion radius scales with hadron size
             let exclusion_dist = hadron.center.w + params.electron.y;
 
             if (r_hadron < exclusion_dist) {

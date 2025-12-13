@@ -84,38 +84,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     particle.position = vec4<f32>(new_position, particle.position.w);
     particle.velocity = vec4<f32>(damped_velocity, mass);
 
-    // Random color change (Gluon interaction simulation)
-    // Quarks change color to minimize strong force potential (find stable bound states)
-    if is_quark(particle.position.w) {
-        let potential = forces[index].potential;
-
-        // Based on forces.wgsl calculation:
-        // Positive Potential = Unstable (Repelling)
-        // Negative Potential = Stable (Attracting)
-
-        var prob = 0.0;
-        if potential > 0.5 {
-            // Net Repelling state: chance to flip to find a partner
-            prob = 0.05;
-        } else if potential > -0.5 {
-            // Weakly bound or isolated: very small chance to flip
-            prob = 0.001;
-        }
-        // Else (potential <= -0.5): Stable (bound), do not flip
-
-        // Use position and velocity as seed for randomness
-        let seed = vec2<f32>(
-            particle.position.x * particle.velocity.y + particle.position.z + params.integration.z,
-            particle.position.y * particle.velocity.x + f32(index) * 0.1 - params.integration.z
-        );
-
-        if rand(seed) < prob {
-            // Pick a new random color (0, 1, or 2)
-            let r = rand(seed + vec2<f32>(1.0, 1.0));
-            let new_color = u32(r * 3.0); // 0, 1, or 2
-            particle.color_and_flags.x = new_color;
-        }
-    }
+    // Color charge is FIXED - it's a conserved quantum number like electric charge
+    // Quarks don't randomly change color. They find each other via the strong force
+    // and form color-neutral hadrons based on their fixed color charges.
 
     particles[index] = particle;
 }
