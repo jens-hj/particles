@@ -21,6 +21,7 @@ pub struct UiState {
     pub show_bonds: bool,
     pub is_paused: bool,
     pub step_one_frame: bool,
+    pub steps_to_play: u32,
     pub steps_remaining: u32,
 
     // LOD controls
@@ -49,6 +50,7 @@ impl Default for UiState {
             show_bonds: true,
             is_paused: false,
             step_one_frame: false,
+            steps_to_play: 1,
             steps_remaining: 0,
 
             lod_shell_fade_start: 10.0,
@@ -387,29 +389,47 @@ impl Gui {
                 }
             });
 
-        // Time controls (Bottom Right)
+        // Time Controls (Bottom Right)
         egui::Window::new("Time Controls")
             .anchor(egui::Align2::RIGHT_BOTTOM, [-10.0, -10.0])
             .resizable(false)
             .collapsible(true)
+            .default_open(true)
             .show(ctx, |ui| {
-                ui.label("Time");
-                ui.checkbox(&mut state.is_paused, "Pause (Space)");
+                ui.horizontal(|ui| {
+                    if ui
+                        .button(if state.is_paused {
+                            "▶ Resume (Space)"
+                        } else {
+                            "⏸ Pause (Space)"
+                        })
+                        .clicked()
+                    {
+                        state.is_paused = !state.is_paused;
+                    }
+                });
 
-                if state.is_paused {
-                    ui.horizontal(|ui| {
-                        if ui.button("Step").clicked() {
-                            state.steps_remaining += 1;
-                        }
-                        ui.label("Ctrl+→ / Ctrl+D");
-                    });
-                }
-
+                // Improvement retained: keep dt control in this quick-access panel.
                 ui.add(
                     egui::Slider::new(&mut state.physics_params.integration[0], 0.0001..=0.01)
                         .text("Time Step (dt)")
                         .step_by(0.0001),
                 );
+
+                if state.is_paused {
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.label("Steps:");
+                        ui.add(
+                            egui::DragValue::new(&mut state.steps_to_play)
+                                .speed(1)
+                                .range(1..=1000),
+                        );
+                        if ui.button("Step ⏭ (Ctrl+Right/D)").clicked() {
+                            state.steps_remaining += state.steps_to_play;
+                        }
+                    });
+                }
             });
     }
 }
