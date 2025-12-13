@@ -125,6 +125,7 @@ impl ParticleSimulation {
             contents: bytemuck::cast_slice(&[params]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
+
         log::info!("Buffers created");
 
         // Load compute shaders
@@ -158,7 +159,9 @@ impl ParticleSimulation {
                         binding: 0,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            // Force shader may scrub invalid hadron_id values, so it must be able to write
+                            // back into the particle buffer.
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -455,6 +458,7 @@ impl ParticleSimulation {
             hadron_count_buffer,
             locks_buffer,
             params_buffer,
+
             force_pipeline,
             integrate_pipeline,
             hadron_validation_pipeline,

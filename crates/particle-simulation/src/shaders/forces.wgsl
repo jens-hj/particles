@@ -30,7 +30,7 @@ struct Force {
 }
 
 @group(0) @binding(0)
-var<storage, read> particles: array<Particle>;
+var<storage, read_write> particles: array<Particle>;
 
 @group(0) @binding(1)
 var<storage, read_write> forces: array<Force>;
@@ -51,6 +51,29 @@ var<storage, read> hadrons: array<Hadron>;
 
 @group(0) @binding(4)
 var<storage, read> hadron_counter: HadronCounter;
+
+// (hadron debug counters removed)
+
+// Treat invalid/out-of-range hadron_id as "free".
+// hadron_id on particles is 1-indexed (0u means "not in a hadron").
+// This prevents quarks from getting stuck in a pseudo-bound state after rapid breakup / slot reuse.
+fn is_valid_hadron_id(hadron_id: u32) -> bool {
+    if (hadron_id == 0u) {
+        return false;
+    }
+
+    // Convert to 0-indexed hadron slot.
+    let h_idx = hadron_id - 1u;
+
+    // Only consider slots within current count to avoid OOB and stale ids.
+    let count = hadron_counter.count;
+    if (h_idx >= count) {
+        return false;
+    }
+
+    // Slot must be marked valid (type_id != 0xFFFFFFFFu).
+    return hadrons[h_idx].indices_type.w != 0xFFFFFFFFu;
+}
 
 // Check if particle is a quark
 fn is_quark(particle_type_f: f32) -> bool {
@@ -149,12 +172,20 @@ fn strong_force(p1: Particle, p2: Particle, r_vec: vec3<f32>, r: f32) -> vec4<f3
     // 2. Both quarks are in the SAME hadron (keeping it together)
     // Free quarks should NOT pull on bound quarks!
     // NOTE: hadron_id on particles is 1-indexed (0u means "not in a hadron")
+    // hadron_id is 1-indexed: 0u = not in hadron, otherwise (hadron_index + 1)
     let p1_hadron_id = p1.color_and_flags.z;
     let p2_hadron_id = p2.color_and_flags.z;
-    let p1_is_free = p1_hadron_id == 0u;
-    let p2_is_free = p2_hadron_id == 0u;
+
+    // Treat invalid/out-of-range ids as free to avoid "stuck bound" particles.
+    let p1_valid_bound = is_valid_hadron_id(p1_hadron_id);
+    let p2_valid_bound = is_valid_hadron_id(p2_hadron_id);
+
+    let p1_is_free = !p1_valid_bound;
+    let p2_is_free = !p2_valid_bound;
     let both_free = p1_is_free && p2_is_free;
-    let same_hadron = p1_hadron_id == p2_hadron_id && p1_hadron_id != 0u;
+
+    // Same-hadron only if both are validly bound and ids match.
+    let same_hadron = p1_valid_bound && p2_valid_bound && (p1_hadron_id == p2_hadron_id);
 
     // Only allow strong force when both free OR in same hadron
     if !both_free && !same_hadron {
@@ -301,6 +332,32 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
+    // Scrub invalid hadron_id references for this particle (local, per-invocation).
+    // This MUST happen before taking the particle snapshot (`let p1 = ...`) so subsequent logic
+    // uses a consistent view for free/bound checks and confinement multipliers.
+    let p1_type_f = particles[index].position.w;
+    if (is_quark(p1_type_f)) {
+        let hid = particles[index].color_and_flags.z;
+
+        // Scrub invalid/out-of-range ids.
+        if (hid != 0u && !is_valid_hadron_id(hid)) {
+            particles[index].color_and_flags.z = 0u;
+        } else if (hid != 0u) {
+            // Slot is valid; ensure it actually contains this particle index.
+            let h_idx = hid - 1u;
+            let h = hadrons[h_idx];
+            let contained =
+                (h.indices_type.x == index) ||
+                (h.indices_type.y == index) ||
+                (h.indices_type.z == index);
+
+            if (!contained) {
+                // Stale bookkeeping: clear to allow re-binding.
+                particles[index].color_and_flags.z = 0u;
+            }
+        }
+    }
+
     let p1 = particles[index];
     var total_force = vec3<f32>(0.0, 0.0, 0.0);
     var total_potential = 0.0;
@@ -342,10 +399,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         // Quarks in hadrons are shielded - only the hadron's net charge matters
         if (p1_is_quark && p2_is_quark) {
             // NOTE: hadron_id on particles is 1-indexed (0u means "not in a hadron")
+            // hadron_id is 1-indexed: 0u = not in hadron, otherwise (hadron_index + 1)
             let p1_hadron_id = p1.color_and_flags.z;
             let p2_hadron_id = p2.color_and_flags.z;
-            let both_free = (p1_hadron_id == 0u) && (p2_hadron_id == 0u);
-            let same_hadron = (p1_hadron_id == p2_hadron_id) && (p1_hadron_id != 0u);
+
+            // Treat invalid/out-of-range ids as free to avoid "stuck bound" particles.
+            let p1_valid_bound = is_valid_hadron_id(p1_hadron_id);
+            let p2_valid_bound = is_valid_hadron_id(p2_hadron_id);
+
+            let both_free = !p1_valid_bound && !p2_valid_bound;
+            let same_hadron = p1_valid_bound && p2_valid_bound && (p1_hadron_id == p2_hadron_id);
 
             if (!both_free && !same_hadron) {
                 skip_em = true; // Skip if in different hadrons or one free + one bound
