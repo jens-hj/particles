@@ -351,9 +351,58 @@ impl GpuState {
 
         // Camera lock: smoothly follow the selected entity every frame.
         //
-        // We use the cached selection target produced by the selection-resolve compute pass.
-        // Only update the camera target when we have a valid resolved target.
+        // IMPORTANT: particles/hadrons move every simulation step, so a click-time resolved
+        // `selection_target_cached` will go stale. To truly "follow", we must re-run the
+        // selection-resolve compute pass regularly while locked.
         if self.camera_lock.is_some() {
+            // Re-resolve selection -> target position (GPU compute), then read back vec4<f32>.
+            //
+            // This is intentionally "blockingly" polled for now for correctness; if it ever shows
+            // up in profiles, we can switch to an async ring buffer of readbacks.
+            {
+                let mut resolve_encoder =
+                    self.device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Selection Resolve Encoder (per-frame follow)"),
+                        });
+
+                self.simulation
+                    .encode_selection_resolve(&mut resolve_encoder);
+
+                resolve_encoder.copy_buffer_to_buffer(
+                    self.simulation.selection_target_buffer(),
+                    0,
+                    &self.selection_target_staging_buffer,
+                    0,
+                    16,
+                );
+
+                self.queue.submit(std::iter::once(resolve_encoder.finish()));
+
+                let slice = self.selection_target_staging_buffer.slice(..);
+                slice.map_async(wgpu::MapMode::Read, |_| {});
+                self.device
+                    .poll(wgpu::PollType::Wait {
+                        submission_index: None,
+                        timeout: None,
+                    })
+                    .unwrap();
+
+                {
+                    let data = slice.get_mapped_range();
+                    let bytes: &[u8] = &data;
+
+                    let x = f32::from_le_bytes(bytes[0..4].try_into().unwrap());
+                    let y = f32::from_le_bytes(bytes[4..8].try_into().unwrap());
+                    let z = f32::from_le_bytes(bytes[8..12].try_into().unwrap());
+                    let w = f32::from_le_bytes(bytes[12..16].try_into().unwrap());
+
+                    self.selection_target_cached = Some([x, y, z, w]);
+                }
+
+                self.selection_target_staging_buffer.unmap();
+            }
+
             if let Some(target) = self.selection_target_cached {
                 // target.w = kind (0 none, 1 particle, 2 hadron)
                 // NOTE: The selection-resolve pass only tells us the kind, not the exact radius.

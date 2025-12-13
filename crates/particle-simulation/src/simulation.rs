@@ -418,7 +418,7 @@ impl ParticleSimulation {
             cache: None,
         });
 
-        log::info!("Creating selection pipeline layout...");
+        log::debug!("Creating selection pipeline layout...");
         let selection_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Selection Pipeline Layout"),
@@ -426,7 +426,7 @@ impl ParticleSimulation {
                 push_constant_ranges: &[],
             });
 
-        log::info!("Creating selection pipeline...");
+        log::debug!("Creating selection pipeline...");
         let selection_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Selection Pipeline"),
             layout: Some(&selection_pipeline_layout),
