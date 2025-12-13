@@ -21,14 +21,24 @@ pub struct UiState {
     pub show_bonds: bool,
     pub is_paused: bool,
     pub step_one_frame: bool,
-    pub steps_to_play: u32,
     pub steps_remaining: u32,
+
+    // LOD controls
     pub lod_shell_fade_start: f32,
     pub lod_shell_fade_end: f32,
     pub lod_bond_fade_start: f32,
     pub lod_bond_fade_end: f32,
     pub lod_quark_fade_start: f32,
     pub lod_quark_fade_end: f32,
+
+    // Debug picking visualization / correlation:
+    // These are updated by the app when a click occurs.
+    pub show_picking_overlay: bool,
+    pub pick_px: u32,
+    pub pick_py: u32,
+    pub pick_tex_w: u32,
+    pub pick_tex_h: u32,
+    pub has_pick_px: bool,
 }
 
 impl Default for UiState {
@@ -48,14 +58,21 @@ impl Default for UiState {
             show_bonds: true,
             is_paused: false,
             step_one_frame: false,
-            steps_to_play: 1,
             steps_remaining: 0,
+
             lod_shell_fade_start: 10.0,
             lod_shell_fade_end: 30.0,
             lod_bond_fade_start: 10.0,
             lod_bond_fade_end: 30.0,
             lod_quark_fade_start: 10.0,
             lod_quark_fade_end: 30.0,
+
+            show_picking_overlay: false,
+            pick_px: 0,
+            pick_py: 0,
+            pick_tex_w: 1,
+            pick_tex_h: 1,
+            has_pick_px: false,
         }
     }
 }
@@ -168,6 +185,73 @@ impl Gui {
     }
 
     fn ui(&self, ctx: &Context, state: &mut UiState) {
+        // Crosshair overlay: drawn in screen space (foreground), so we can correlate:
+        // - red = sampled pick texel
+        // - green = mirrored-y candidate
+        if state.show_picking_overlay && state.has_pick_px {
+            let painter = ctx.layer_painter(egui::LayerId::new(
+                egui::Order::Foreground,
+                egui::Id::new("pick_debug_crosshair"),
+            ));
+
+            // Convert pick texel -> screen coordinates
+            // Common case: pick texture matches swapchain size => 1:1 mapping.
+            // If not, scale based on current screen rect.
+            let screen_w = ctx.content_rect().width().max(1.0);
+            let screen_h = ctx.content_rect().height().max(1.0);
+            let tex_w = (state.pick_tex_w.max(1)) as f32;
+            let tex_h = (state.pick_tex_h.max(1)) as f32;
+
+            let to_screen = |px: u32, py: u32| -> egui::Pos2 {
+                let x = (px as f32 + 0.5) * (screen_w / tex_w);
+                let y = (py as f32 + 0.5) * (screen_h / tex_h);
+                egui::pos2(x, y)
+            };
+
+            let sampled = to_screen(state.pick_px, state.pick_py);
+            let mirrored_py = state
+                .pick_tex_h
+                .saturating_sub(1)
+                .saturating_sub(state.pick_py);
+            let mirrored = to_screen(state.pick_px, mirrored_py);
+
+            let arm = 8.0;
+            let stroke_sampled = egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 64, 64));
+            let stroke_mirrored = egui::Stroke::new(2.0, egui::Color32::from_rgb(64, 255, 64));
+
+            // Red crosshair = sampled pixel
+            painter.line_segment(
+                [
+                    egui::pos2(sampled.x - arm, sampled.y),
+                    egui::pos2(sampled.x + arm, sampled.y),
+                ],
+                stroke_sampled,
+            );
+            painter.line_segment(
+                [
+                    egui::pos2(sampled.x, sampled.y - arm),
+                    egui::pos2(sampled.x, sampled.y + arm),
+                ],
+                stroke_sampled,
+            );
+
+            // Green crosshair = mirrored-y candidate
+            painter.line_segment(
+                [
+                    egui::pos2(mirrored.x - arm, mirrored.y),
+                    egui::pos2(mirrored.x + arm, mirrored.y),
+                ],
+                stroke_mirrored,
+            );
+            painter.line_segment(
+                [
+                    egui::pos2(mirrored.x, mirrored.y - arm),
+                    egui::pos2(mirrored.x, mirrored.y + arm),
+                ],
+                stroke_mirrored,
+            );
+        }
+
         // Handle keyboard shortcuts
         if ctx.input(|i| i.key_pressed(egui::Key::Space)) {
             state.is_paused = !state.is_paused;
@@ -219,6 +303,17 @@ impl Gui {
                 ui.heading("Rendering");
                 ui.checkbox(&mut state.show_shells, "Show Shells");
                 ui.checkbox(&mut state.show_bonds, "Show Bonds");
+
+                if state.show_picking_overlay && state.has_pick_px {
+                    ui.separator();
+                    ui.heading("Picking Debug");
+                    ui.label(format!(
+                        "pick px,py: ({}, {})  tex: ({}x{})",
+                        state.pick_px, state.pick_py, state.pick_tex_w, state.pick_tex_h
+                    ));
+                    ui.label("Crosshair: red = sampled pixel, green = mirrored-y candidate");
+                }
+
                 ui.separator();
                 ui.label("Shell LOD (Fade In):");
                 ui.add(
@@ -231,7 +326,6 @@ impl Gui {
                         .text("Shell End")
                         .step_by(5.0),
                 );
-                // Ensure end is always >= start
                 if state.lod_shell_fade_end < state.lod_shell_fade_start {
                     state.lod_shell_fade_end = state.lod_shell_fade_start;
                 }
@@ -291,15 +385,18 @@ impl Gui {
                 ui.heading("Strong Force");
                 ui.add(
                     egui::Slider::new(&mut state.physics_params.strong_force[0], 0.0..=5.0)
-                        .text("Short Range"),
+                        .text("Short Range")
+                        .step_by(0.1),
                 );
                 ui.add(
                     egui::Slider::new(&mut state.physics_params.strong_force[1], 0.0..=5.0)
-                        .text("Confinement"),
+                        .text("Confinement")
+                        .step_by(0.1),
                 );
                 ui.add(
                     egui::Slider::new(&mut state.physics_params.strong_force[2], 0.0..=10.0)
-                        .text("Range Cutoff"),
+                        .text("Range Cutoff")
+                        .step_by(0.1),
                 );
 
                 ui.separator();
@@ -360,75 +457,26 @@ impl Gui {
                 ui.heading("Electron Physics");
                 ui.add(
                     egui::Slider::new(&mut state.physics_params.electron[0], 0.0..=200.0)
+                        .text("Attraction Strength"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.electron[1], 0.1..=10.0)
+                        .text("Attraction Range"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.electron[2], 0.0..=300.0)
                         .text("Exclusion Strength"),
                 );
                 ui.add(
-                    egui::Slider::new(&mut state.physics_params.electron[1], 0.1..=5.0)
+                    egui::Slider::new(&mut state.physics_params.electron[3], 0.5..=3.0)
                         .text("Exclusion Radius"),
                 );
 
                 ui.separator();
-                ui.heading("Hadron Formation");
-                ui.label("⚠ Breakup must be > Binding for stability!");
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.hadron[0], 0.5..=3.0)
-                        .text("Binding Distance (form)")
-                        .step_by(0.1),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.hadron[1], 1.0..=5.0)
-                        .text("Breakup Distance (break)")
-                        .step_by(0.1),
-                );
-
-                ui.separator();
-                ui.heading("Quark Confinement");
-                ui.label("Free quarks seek partners more strongly:");
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.hadron[2], 1.0..=5.0)
-                        .text("Range Multiplier")
-                        .step_by(0.1),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.hadron[3], 1.0..=5.0)
-                        .text("Strength Multiplier")
-                        .step_by(0.1),
-                );
-            });
-
-        // Time Controls (Bottom Right)
-        egui::Window::new("Time Controls")
-            .anchor(egui::Align2::RIGHT_BOTTOM, [-10.0, -10.0])
-            .resizable(false)
-            .collapsible(true)
-            .default_open(true)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    if ui
-                        .button(if state.is_paused {
-                            "▶ Resume (Space)"
-                        } else {
-                            "⏸ Pause (Space)"
-                        })
-                        .clicked()
-                    {
-                        state.is_paused = !state.is_paused;
-                    }
-                });
-
+                ui.heading("Simulation");
+                ui.checkbox(&mut state.is_paused, "Pause (Space)");
                 if state.is_paused {
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        ui.label("Steps:");
-                        ui.add(
-                            egui::DragValue::new(&mut state.steps_to_play)
-                                .speed(1)
-                                .range(1..=1000),
-                        );
-                        if ui.button("Step ⏭ (Ctrl+Right/D)").clicked() {
-                            state.steps_remaining += state.steps_to_play;
-                        }
-                    });
+                    ui.label("Step: Ctrl+→ or Ctrl+D");
                 }
             });
     }

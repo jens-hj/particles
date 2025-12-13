@@ -233,6 +233,12 @@ fn id_to_color(id: u32) -> vec3<f32> {
 @fragment
 fn fs_overlay(in: VsOut) -> @location(0) vec4<f32> {
     // Sample ID texture
+    //
+    // NOTE: wgpu texture coordinates use (0,0) at the *top-left* of the texture.
+    // Our cursor/pick math treats (0,0) as *top-left* as well, but the fullscreen
+    // triangle UV mapping here ends up vertically flipped relative to that.
+    //
+    // Sample the texture directly with no UV transforms.
     let rgba = textureSample(id_tex, id_samp, in.uv);
     let id = unpack_rgba8_to_u32(rgba);
 

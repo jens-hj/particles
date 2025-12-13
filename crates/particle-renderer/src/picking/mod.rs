@@ -148,6 +148,7 @@ impl GpuPicker {
     /// if you expect deterministic results.
     pub fn encode_read_pixel(&self, encoder: &mut wgpu::CommandEncoder, x: u32, y: u32) {
         let x = x.min(self.width.saturating_sub(1));
+
         let y = y.min(self.height.saturating_sub(1));
 
         // `bytes_per_row` must be 256-byte aligned, even for 1x1 copies.

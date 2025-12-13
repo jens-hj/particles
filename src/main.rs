@@ -26,6 +26,57 @@ const PARTICLE_COUNT: usize = 8000;
 const SPAWN_RADIUS: f32 = 50.0;
 const PARTICLE_SCALE: f32 = 3.0; // Global scale multiplier for visibility
 
+#[derive(Debug, Clone, Copy)]
+struct PickDebug {
+    enabled: bool,
+
+    // Last sampled pixel in the picking ID texture (absolute texel coords).
+    last_px: u32,
+    last_py: u32,
+
+    // Cached dimensions at the time of the click (for mirrored-y computation).
+    last_w: u32,
+    last_h: u32,
+}
+
+impl PickDebug {
+    fn new() -> Self {
+        Self {
+            enabled: true,
+            last_px: 0,
+            last_py: 0,
+            last_w: 1,
+            last_h: 1,
+        }
+    }
+
+    fn update(&mut self, px: u32, py: u32, w: u32, h: u32) {
+        self.last_px = px;
+        self.last_py = py;
+        self.last_w = w.max(1);
+        self.last_h = h.max(1);
+    }
+
+    fn mirrored_y(&self) -> u32 {
+        self.last_h.saturating_sub(1).saturating_sub(self.last_py)
+    }
+
+    fn log_snapshot(&self) {
+        if !self.enabled {
+            return;
+        }
+        log::info!(
+            "pick debug: sampled_px=({}, {}) mirrored_y_px=({}, {}) tex=({}x{})",
+            self.last_px,
+            self.last_py,
+            self.last_px,
+            self.mirrored_y(),
+            self.last_w,
+            self.last_h
+        );
+    }
+}
+
 /// Initialize particles with quarks and electrons
 fn initialize_particles() -> Vec<Particle> {
     let mut rng = rand::rng();
@@ -107,12 +158,25 @@ struct GpuState {
     picking_overlay_opacity: f32,
     picking_overlay: PickingOverlay,
 
+    // Debug: record last sampled pick pixel (+ mirrored-y candidate) to correlate with overlay.
+    pick_debug: PickDebug,
+
     // Camera lock (follow selected entity)
     camera_lock: Option<CameraLock>,
 
     // Selection resolve (GPU -> CPU readback for camera target)
     selection_target_staging_buffer: wgpu::Buffer,
     selection_target_cached: Option<[f32; 4]>,
+
+    // Smooth reset target when pressing `C` (avoid snapping).
+    camera_reset_target: Option<Vec3>,
+
+    // Shared picking particle size used for BOTH:
+    // - click-time picking render+readback
+    // - the picking overlay pass (visualization)
+    //
+    // Keep these in sync so the overlay represents the exact pick colliders.
+    picking_particle_size: f32,
 
     frame_times: Vec<f32>,
     last_frame_time: Instant,
@@ -252,6 +316,9 @@ impl GpuState {
         // Debug overlay to visualize the picking ID buffer
         let picking_overlay = PickingOverlay::new(&device, config.format);
 
+        // Debug: track the last sampled pixel (and mirrored-y candidate)
+        let pick_debug = PickDebug::new();
+
         // Create staging buffer for reading hadron counters:
         // [total_hadrons, protons, neutrons, other]
         let hadron_count_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -289,10 +356,18 @@ impl GpuState {
             picking_overlay_opacity: 0.35,
             picking_overlay,
 
+            pick_debug,
+
             camera_lock: None,
 
             selection_target_staging_buffer,
             selection_target_cached: None,
+
+            camera_reset_target: None,
+
+            // Default: match the normal render scale.
+            // You can temporarily increase this for debugging (e.g. *8.0) but keep it shared.
+            picking_particle_size: PARTICLE_SCALE,
 
             frame_times: Vec::with_capacity(100),
             last_frame_time: Instant::now(),
@@ -320,6 +395,23 @@ impl GpuState {
         let now = Instant::now();
         let frame_time = (now - self.last_frame_time).as_secs_f32() * 1000.0;
         self.last_frame_time = now;
+
+        // Camera reset: smoothly return to origin when requested (press `C`).
+        if let Some(desired) = self.camera_reset_target {
+            // Exponential smoothing (frame-rate independent).
+            // Higher values -> snappier reset.
+            let reset_rate: f32 = 12.0;
+            let dt = (frame_time * 0.001).max(0.0);
+            let t = 1.0 - (-reset_rate * dt).exp();
+
+            self.camera.target = self.camera.target.lerp(desired, t);
+
+            // Stop resetting once we're close enough.
+            if (self.camera.target - desired).length() < 0.001 {
+                self.camera.target = desired;
+                self.camera_reset_target = None;
+            }
+        }
 
         // Camera lock: smoothly follow the selected entity every frame.
         //
@@ -441,6 +533,19 @@ impl GpuState {
             self.ui_state.lod_quark_fade_end,
         );
 
+        // Feed pick-debug info into the UI so egui can draw crosshairs in screen space.
+        self.ui_state.show_picking_overlay = self.show_picking_overlay;
+        self.ui_state.pick_px = self.pick_debug.last_px;
+        self.ui_state.pick_py = self.pick_debug.last_py;
+        self.ui_state.pick_tex_w = self.pick_debug.last_w;
+        self.ui_state.pick_tex_h = self.pick_debug.last_h;
+
+        // Only show the crosshair after the first click updates `pick_debug`.
+        // This prevents drawing a bogus marker at (0,0) on startup.
+        //
+        // NOTE: we're inside `GpuState::render`, so use `self.pick_debug` (not `gpu_state`).
+        self.ui_state.has_pick_px = self.pick_debug.last_w != 0 && self.pick_debug.last_h != 0;
+
         // Debug: visualize what the picking pass rasterized.
         // We run a picking pass each frame only when the overlay is enabled.
         if self.show_picking_overlay {
@@ -451,7 +556,7 @@ impl GpuState {
                 });
 
             // Render IDs into the pick texture.
-            // Use the same particle size as the normal render for now.
+
             self.picking_renderer.render(
                 &self.device,
                 &self.queue,
@@ -463,7 +568,7 @@ impl GpuState {
                 self.simulation.hadron_count_buffer(),
                 self.simulation.particle_count(),
                 self.simulation.particle_count(),
-                PARTICLE_SCALE,
+                self.picking_particle_size,
                 self.ui_state.physics_params.integration[2],
                 self.ui_state.lod_shell_fade_start,
                 self.ui_state.lod_shell_fade_end,
@@ -617,7 +722,10 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 if let Some(gpu_state) = &mut self.gpu_state {
-                    gpu_state.camera.target = Vec3::ZERO;
+                    // Smooth reset: request a lerped return to origin instead of snapping.
+                    gpu_state.camera_reset_target = Some(Vec3::ZERO);
+
+                    // Clear selection/lock state so follow doesn't fight the reset.
                     gpu_state.camera_lock = None;
                     gpu_state.selection_target_cached = None;
                     gpu_state.simulation.set_selected_id(0);
@@ -676,7 +784,7 @@ impl ApplicationHandler for App {
                         // `inner_size()` and our swapchain/config are in physical pixels.
                         // If we don't apply the window scale factor, pick coordinates will be wrong
                         // (often "about half the time" depending on DPI, window moves, etc).
-                        let scale = window.scale_factor();
+                        let scale = 1.0;
                         let physical_x = (x * scale).round();
                         let physical_y = (y * scale).round();
 
@@ -684,7 +792,7 @@ impl ApplicationHandler for App {
                         let w = size.width.max(1) as f64;
                         let h = size.height.max(1) as f64;
 
-                        // Convert physical window-space -> texture pixel coords (origin top-left).
+                        // Convert physical window-space -> texture pixel coords.
                         // Clamp to the valid render target range.
                         let px = ((physical_x / w) * gpu_state.config.width as f64)
                             .floor()
@@ -694,6 +802,14 @@ impl ApplicationHandler for App {
                             .floor()
                             .clamp(0.0, (gpu_state.config.height.saturating_sub(1)) as f64)
                             as u32;
+
+                        gpu_state.pick_debug.update(
+                            px,
+                            py,
+                            gpu_state.config.width,
+                            gpu_state.config.height,
+                        );
+                        gpu_state.pick_debug.log_snapshot();
 
                         log::info!(
                             "pick click: cursor_logical=({:.1},{:.1}) scale={:.3} cursor_physical=({:.1},{:.1}) window_physical=({}x{}) cfg=({}x{}) pick_px=({}, {})",
@@ -725,10 +841,8 @@ impl ApplicationHandler for App {
                         // If the picking pass uses too small a `particle_size`, most clicks will hit background (id=0),
                         // and picking will appear angle-dependent / unreliable.
                         //
-                        // For now, we use a higher `particle_size` for picking so the pick collider matches what you
-                        // can realistically hit on-screen.
-                        let picking_particle_size = PARTICLE_SCALE * 8.0;
-
+                        // Use the shared picking particle size so the click picking render matches
+                        // the picking overlay visualization exactly.
                         gpu_state.picking_renderer.render(
                             &gpu_state.device,
                             &gpu_state.queue,
@@ -740,7 +854,7 @@ impl ApplicationHandler for App {
                             gpu_state.simulation.hadron_count_buffer(),
                             gpu_state.simulation.particle_count(),
                             gpu_state.simulation.particle_count(), // max_hadrons == particle_count allocation
-                            picking_particle_size,
+                            gpu_state.picking_particle_size,
                             gpu_state.ui_state.physics_params.integration[2],
                             gpu_state.ui_state.lod_shell_fade_start,
                             gpu_state.ui_state.lod_shell_fade_end,

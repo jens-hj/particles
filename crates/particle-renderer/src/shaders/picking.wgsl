@@ -6,6 +6,14 @@
 //   - for now: particles write (index + 1)
 //   - hadrons write 0x8000_0000 | (hadron_index + 1)
 //
+// IMPORTANT (uniqueness / semantics):
+// - IDs are derived from `@builtin(instance_index)` at draw time.
+// - This means IDs are unique per *buffer slot* / instance, not per "physical particle identity"
+//   (if your simulation compacts/reorders buffers over time, the same physical particle may
+//   appear under a different ID in later frames).
+// - Within a single picking pass, there should be no accidental ID collisions as long as each
+//   instance_index maps to exactly one slot.
+//
 // NOTE: This shader is intentionally minimal and independent from the visual shaders.
 // It shares buffer layouts with `particle.wgsl` / `hadron.wgsl` for compatibility.
 
