@@ -9,7 +9,13 @@ pub struct UiState {
     pub fps: f32,
     pub frame_time: f32,
     pub particle_count: usize,
+
+    // Hadrons
     pub hadron_count: u32,
+    pub proton_count: u32,
+    pub neutron_count: u32,
+    pub other_hadron_count: u32,
+
     pub physics_params: PhysicsParams,
     pub show_shells: bool,
     pub show_bonds: bool,
@@ -31,7 +37,12 @@ impl Default for UiState {
             fps: 0.0,
             frame_time: 0.0,
             particle_count: 0,
+
             hadron_count: 0,
+            proton_count: 0,
+            neutron_count: 0,
+            other_hadron_count: 0,
+
             physics_params: PhysicsParams::default(),
             show_shells: true,
             show_bonds: true,
@@ -197,9 +208,14 @@ impl Gui {
                 ui.heading("Particles");
                 ui.label(format!("Total: {}", state.particle_count));
                 ui.separator();
+
                 ui.heading("Hadrons");
-                ui.label(format!("Detected: {}", state.hadron_count));
+                ui.label(format!("Total: {}", state.hadron_count));
+                ui.label(format!("Protons: {}", state.proton_count));
+                ui.label(format!("Neutrons: {}", state.neutron_count));
+                ui.label(format!("Other: {}", state.other_hadron_count));
                 ui.separator();
+
                 ui.heading("Rendering");
                 ui.checkbox(&mut state.show_shells, "Show Shells");
                 ui.checkbox(&mut state.show_bonds, "Show Bonds");

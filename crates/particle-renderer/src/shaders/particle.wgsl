@@ -33,8 +33,12 @@ struct Hadron {
 }
 
 struct HadronCounter {
-    count: u32,
-    _pad: vec3<u32>,
+    // 4x u32 values (16 bytes) matching the simulation counter buffer:
+    // [0] total hadrons (counter range; may include invalid slots)
+    // [1] protons
+    // [2] neutrons
+    // [3] other hadrons (mesons, other baryons, etc.)
+    counters: vec4<u32>,
 }
 
 @group(0) @binding(2)
@@ -102,7 +106,7 @@ fn get_hadron_distance(particle_index: u32, particle_type: u32) -> f32 {
     }
 
     // Check all hadrons to see if this particle is part of one
-    let num_hadrons = hadron_counter.count;
+    let num_hadrons = hadron_counter.counters.x;
     for (var i = 0u; i < num_hadrons; i++) {
         let hadron = hadrons[i];
 

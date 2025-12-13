@@ -47,6 +47,12 @@ const HADRON_PROTON: u32 = 1u;  // uud
 const HADRON_NEUTRON: u32 = 2u; // udd
 const HADRON_BARYON_OTHER: u32 = 3u; // other combinations
 
+// Hadron counters indices
+const COUNTER_TOTAL: u32 = 0u;
+const COUNTER_PROTONS: u32 = 1u;
+const COUNTER_NEUTRONS: u32 = 2u;
+const COUNTER_OTHER: u32 = 3u;
+
 struct Particle {
     position: vec4<f32>,        // xyz = position, w = particle_type
     velocity: vec4<f32>,        // xyz = velocity, w = mass
@@ -61,8 +67,22 @@ struct Hadron {
 }
 
 struct HadronCounter {
-    count: atomic<u32>,
-    _pad: vec3<u32>,
+    // 4x u32 counters:
+    // [0] total hadrons (counter range; may include invalid slots)
+    // [1] protons
+    // [2] neutrons
+    // [3] other hadrons (mesons, other baryons, etc.)
+    counters: array<atomic<u32>, 4>,
+}
+
+fn bump_hadron_type_counter(type_id: u32) {
+    if (type_id == HADRON_PROTON) {
+        _ = atomicAdd(&counter.counters[COUNTER_PROTONS], 1u);
+    } else if (type_id == HADRON_NEUTRON) {
+        _ = atomicAdd(&counter.counters[COUNTER_NEUTRONS], 1u);
+    } else {
+        _ = atomicAdd(&counter.counters[COUNTER_OTHER], 1u);
+    }
 }
 
 struct PhysicsParams {
@@ -141,7 +161,7 @@ fn is_bound(p_idx: u32) -> bool {
 
 // Find a free hadron slot (either beyond current count or an invalid slot)
 fn find_free_slot() -> u32 {
-    let current_count = atomicLoad(&counter.count);
+    let current_count = atomicLoad(&counter.counters[0]);
     let max_hadrons = arrayLength(&hadrons);
 
     // First, look for invalid slots to reuse
@@ -153,7 +173,7 @@ fn find_free_slot() -> u32 {
 
     // No invalid slots found, try to allocate new one
     if (current_count < max_hadrons) {
-        return atomicAdd(&counter.count, 1u);
+        return atomicAdd(&counter.counters[0], 1u);
     }
 
     // No space available
@@ -317,17 +337,22 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                             let r3 = distance(center, p3.position.xyz);
                             let radius = max(r1, max(r2, r3)) + 0.2;
 
+                            let baryon_type_id = identify_baryon(index, closest_1, closest_2);
+
                             var h: Hadron;
                             h.indices_type = vec4<u32>(
                                 index,
                                 closest_1,
                                 closest_2,
-                                identify_baryon(index, closest_1, closest_2)
+                                baryon_type_id
                             );
                             h.center = vec4<f32>(center, radius);
                             h.velocity = vec4<f32>(velocity, 0.0);
 
                             hadrons[h_idx] = h;
+
+                            // Increment per-type counters
+                            bump_hadron_type_counter(baryon_type_id);
 
                             // Set hadron_id on constituent particles (1-indexed)
                             particles[index].color_and_flags.z = h_idx + 1u;
@@ -409,6 +434,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                     h.velocity = vec4<f32>(velocity, 0.0);
 
                     hadrons[h_idx] = h;
+
+                    // Increment per-type counters (mesons count as "other")
+                    bump_hadron_type_counter(HADRON_MESON);
 
                     // Set hadron_id on constituent particles (1-indexed)
                     particles[index].color_and_flags.z = h_idx + 1u;

@@ -27,8 +27,12 @@ struct Hadron {
 }
 
 struct HadronCounter {
-    count: u32,
-    _pad: vec3<u32>,
+    // 4x u32 values (16 bytes) matching the simulation counter buffer:
+    // [0] total hadrons (counter range; may include invalid slots)
+    // [1] protons
+    // [2] neutrons
+    // [3] other hadrons (mesons, other baryons, etc.)
+    counters: vec4<u32>,
 }
 
 @group(0) @binding(0)
@@ -70,7 +74,7 @@ fn vs_shell(
     var out: VertexOutput;
 
     // Discard if out of range
-    if (instance_index >= counter.count) {
+    if (instance_index >= counter.counters.x) {
         out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
         return out;
     }
@@ -155,7 +159,7 @@ fn vs_bond(
     let hadron_idx = vertex_index / 6u;
     let line_idx = vertex_index % 6u; // 0-1, 2-3, 4-5
 
-    if (hadron_idx >= counter.count) {
+    if (hadron_idx >= counter.counters.x) {
         out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
         return out;
     }

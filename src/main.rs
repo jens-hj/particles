@@ -185,10 +185,11 @@ impl GpuState {
         let gui = Gui::new(&device, config.format, &window);
         let ui_state = UiState::default();
 
-        // Create staging buffer for reading hadron count
+        // Create staging buffer for reading hadron counters:
+        // [total_hadrons, protons, neutrons, other]
         let hadron_count_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Hadron Count Staging Buffer"),
-            size: 4,
+            size: 16,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -263,7 +264,7 @@ impl GpuState {
                 0,
                 &self.hadron_count_staging_buffer,
                 0,
-                4,
+                16,
             );
 
             self.queue.submit(std::iter::once(encoder.finish()));
@@ -279,7 +280,19 @@ impl GpuState {
 
             {
                 let data = slice.get_mapped_range();
-                self.ui_state.hadron_count = *bytemuck::from_bytes::<u32>(&data);
+
+                // Layout: 4 little-endian u32 values
+                // [0] total hadrons
+                // [1] protons
+                // [2] neutrons
+                // [3] other
+                let bytes: &[u8] = &data;
+
+                self.ui_state.hadron_count = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
+                self.ui_state.proton_count = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+                self.ui_state.neutron_count = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
+                self.ui_state.other_hadron_count =
+                    u32::from_le_bytes(bytes[12..16].try_into().unwrap());
             }
             self.hadron_count_staging_buffer.unmap();
         }

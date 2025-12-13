@@ -42,8 +42,12 @@ struct Hadron {
 }
 
 struct HadronCounter {
-    count: u32,
-    _pad: vec3<u32>,
+    // 4x u32 counters:
+    // [0] total hadrons (counter range; may include invalid slots)
+    // [1] protons
+    // [2] neutrons
+    // [3] other hadrons (mesons, other baryons, etc.)
+    counters: vec4<u32>,
 }
 
 @group(0) @binding(3)
@@ -66,7 +70,7 @@ fn is_valid_hadron_id(hadron_id: u32) -> bool {
     let h_idx = hadron_id - 1u;
 
     // Only consider slots within current count to avoid OOB and stale ids.
-    let count = hadron_counter.count;
+    let count = hadron_counter.counters.x;
     if (h_idx >= count) {
         return false;
     }
@@ -435,7 +439,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // - Electrons DO interact with hadrons via hadron net charge (e.g. proton +1, neutron 0)
     // - Exclusion keeps electrons out of the nucleus center so they form shells around it
     if (is_electron(p1.position.w)) {
-        let num_hadrons = hadron_counter.count;
+        let num_hadrons = hadron_counter.counters.x;
 
         for (var h = 0u; h < num_hadrons; h++) {
             let hadron = hadrons[h];
@@ -478,7 +482,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // Nucleon Forces (Inter-Hadron)
     if (is_quark(p1.position.w)) {
-        let num_hadrons = hadron_counter.count;
+        let num_hadrons = hadron_counter.counters.x;
         var my_hadron_idx = -1;
 
         // Find my hadron

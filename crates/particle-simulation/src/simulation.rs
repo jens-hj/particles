@@ -100,10 +100,18 @@ impl ParticleSimulation {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
         });
 
-        // Create hadron counter buffer
+        // Create hadron counter buffer.
+        //
+        // Layout (16 bytes, 4x u32):
+        // [0] total hadrons (including invalid slots that are still within counter range)
+        // [1] protons
+        // [2] neutrons
+        // [3] other hadrons (e.g. mesons, other baryons)
+        //
+        // Note: WGSL uses explicit atomics; alignment here is naturally 4 bytes.
         let hadron_count_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Hadron Count Buffer"),
-            size: 32, // u32 + padding (32 bytes due to vec3 alignment rules)
+            size: 16,
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC,

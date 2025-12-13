@@ -19,8 +19,12 @@ struct Hadron {
 }
 
 struct HadronCounter {
-    count: atomic<u32>,
-    _pad: vec3<u32>,
+    // 4x u32 counters:
+    // [0] total hadrons (counter range; may include invalid slots)
+    // [1] protons
+    // [2] neutrons
+    // [3] other hadrons (mesons, other baryons, etc.)
+    counters: array<atomic<u32>, 4>,
 }
 
 struct PhysicsParams {
@@ -86,7 +90,7 @@ fn invalidate_hadron(h_idx: u32) {
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let h_idx = global_id.x;
-    let num_hadrons = atomicLoad(&counter.count);
+    let num_hadrons = atomicLoad(&counter.counters[0]);
 
     if (h_idx >= num_hadrons) {
         return;
