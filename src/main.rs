@@ -7,7 +7,9 @@ mod gui;
 use glam::Vec3;
 use gui::{Gui, UiState};
 use particle_physics::{ColorCharge, Particle};
-use particle_renderer::{Camera, GpuPicker, HadronRenderer, ParticleRenderer, PickingRenderer};
+use particle_renderer::{
+    Camera, GpuPicker, HadronRenderer, NucleusRenderer, ParticleRenderer, PickingRenderer,
+};
 use particle_simulation::ParticleSimulation;
 use rand::Rng;
 use std::sync::Arc;
@@ -90,11 +92,13 @@ struct GpuState {
     simulation: ParticleSimulation,
     renderer: ParticleRenderer,
     hadron_renderer: HadronRenderer,
+    nucleus_renderer: NucleusRenderer,
     camera: Camera,
 
     gui: Gui,
     ui_state: UiState,
     hadron_count_staging_buffer: wgpu::Buffer,
+    _nucleus_count_staging_buffer: wgpu::Buffer,
 
     // GPU picking (ID render + 1px readback)
     picker: GpuPicker,
@@ -235,6 +239,9 @@ impl GpuState {
         let hadron_renderer = HadronRenderer::new(&device, config.format, &dummy_layout);
         log::info!("✓ Hadron Renderer initialized");
 
+        let nucleus_renderer = NucleusRenderer::new(&device, config.format, &dummy_layout);
+        log::info!("✓ Nucleus Renderer initialized");
+
         // Create camera
         let camera = Camera::new(size.width, size.height);
 
@@ -268,6 +275,14 @@ impl GpuState {
             mapped_at_creation: false,
         });
 
+        // Create staging buffer for reading nucleus counter
+        let _nucleus_count_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Nucleus Count Staging Buffer"),
+            size: 32, // WGSL atomic alignment requirement
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         // Selection target readback (vec4<f32> = 16 bytes)
         let selection_target_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Selection Target Staging Buffer"),
@@ -284,10 +299,12 @@ impl GpuState {
             simulation,
             renderer,
             hadron_renderer,
+            nucleus_renderer,
             camera,
             gui,
             ui_state,
             hadron_count_staging_buffer,
+            _nucleus_count_staging_buffer,
 
             picker,
             picking_renderer,
@@ -549,6 +566,8 @@ impl GpuState {
             self.ui_state.lod_bond_fade_end,
             self.ui_state.lod_quark_fade_start,
             self.ui_state.lod_quark_fade_end,
+            self.ui_state.lod_nucleus_fade_start,
+            self.ui_state.lod_nucleus_fade_end,
         );
 
         // Render Hadrons
@@ -593,6 +612,17 @@ impl GpuState {
                     self.simulation.particle_count(),
                     self.ui_state.show_shells,
                     self.ui_state.show_bonds,
+                );
+
+                // Render nuclei
+                self.nucleus_renderer.render(
+                    &self.device,
+                    &mut render_pass,
+                    &self.renderer.camera_buffer,
+                    self.simulation.nucleus_buffer(),
+                    self.simulation.nucleus_count_buffer(),
+                    self.simulation.particle_count() / 4, // Rough estimate of max nuclei
+                    self.ui_state.show_nuclei,
                 );
             }
 
@@ -813,6 +843,8 @@ impl ApplicationHandler for App {
                             gpu_state.ui_state.lod_bond_fade_end,
                             gpu_state.ui_state.lod_quark_fade_start,
                             gpu_state.ui_state.lod_quark_fade_end,
+                            gpu_state.ui_state.lod_nucleus_fade_start,
+                            gpu_state.ui_state.lod_nucleus_fade_end,
                         );
 
                         // Copy clicked pixel into staging buffer

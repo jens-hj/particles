@@ -7,7 +7,7 @@
 
 use crate::PhysicsParams;
 use bytemuck::{Pod, Zeroable};
-use particle_physics::{Hadron, Particle};
+use particle_physics::{Hadron, Nucleus, Particle, MAX_NUCLEONS};
 use wgpu::util::DeviceExt;
 
 /// Force accumulator structure (matches WGSL)
@@ -28,6 +28,8 @@ pub struct ParticleSimulation {
     _force_buffer: wgpu::Buffer,
     hadron_buffer: wgpu::Buffer,
     hadron_count_buffer: wgpu::Buffer,
+    nucleus_buffer: wgpu::Buffer,
+    nucleus_count_buffer: wgpu::Buffer,
     locks_buffer: wgpu::Buffer,
     params_buffer: wgpu::Buffer,
 
@@ -42,11 +44,14 @@ pub struct ParticleSimulation {
     integrate_pipeline: wgpu::ComputePipeline,
     hadron_validation_pipeline: wgpu::ComputePipeline,
     hadron_pipeline: wgpu::ComputePipeline,
+    nucleus_validation_pipeline: wgpu::ComputePipeline,
+    nucleus_pipeline: wgpu::ComputePipeline,
 
     // Bind groups
     force_bind_group: wgpu::BindGroup,
     integrate_bind_group: wgpu::BindGroup,
     hadron_bind_group: wgpu::BindGroup,
+    nucleus_bind_group: wgpu::BindGroup,
 
     particle_count: u32,
 }
@@ -124,6 +129,41 @@ impl ParticleSimulation {
             mapped_at_creation: false,
         });
 
+        // Create nucleus buffer.
+        //
+        // Similar to hadron buffer, we need to initialize all slots as invalid (type_id = 0xFFFFFFFF).
+        // Nuclei can contain up to MAX_NUCLEONS hadrons. We'll allocate space for up to
+        // particles.len() / 4 potential nuclei (rough estimate).
+        let max_nuclei = particles.len() / 4;
+        let invalid_nuclei: Vec<Nucleus> = (0..max_nuclei)
+            .map(|_| Nucleus {
+                hadron_indices: [0xFFFF_FFFF; MAX_NUCLEONS],
+                nucleon_count: 0,
+                proton_count: 0,
+                neutron_count: 0,
+                type_id: 0xFFFF_FFFF,
+                center: [0.0; 4],
+                velocity: [0.0; 4],
+            })
+            .collect();
+
+        let nucleus_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Nucleus Buffer"),
+            contents: bytemuck::cast_slice(&invalid_nuclei),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        });
+
+        // Create nucleus counter buffer (single u32 + padding)
+        // WGSL alignment for atomic<u32> requires 32 bytes total
+        let nucleus_count_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Nucleus Count Buffer"),
+            size: 32, // WGSL atomic alignment requirement
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
         // Create locks buffer
         let locks_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Locks Buffer"),
@@ -181,6 +221,18 @@ impl ParticleSimulation {
         let hadron_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Hadron Detection Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/hadron_detection.wgsl").into()),
+        });
+
+        let nucleus_validation_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Nucleus Validation Shader"),
+            source: wgpu::ShaderSource::Wgsl(
+                include_str!("shaders/nucleus_validation.wgsl").into(),
+            ),
+        });
+
+        let nucleus_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Nucleus Detection Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/nucleus_detection.wgsl").into()),
         });
 
         let selection_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -397,6 +449,63 @@ impl ParticleSimulation {
                     },
                 ],
             });
+
+        let nucleus_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Nucleus Bind Group Layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false }, // Need write access for nucleus_id
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
         log::info!("Bind group layouts created");
 
         // Create compute pipelines
@@ -478,6 +587,35 @@ impl ParticleSimulation {
             label: Some("Hadron Pipeline"),
             layout: Some(&hadron_pipeline_layout),
             module: &hadron_shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        log::info!("Creating nucleus pipeline layout...");
+        let nucleus_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Nucleus Pipeline Layout"),
+                bind_group_layouts: &[&nucleus_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        log::info!("Creating nucleus validation pipeline...");
+        let nucleus_validation_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Nucleus Validation Pipeline"),
+                layout: Some(&nucleus_pipeline_layout),
+                module: &nucleus_validation_shader,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+
+        log::info!("Creating nucleus pipeline...");
+        let nucleus_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Nucleus Pipeline"),
+            layout: Some(&nucleus_pipeline_layout),
+            module: &nucleus_shader,
             entry_point: Some("main"),
             compilation_options: Default::default(),
             cache: None,
@@ -580,6 +718,33 @@ impl ParticleSimulation {
                 },
             ],
         });
+
+        let nucleus_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Nucleus Bind Group"),
+            layout: &nucleus_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: hadron_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: nucleus_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: nucleus_count_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: locks_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
         log::info!("Bind groups created");
 
         Self {
@@ -589,6 +754,8 @@ impl ParticleSimulation {
             _force_buffer: force_buffer,
             hadron_buffer,
             hadron_count_buffer,
+            nucleus_buffer,
+            nucleus_count_buffer,
             locks_buffer,
             params_buffer,
 
@@ -601,9 +768,12 @@ impl ParticleSimulation {
             integrate_pipeline,
             hadron_validation_pipeline,
             hadron_pipeline,
+            nucleus_validation_pipeline,
+            nucleus_pipeline,
             force_bind_group,
             integrate_bind_group,
             hadron_bind_group,
+            nucleus_bind_group,
             particle_count,
         }
     }
@@ -666,6 +836,31 @@ impl ParticleSimulation {
             compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
         }
 
+        // Step 5: Validate existing nuclei
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Nucleus Validation Pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(&self.nucleus_validation_pipeline);
+            compute_pass.set_bind_group(0, &self.nucleus_bind_group, &[]);
+            compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
+        }
+
+        // Step 6: Detect new nuclei
+        {
+            // Reset locks (nucleus count persists)
+            encoder.clear_buffer(&self.locks_buffer, 0, None);
+
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Nucleus Detection Pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(&self.nucleus_pipeline);
+            compute_pass.set_bind_group(0, &self.nucleus_bind_group, &[]);
+            compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
+        }
+
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
@@ -723,6 +918,16 @@ impl ParticleSimulation {
     /// This is also used by GPU picking to know how many hadrons are valid.
     pub fn hadron_count_buffer(&self) -> &wgpu::Buffer {
         &self.hadron_count_buffer
+    }
+
+    /// Get reference to nucleus buffer.
+    pub fn nucleus_buffer(&self) -> &wgpu::Buffer {
+        &self.nucleus_buffer
+    }
+
+    /// Get reference to nucleus count buffer.
+    pub fn nucleus_count_buffer(&self) -> &wgpu::Buffer {
+        &self.nucleus_count_buffer
     }
 
     /// Update physics parameters

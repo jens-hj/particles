@@ -19,6 +19,7 @@ pub struct UiState {
     pub physics_params: PhysicsParams,
     pub show_shells: bool,
     pub show_bonds: bool,
+    pub show_nuclei: bool,
     pub is_paused: bool,
     pub step_one_frame: bool,
     pub steps_to_play: u32,
@@ -31,6 +32,8 @@ pub struct UiState {
     pub lod_bond_fade_end: f32,
     pub lod_quark_fade_start: f32,
     pub lod_quark_fade_end: f32,
+    pub lod_nucleus_fade_start: f32,
+    pub lod_nucleus_fade_end: f32,
 }
 
 impl Default for UiState {
@@ -48,6 +51,7 @@ impl Default for UiState {
             physics_params: PhysicsParams::default(),
             show_shells: true,
             show_bonds: true,
+            show_nuclei: true,
             is_paused: false,
             step_one_frame: false,
             steps_to_play: 1,
@@ -59,6 +63,8 @@ impl Default for UiState {
             lod_bond_fade_end: 30.0,
             lod_quark_fade_start: 10.0,
             lod_quark_fade_end: 30.0,
+            lod_nucleus_fade_start: 30.0, // Nuclei appear further out than hadrons
+            lod_nucleus_fade_end: 100.0,
         }
     }
 }
@@ -220,8 +226,9 @@ impl Gui {
                 ui.separator();
 
                 ui.heading("Rendering");
-                ui.checkbox(&mut state.show_shells, "Show Shells");
-                ui.checkbox(&mut state.show_bonds, "Show Bonds");
+                ui.checkbox(&mut state.show_shells, "Show Hadrons");
+                ui.checkbox(&mut state.show_bonds, "Show Quark Bonds");
+                ui.checkbox(&mut state.show_nuclei, "Show Nuclei");
 
                 ui.separator();
                 ui.label("Shell LOD (Fade In):");
@@ -269,6 +276,22 @@ impl Gui {
                 );
                 if state.lod_quark_fade_end < state.lod_quark_fade_start {
                     state.lod_quark_fade_end = state.lod_quark_fade_start;
+                }
+
+                ui.separator();
+                ui.label("Nucleus LOD (Fade In):");
+                ui.add(
+                    egui::Slider::new(&mut state.lod_nucleus_fade_start, 10.0..=300.0)
+                        .text("Nucleus Start")
+                        .step_by(10.0),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.lod_nucleus_fade_end, 10.0..=300.0)
+                        .text("Nucleus End")
+                        .step_by(10.0),
+                );
+                if state.lod_nucleus_fade_end < state.lod_nucleus_fade_start {
+                    state.lod_nucleus_fade_end = state.lod_nucleus_fade_start;
                 }
             });
 
@@ -382,10 +405,31 @@ impl Gui {
                 );
 
                 ui.separator();
-                ui.heading("Simulation");
-                ui.checkbox(&mut state.is_paused, "Pause (Space)");
-                if state.is_paused {
-                    ui.label("Step: Ctrl+→ or Ctrl+D");
+                ui.heading("Hadron Formation");
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.hadron[0], 0.1..=3.0)
+                        .text("Binding Distance")
+                        .step_by(0.05),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.hadron[1], 0.1..=5.0)
+                        .text("Breakup Distance")
+                        .step_by(0.05),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.hadron[2], 0.1..=5.0)
+                        .text("Confinement Range Mult")
+                        .step_by(0.1),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.physics_params.hadron[3], 0.1..=5.0)
+                        .text("Confinement Strength Mult")
+                        .step_by(0.1),
+                );
+
+                // Keep invariants sane (avoid immediate breakup right after formation).
+                if state.physics_params.hadron[1] < state.physics_params.hadron[0] {
+                    state.physics_params.hadron[1] = state.physics_params.hadron[0];
                 }
             });
 

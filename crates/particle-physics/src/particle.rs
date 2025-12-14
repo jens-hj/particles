@@ -152,8 +152,50 @@ pub struct Hadron {
     /// Center of mass (xyz) and radius (w)
     pub center: [f32; 4],
 
-    /// Velocity (xyz) and padding (w)
+    /// Velocity (xyz) and nucleus_id (w, stored as f32 but used as u32, 0 = unbound)
     pub velocity: [f32; 4],
 }
 
 unsafe impl bytemuck::Pod for Hadron {}
+
+/// Maximum number of nucleons that can be stored in a nucleus
+pub const MAX_NUCLEONS: usize = 16;
+
+/// Nucleus structure for atomic nuclei detection
+/// Represents a bound cluster of nucleons (protons and neutrons = hadrons)
+#[repr(C)]
+#[derive(Clone, Copy, Zeroable)]
+pub struct Nucleus {
+    /// Indices of constituent hadrons (nucleons), 0xFFFFFFFF = unused slot
+    pub hadron_indices: [u32; MAX_NUCLEONS],
+
+    /// Total number of nucleons in this nucleus
+    pub nucleon_count: u32,
+
+    /// Number of protons (atomic number Z)
+    pub proton_count: u32,
+
+    /// Number of neutrons (N)
+    pub neutron_count: u32,
+
+    /// Type ID: 0xFFFFFFFF = invalid/empty, otherwise = atomic number (Z)
+    pub type_id: u32,
+
+    /// Center of mass (xyz) and radius (w)
+    pub center: [f32; 4],
+
+    /// Velocity (xyz) and padding (w)
+    pub velocity: [f32; 4],
+}
+
+unsafe impl bytemuck::Pod for Nucleus {}
+
+/// Counter for nucleus detection (GPU atomic counter)
+#[repr(C)]
+#[derive(Clone, Copy, Zeroable)]
+pub struct NucleusCounter {
+    pub count: u32,
+    pub _pad: [u32; 3],
+}
+
+unsafe impl bytemuck::Pod for NucleusCounter {}

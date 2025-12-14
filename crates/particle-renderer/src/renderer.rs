@@ -17,7 +17,12 @@ impl ParticleRenderer {
         // Create camera buffer
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Camera Buffer"),
-            size: std::mem::size_of::<CameraUniform>() as u64,
+            // Uniforms are validated using WGSL layout rules (16-byte aligned).
+            // Round up the allocation so `as_entire_binding()` meets any 16-byte-rounded minimum.
+            size: {
+                let sz = std::mem::size_of::<CameraUniform>() as u64;
+                ((sz + 15) / 16) * 16
+            },
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -42,7 +47,14 @@ impl ParticleRenderer {
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: None,
+                        min_binding_size: Some(
+                            std::num::NonZeroU64::new({
+                                let sz = std::mem::size_of::<CameraUniform>() as u64;
+                                // Uniforms use 16-byte alignment rules; round up so validation matches WGSL layout.
+                                ((sz + 15) / 16) * 16
+                            })
+                            .unwrap(),
+                        ),
                     },
                     count: None,
                 },
@@ -182,6 +194,8 @@ impl ParticleRenderer {
         lod_bond_fade_end: f32,
         lod_quark_fade_start: f32,
         lod_quark_fade_end: f32,
+        lod_nucleus_fade_start: f32,
+        lod_nucleus_fade_end: f32,
     ) {
         // Update camera
         queue.write_buffer(
@@ -196,6 +210,8 @@ impl ParticleRenderer {
                 lod_bond_fade_end,
                 lod_quark_fade_start,
                 lod_quark_fade_end,
+                lod_nucleus_fade_start,
+                lod_nucleus_fade_end,
             )]),
         );
 

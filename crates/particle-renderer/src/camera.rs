@@ -17,7 +17,12 @@ pub struct CameraUniform {
     pub lod_bond_fade_end: f32,
     pub lod_quark_fade_start: f32,
     pub lod_quark_fade_end: f32,
-    pub _padding: f32,
+    pub lod_nucleus_fade_start: f32,
+    pub lod_nucleus_fade_end: f32,
+
+    // Pad to 16 bytes (4x f32) so WGSL uniform layout stays in 16-byte chunks.
+    // This avoids the shader-side struct size rounding up unexpectedly (e.g. to 144 bytes).
+    pub _pad: [f32; 4],
 }
 
 /// Camera for 3D scene navigation
@@ -85,6 +90,8 @@ impl Camera {
         lod_bond_fade_end: f32,
         lod_quark_fade_start: f32,
         lod_quark_fade_end: f32,
+        lod_nucleus_fade_start: f32,
+        lod_nucleus_fade_end: f32,
     ) -> CameraUniform {
         CameraUniform {
             view_proj: self.build_view_projection_matrix().to_cols_array_2d(),
@@ -97,7 +104,9 @@ impl Camera {
             lod_bond_fade_end,
             lod_quark_fade_start,
             lod_quark_fade_end,
-            _padding: 0.0,
+            lod_nucleus_fade_start,
+            lod_nucleus_fade_end,
+            _pad: [0.0; 4],
         }
     }
 

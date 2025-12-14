@@ -5,6 +5,18 @@ struct Camera {
     view_proj: mat4x4<f32>,
     position: vec3<f32>,
     particle_size: f32,
+    time: f32,
+    lod_shell_fade_start: f32,
+    lod_shell_fade_end: f32,
+    lod_bond_fade_start: f32,
+    lod_bond_fade_end: f32,
+    lod_quark_fade_start: f32,
+    lod_quark_fade_end: f32,
+    lod_nucleus_fade_start: f32,
+    lod_nucleus_fade_end: f32,
+
+    // Uniforms are laid out in 16-byte chunks; use 16-byte padding to avoid rounding up to 144 bytes.
+    _pad: vec4<f32>,
 }
 
 @group(0) @binding(0)

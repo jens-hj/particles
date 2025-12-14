@@ -1,23 +1,22 @@
-pub struct HadronRenderer {
+pub struct NucleusRenderer {
     shell_pipeline: wgpu::RenderPipeline,
-    bond_pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
 }
 
-impl HadronRenderer {
+impl NucleusRenderer {
     pub fn new(
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         _camera_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Hadron Renderer Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/hadron.wgsl").into()),
+            label: Some("Nucleus Renderer Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/nucleus.wgsl").into()),
         });
 
-        // Bind group layout for hadron data
+        // Bind group layout for nucleus data
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Hadron Bind Group Layout"),
+            label: Some("Nucleus Bind Group Layout"),
             entries: &[
                 // Camera (Uniform) - Binding 0
                 wgpu::BindGroupLayoutEntry {
@@ -29,7 +28,7 @@ impl HadronRenderer {
                         min_binding_size: Some(
                             std::num::NonZeroU64::new({
                                 let sz = std::mem::size_of::<crate::camera::CameraUniform>() as u64;
-                                // Uniform bindings are validated against WGSL layout rules; round up to 16 bytes.
+                                // Uniforms use 16-byte alignment rules; round up so validation matches WGSL layout.
                                 ((sz + 15) / 16) * 16
                             })
                             .unwrap(),
@@ -37,7 +36,7 @@ impl HadronRenderer {
                     },
                     count: None,
                 },
-                // Hadrons (Storage) - Binding 1
+                // Nuclei (Storage) - Binding 1
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::VERTEX,
@@ -48,20 +47,9 @@ impl HadronRenderer {
                     },
                     count: None,
                 },
-                // Particles (Storage) - Binding 2
+                // Counter (Storage) - Binding 2
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                // Counter (Storage) - Binding 3
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
                     visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: true },
@@ -74,19 +62,19 @@ impl HadronRenderer {
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Hadron Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout], // We include camera in this layout for simplicity
+            label: Some("Nucleus Pipeline Layout"),
+            bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
 
-        // --- SHELL PIPELINE (Instanced Quads) ---
+        // Shell pipeline (Instanced Quads for nucleus shells)
         let shell_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Hadron Shell Pipeline"),
+            label: Some("Nucleus Shell Pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_shell"),
-                buffers: &[], // No vertex buffers, using vertex_index
+                buffers: &[],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -103,47 +91,6 @@ impl HadronRenderer {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None, // Don't cull billboards
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: true, // Write depth so hadrons depth-test correctly against each other
-                depth_compare: wgpu::CompareFunction::Less, // Proper depth testing between hadrons
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
-            cache: None,
-        });
-
-        // --- BOND PIPELINE (Lines) ---
-        let bond_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Hadron Bond Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_bond"),
-                buffers: &[],
-                compilation_options: Default::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_bond"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::LineList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
                 cull_mode: None,
                 unclipped_depth: false,
                 polygon_mode: wgpu::PolygonMode::Fill,
@@ -151,7 +98,7 @@ impl HadronRenderer {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: false, // Transparent lines don't write depth
+                depth_write_enabled: true,
                 depth_compare: wgpu::CompareFunction::Less,
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
@@ -163,7 +110,6 @@ impl HadronRenderer {
 
         Self {
             shell_pipeline,
-            bond_pipeline,
             bind_group_layout,
         }
     }
@@ -173,17 +119,18 @@ impl HadronRenderer {
         device: &wgpu::Device,
         render_pass: &mut wgpu::RenderPass,
         camera_buffer: &wgpu::Buffer,
-        hadron_buffer: &wgpu::Buffer,
-        particle_buffer: &wgpu::Buffer,
-        hadron_count_buffer: &wgpu::Buffer,
-        max_hadrons: u32,
+        nucleus_buffer: &wgpu::Buffer,
+        nucleus_count_buffer: &wgpu::Buffer,
+        max_nuclei: u32,
         show_shells: bool,
-        show_bonds: bool,
     ) {
+        if !show_shells || max_nuclei == 0 {
+            return;
+        }
+
         // Create bind group for this frame
-        // Note: In a real engine, we would cache this or use a BindGroupAllocator
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Hadron Render Bind Group"),
+            label: Some("Nucleus Render Bind Group"),
             layout: &self.bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -192,35 +139,23 @@ impl HadronRenderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: hadron_buffer.as_entire_binding(),
+                    resource: nucleus_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: particle_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: hadron_count_buffer.as_entire_binding(),
+                    resource: nucleus_count_buffer.as_entire_binding(),
                 },
             ],
         });
 
-        // Draw Shells
-        if show_shells {
-            render_pass.set_pipeline(&self.shell_pipeline);
-            render_pass.set_bind_group(0, &bind_group, &[]);
-            // Draw 6 vertices (quad) per instance, max_hadrons instances
-            // The shader will discard invalid instances
-            render_pass.draw(0..6, 0..max_hadrons);
-        }
+        render_pass.set_pipeline(&self.shell_pipeline);
+        render_pass.set_bind_group(0, &bind_group, &[]);
 
-        // Draw Bonds
-        if show_bonds {
-            render_pass.set_pipeline(&self.bond_pipeline);
-            render_pass.set_bind_group(0, &bind_group, &[]);
-            // Draw 6 vertices per hadron (3 lines), 1 instance
-            // The shader will discard invalid vertices
-            render_pass.draw(0..(max_hadrons * 6), 0..1);
-        }
+        // Each nucleus shell is rendered as a quad (6 vertices)
+        render_pass.draw(0..6, 0..max_nuclei);
+    }
+
+    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.bind_group_layout
     }
 }
