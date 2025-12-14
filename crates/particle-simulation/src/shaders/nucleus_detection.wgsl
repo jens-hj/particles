@@ -41,6 +41,15 @@ struct PhysicsParams {
     hadron: vec4<f32>,
 }
 
+struct HadronCounter {
+    // 4x u32 counters (atomics):
+    // [0] total hadrons (counter range; may include invalid slots)
+    // [1] protons
+    // [2] neutrons
+    // [3] other
+    counters: array<atomic<u32>, 4>,
+}
+
 @group(0) @binding(0)
 var<storage, read_write> hadrons: array<Hadron>;
 
@@ -56,9 +65,16 @@ var<storage, read_write> locks: array<atomic<u32>>;
 @group(0) @binding(4)
 var<uniform> params: PhysicsParams;
 
+@group(0) @binding(5)
+var<storage, read> hadron_counter: HadronCounter;
+
 // Check if hadron is a nucleon (proton or neutron)
 fn is_nucleon(type_id: u32) -> bool {
     return type_id == HADRON_PROTON || type_id == HADRON_NEUTRON;
+}
+
+fn is_proton(type_id: u32) -> bool {
+    return type_id == HADRON_PROTON;
 }
 
 // Check if hadron is valid (not marked as invalid)
@@ -82,11 +98,11 @@ fn get_distance(h1_idx: u32, h2_idx: u32) -> f32 {
     return distance(pos1, pos2);
 }
 
-// Get relative velocity magnitude
-fn get_relative_velocity(h1_idx: u32, h2_idx: u32) -> f32 {
-    let vel1 = hadrons[h1_idx].velocity.xyz;
-    let vel2 = hadrons[h2_idx].velocity.xyz;
-    return length(vel1 - vel2);
+fn get_distance_sq(h1_idx: u32, h2_idx: u32) -> f32 {
+    let pos1 = hadrons[h1_idx].center.xyz;
+    let pos2 = hadrons[h2_idx].center.xyz;
+    let d = pos2 - pos1;
+    return dot(d, d);
 }
 
 // Find a free nucleus slot
@@ -113,19 +129,20 @@ fn find_free_slot() -> u32 {
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let index = global_id.x;
-    let num_hadrons = arrayLength(&hadrons);
+    let num_hadrons = min(atomicLoad(&hadron_counter.counters[0]), arrayLength(&hadrons));
 
     if (index >= num_hadrons) {
         return;
     }
 
-    // Only nucleons can initiate nucleus search
+    // Only protons can initiate nucleus search.
+    // This guarantees Z>=1 for every created nucleus/"atom".
     if (!is_valid_hadron(index)) {
         return;
     }
 
     let my_type = hadrons[index].indices_type.w;
-    if (!is_nucleon(my_type)) {
+    if (!is_proton(my_type)) {
         return;
     }
 
@@ -137,7 +154,21 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Search for nearby nucleons to form a nucleus
     // Use nucleon binding range from params
     let binding_range = params.nucleon.y;
-    let max_relative_velocity = 5.0; // Threshold for stable binding
+
+    // Deterministic seeding: only the lowest-index proton within binding range is allowed to seed.
+    // This avoids multiple overlapping nuclei for the same cluster in a single frame.
+    let binding_sq = binding_range * binding_range;
+    for (var i = 0u; i < index; i++) {
+        if (!is_valid_hadron(i)) {
+            continue;
+        }
+        if (!is_proton(hadrons[i].indices_type.w)) {
+            continue;
+        }
+        if (get_distance_sq(index, i) <= binding_sq) {
+            return;
+        }
+    }
 
     var nearby_nucleons: array<u32, MAX_NUCLEONS>;
     var nearby_count = 0u;
@@ -165,13 +196,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             continue;
         }
 
-        let dist = get_distance(index, i);
-        if (dist > binding_range) {
-            continue;
-        }
-
-        let rel_vel = get_relative_velocity(index, i);
-        if (rel_vel > max_relative_velocity) {
+        let dist_sq = get_distance_sq(index, i);
+        if (dist_sq > binding_sq) {
             continue;
         }
 
@@ -179,10 +205,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         nearby_count++;
     }
 
-    // Need at least 2 nucleons to form a nucleus
-    if (nearby_count < 2u) {
-        return;
-    }
+    // A single proton is already a valid nucleus/"atom" (Hydrogen).
 
     // Try to acquire locks on all nearby nucleons
     var locks_acquired: array<bool, MAX_NUCLEONS>;
@@ -204,6 +227,38 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 atomicStore(&locks[nearby_nucleons[i]], 0u);
             }
         }
+        // Fallback: always allow creating a single-proton nucleus so shells don't disappear
+        // due to transient lock contention.
+        if (!atomicCompareExchangeWeak(&locks[index], 0u, 1u).exchanged) {
+            return;
+        }
+
+        if (!is_valid_hadron(index) || !is_proton(hadrons[index].indices_type.w) || is_bound_to_nucleus(index)) {
+            atomicStore(&locks[index], 0u);
+            return;
+        }
+
+        let n_idx = find_free_slot();
+        if (n_idx == 0xFFFFFFFFu) {
+            atomicStore(&locks[index], 0u);
+            return;
+        }
+
+        var nucleus: Nucleus;
+        for (var i = 0u; i < MAX_NUCLEONS; i++) {
+            nucleus.hadron_indices[i] = 0xFFFFFFFFu;
+        }
+        nucleus.hadron_indices[0u] = index;
+        nucleus.nucleon_count = 1u;
+        nucleus.proton_count = 1u;
+        nucleus.neutron_count = 0u;
+        nucleus.type_id = 1u;
+        nucleus.center = vec4<f32>(hadrons[index].center.xyz, hadrons[index].center.w + 0.5);
+        nucleus.velocity = vec4<f32>(hadrons[index].velocity.xyz, 0.0);
+        nuclei[n_idx] = nucleus;
+        hadrons[index].velocity.w = f32(n_idx + 1u);
+
+        atomicStore(&locks[index], 0u);
         return;
     }
 

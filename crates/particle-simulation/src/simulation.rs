@@ -44,8 +44,8 @@ pub struct ParticleSimulation {
     integrate_pipeline: wgpu::ComputePipeline,
     hadron_validation_pipeline: wgpu::ComputePipeline,
     hadron_pipeline: wgpu::ComputePipeline,
-    nucleus_validation_pipeline: wgpu::ComputePipeline,
     nucleus_pipeline: wgpu::ComputePipeline,
+    nucleus_reset_pipeline: wgpu::ComputePipeline,
 
     // Bind groups
     force_bind_group: wgpu::BindGroup,
@@ -54,6 +54,7 @@ pub struct ParticleSimulation {
     nucleus_bind_group: wgpu::BindGroup,
 
     particle_count: u32,
+    nucleus_capacity: u32,
 }
 
 impl ParticleSimulation {
@@ -223,16 +224,16 @@ impl ParticleSimulation {
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/hadron_detection.wgsl").into()),
         });
 
-        let nucleus_validation_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Nucleus Validation Shader"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("shaders/nucleus_validation.wgsl").into(),
-            ),
-        });
-
         let nucleus_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Nucleus Detection Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/nucleus_detection.wgsl").into()),
+        });
+
+        let nucleus_reset_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Nucleus Frame Reset Shader"),
+            source: wgpu::ShaderSource::Wgsl(
+                include_str!("shaders/nucleus_validation.wgsl").into(),
+            ),
         });
 
         let selection_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -504,8 +505,20 @@ impl ParticleSimulation {
                         },
                         count: None,
                     },
+                    // Hadron Counter (Storage, read-only) - Binding 5
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
             });
+
         log::info!("Bind group layouts created");
 
         // Create compute pipelines
@@ -600,17 +613,6 @@ impl ParticleSimulation {
                 push_constant_ranges: &[],
             });
 
-        log::info!("Creating nucleus validation pipeline...");
-        let nucleus_validation_pipeline =
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("Nucleus Validation Pipeline"),
-                layout: Some(&nucleus_pipeline_layout),
-                module: &nucleus_validation_shader,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-
         log::info!("Creating nucleus pipeline...");
         let nucleus_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Nucleus Pipeline"),
@@ -620,6 +622,18 @@ impl ParticleSimulation {
             compilation_options: Default::default(),
             cache: None,
         });
+
+        log::info!("Creating nucleus reset pipeline...");
+        let nucleus_reset_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Nucleus Reset Pipeline"),
+                layout: Some(&nucleus_pipeline_layout),
+                module: &nucleus_reset_shader,
+                entry_point: Some("reset_main"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+
         log::info!("Pipelines created");
 
         // Create bind groups
@@ -743,8 +757,13 @@ impl ParticleSimulation {
                     binding: 4,
                     resource: params_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: hadron_count_buffer.as_entire_binding(),
+                },
             ],
         });
+
         log::info!("Bind groups created");
 
         Self {
@@ -768,13 +787,14 @@ impl ParticleSimulation {
             integrate_pipeline,
             hadron_validation_pipeline,
             hadron_pipeline,
-            nucleus_validation_pipeline,
             nucleus_pipeline,
+            nucleus_reset_pipeline,
             force_bind_group,
             integrate_bind_group,
             hadron_bind_group,
             nucleus_bind_group,
             particle_count,
+            nucleus_capacity: max_nuclei as u32,
         }
     }
 
@@ -836,20 +856,27 @@ impl ParticleSimulation {
             compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
         }
 
-        // Step 5: Validate existing nuclei
+        // Step 5: Per-frame nucleus detection (reset + detect)
         {
+            // Reset nucleus counter + invalidate nucleus slots + clear nucleus_id on hadrons.
+            encoder.clear_buffer(&self.nucleus_count_buffer, 0, None);
+            encoder.clear_buffer(&self.locks_buffer, 0, None);
+
+            let reset_span = self.particle_count.max(self.nucleus_capacity);
+            let reset_workgroups = (reset_span + 255) / 256;
+
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Nucleus Validation Pass"),
+                label: Some("Nucleus Frame Reset Pass"),
                 timestamp_writes: None,
             });
-            compute_pass.set_pipeline(&self.nucleus_validation_pipeline);
+            compute_pass.set_pipeline(&self.nucleus_reset_pipeline);
             compute_pass.set_bind_group(0, &self.nucleus_bind_group, &[]);
-            compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
+            compute_pass.dispatch_workgroups(reset_workgroups, 1, 1);
         }
 
-        // Step 6: Detect new nuclei
+        // Step 6: Detect nuclei
         {
-            // Reset locks (nucleus count persists)
+            // Reset locks for detection.
             encoder.clear_buffer(&self.locks_buffer, 0, None);
 
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
