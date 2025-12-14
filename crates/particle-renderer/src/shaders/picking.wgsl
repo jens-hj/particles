@@ -5,6 +5,7 @@
 // - otherwise: application-defined:
 //   - for now: particles write (index + 1)
 //   - hadrons write 0x8000_0000 | (hadron_index + 1)
+//   - nuclei write  0x4000_0000 | (anchor_hadron_index + 1)
 //
 // IMPORTANT (uniqueness / semantics):
 // - IDs are derived from `@builtin(instance_index)` at draw time.
@@ -21,6 +22,7 @@
 // - Hadron shells should not be pickable when their visual alpha is 0.
 // - Quarks that are part of hadrons should not be pickable once they have faded out due to
 //   quark LOD (same logic as `particle.wgsl`: fade out based on hadron distance).
+// - Nucleus shells should not be pickable when their visual alpha is 0.
 
 struct Camera {
     view_proj: mat4x4<f32>,
@@ -74,6 +76,31 @@ struct HadronCounter {
 
 @group(0) @binding(3)
 var<storage, read> hadron_counter: HadronCounter;
+
+// -------------------- Nucleus picking --------------------
+
+const MAX_NUCLEONS: u32 = 16u;
+
+struct Nucleus {
+    hadron_indices: array<u32, MAX_NUCLEONS>,
+    nucleon_count: u32,
+    proton_count: u32,
+    neutron_count: u32,
+    type_id: u32,      // Atomic number (Z)
+    center: vec4<f32>, // xyz = center, w = radius
+    velocity: vec4<f32>,
+}
+
+struct NucleusCounter {
+    count: u32,
+    _pad: vec3<u32>,
+}
+
+@group(0) @binding(4)
+var<storage, read> nuclei: array<Nucleus>;
+
+@group(0) @binding(5)
+var<storage, read> nucleus_counter: NucleusCounter;
 
 struct VsOut {
     @builtin(position) clip_position: vec4<f32>,
@@ -301,6 +328,90 @@ fn vs_pick_hadron(
 
 @fragment
 fn fs_pick_hadron(in: VsOut) -> @location(0) vec4<f32> {
+    // Shell is a disc in screen-facing quad. For picking, we accept the full disc.
+    let d = in.uv - vec2<f32>(0.5, 0.5);
+    let r2 = dot(d, d);
+    if (r2 > 0.25) {
+        discard;
+    }
+
+    return pack_u32_to_rgba8(in.id);
+}
+
+@vertex
+fn vs_pick_nucleus(
+    @builtin(vertex_index) vertex_index: u32,
+    @builtin(instance_index) instance_index: u32,
+) -> VsOut {
+    var out: VsOut;
+
+    if (instance_index >= nucleus_counter.count) {
+        out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        out.id = 0u;
+        out.uv = vec2<f32>(0.0, 0.0);
+        return out;
+    }
+
+    let n = nuclei[instance_index];
+
+    // Invalid slot sentinel (matches `nucleus.wgsl`).
+    if (n.type_id == 0xFFFFFFFFu) {
+        out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        out.id = 0u;
+        out.uv = vec2<f32>(0.0, 0.0);
+        return out;
+    }
+
+    let center = n.center.xyz;
+    let radius = n.center.w;
+
+    // Match nucleus shell fade-in: if visually transparent, it should not be pickable.
+    let dist_to_cam = distance(camera.position, center);
+    let alpha = smoothstep(camera.lod_nucleus_fade_start, camera.lod_nucleus_fade_end, dist_to_cam);
+    if (alpha < 0.01) {
+        out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        out.id = 0u;
+        out.uv = vec2<f32>(0.0, 0.0);
+        return out;
+    }
+
+    // Encode nucleus hits as: 0x4000_0000 | (anchor_hadron_index + 1)
+    // Rationale: nucleus slots are rebuilt/compacted, but the hadron indices inside a nucleus
+    // provide a more stable identity for camera-follow.
+    if (n.nucleon_count == 0u) {
+        out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        out.id = 0u;
+        out.uv = vec2<f32>(0.0, 0.0);
+        return out;
+    }
+
+    let anchor_hadron_index = n.hadron_indices[0u];
+    if (anchor_hadron_index == 0xFFFFFFFFu) {
+        out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        out.id = 0u;
+        out.uv = vec2<f32>(0.0, 0.0);
+        return out;
+    }
+
+    out.id = 0x40000000u | (anchor_hadron_index + 1u);
+
+    let local = quad_vertex(vertex_index);
+    let uv = quad_uv(local);
+
+    // Camera-facing basis (robust)
+    let to_cam = normalize(camera.position - center);
+    let basis = billboard_basis(to_cam);
+    let right = basis[0];
+    let up = basis[1];
+
+    let world_pos = center + (right * local.x + up * local.y) * radius;
+    out.clip_position = camera.view_proj * vec4<f32>(world_pos, 1.0);
+    out.uv = uv;
+    return out;
+}
+
+@fragment
+fn fs_pick_nucleus(in: VsOut) -> @location(0) vec4<f32> {
     // Shell is a disc in screen-facing quad. For picking, we accept the full disc.
     let d = in.uv - vec2<f32>(0.5, 0.5);
     let r2 = dot(d, d);

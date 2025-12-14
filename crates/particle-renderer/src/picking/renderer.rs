@@ -9,6 +9,7 @@
 //! - 0                => "no hit" / background
 //! - (particle_idx+1) => particle hit
 //! - 0x8000_0000 | (hadron_idx+1) => hadron hit (top bit marks hadron class)
+//! - 0x4000_0000 | (anchor_hadron_idx+1) => nucleus hit (bit 30 marks nucleus class)
 //!
 //! Notes:
 //! - This pass should be rendered with a depth buffer to respect occlusion.
@@ -21,6 +22,7 @@ use crate::camera::{Camera, CameraUniform};
 pub struct PickingRenderer {
     particle_pipeline: wgpu::RenderPipeline,
     hadron_pipeline: wgpu::RenderPipeline,
+    nucleus_pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
 
     /// Depth texture view matching the current surface size (for occlusion in pick pass).
@@ -74,6 +76,8 @@ impl PickingRenderer {
         // 1: particles storage
         // 2: hadrons storage
         // 3: hadron counter storage
+        // 4: nuclei storage
+        // 5: nucleus counter storage
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Picking Bind Group Layout"),
             entries: &[
@@ -116,6 +120,26 @@ impl PickingRenderer {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 3,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
                     visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: true },
@@ -198,6 +222,32 @@ impl PickingRenderer {
                 compilation_options: Default::default(),
             }),
             primitive,
+            depth_stencil: depth_stencil.clone(),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
+        let nucleus_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Picking Nucleus Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_pick_nucleus"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_pick_nucleus"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: color_format,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive,
             depth_stencil,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
@@ -207,6 +257,7 @@ impl PickingRenderer {
         Self {
             particle_pipeline,
             hadron_pipeline,
+            nucleus_pipeline,
             bind_group_layout,
             depth_view,
             depth_format,
@@ -244,8 +295,11 @@ impl PickingRenderer {
         particle_buffer: &wgpu::Buffer,
         hadron_buffer: &wgpu::Buffer,
         hadron_count_buffer: &wgpu::Buffer,
+        nucleus_buffer: &wgpu::Buffer,
+        nucleus_count_buffer: &wgpu::Buffer,
         particle_count: u32,
         max_hadrons: u32,
+        max_nuclei: u32,
         particle_size: f32,
         time: f32,
         lod_shell_fade_start: f32,
@@ -299,6 +353,14 @@ impl PickingRenderer {
                     binding: 3,
                     resource: hadron_count_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: nucleus_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: nucleus_count_buffer.as_entire_binding(),
+                },
             ],
         });
 
@@ -340,6 +402,9 @@ impl PickingRenderer {
 
         pass.set_pipeline(&self.hadron_pipeline);
         pass.draw(0..6, 0..max_hadrons);
+
+        pass.set_pipeline(&self.nucleus_pipeline);
+        pass.draw(0..6, 0..max_nuclei);
     }
 }
 

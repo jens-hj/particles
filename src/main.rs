@@ -137,6 +137,7 @@ struct GpuState {
 enum CameraLock {
     Particle { particle_index: u32 },
     Hadron { hadron_index: u32 },
+    Nucleus { anchor_hadron_index: u32 },
 }
 
 fn decode_pick_id(raw: u32) -> Option<CameraLock> {
@@ -145,7 +146,15 @@ fn decode_pick_id(raw: u32) -> Option<CameraLock> {
     }
 
     let is_hadron = (raw & 0x8000_0000) != 0;
-    let idx_1 = raw & 0x7FFF_FFFF;
+    let is_nucleus = (!is_hadron) && ((raw & 0x4000_0000) != 0);
+
+    let idx_1 = if is_hadron {
+        raw & 0x7FFF_FFFF
+    } else if is_nucleus {
+        raw & 0x3FFF_FFFF
+    } else {
+        raw
+    };
 
     if idx_1 == 0 {
         return None;
@@ -155,6 +164,10 @@ fn decode_pick_id(raw: u32) -> Option<CameraLock> {
 
     if is_hadron {
         Some(CameraLock::Hadron { hadron_index: idx0 })
+    } else if is_nucleus {
+        Some(CameraLock::Nucleus {
+            anchor_hadron_index: idx0,
+        })
     } else {
         Some(CameraLock::Particle {
             particle_index: idx0,
@@ -421,7 +434,7 @@ impl GpuState {
             }
 
             if let Some(target) = self.selection_target_cached {
-                // target.w = kind (0 none, 1 particle, 2 hadron)
+                // target.w = kind (0 none, 1 particle, 2 hadron, 3 nucleus)
                 // NOTE: The selection-resolve pass only tells us the kind, not the exact radius.
                 // We approximate desired camera distance based on kind. This can be refined later
                 // by adding a resolved "size/radius" output from the compute pass.
@@ -446,6 +459,7 @@ impl GpuState {
                         let desired_distance = match target[3].round() as i32 {
                             1 => 5.0,  // particle/quark: close-up
                             2 => 15.0, // hadron shell: larger, keep more distance
+                            3 => 50.0, // nucleus shell: treat like hadron for now
                             _ => self.camera.distance,
                         };
                         self.camera_distance_target = Some(desired_distance);
@@ -835,8 +849,11 @@ impl ApplicationHandler for App {
                             gpu_state.simulation.particle_buffer(),
                             gpu_state.simulation.hadron_buffer(),
                             gpu_state.simulation.hadron_count_buffer(),
+                            gpu_state.simulation.nucleus_buffer(),
+                            gpu_state.simulation.nucleus_count_buffer(),
                             gpu_state.simulation.particle_count(),
                             gpu_state.simulation.particle_count(), // max_hadrons == particle_count allocation
+                            gpu_state.simulation.particle_count() / 4, // match render path's rough max nuclei
                             gpu_state.picking_particle_size,
                             gpu_state.ui_state.physics_params.integration[2],
                             gpu_state.ui_state.lod_shell_fade_start,

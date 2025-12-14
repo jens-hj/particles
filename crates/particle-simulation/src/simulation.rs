@@ -346,6 +346,7 @@ impl ParticleSimulation {
         // 1: particles (storage, read)
         // 2: hadrons (storage, read)
         // 3: selection target (storage, write)
+        // 4: nuclei (storage, read)
         let selection_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Selection Bind Group Layout"),
@@ -385,6 +386,16 @@ impl ParticleSimulation {
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -684,6 +695,10 @@ impl ParticleSimulation {
                     binding: 3,
                     resource: selection_target_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: nucleus_buffer.as_entire_binding(),
+                },
             ],
         });
 
@@ -904,6 +919,7 @@ impl ParticleSimulation {
     /// - 0 => none
     /// - (particle_index + 1) => particle
     /// - 0x80000000 | (hadron_index + 1) => hadron
+    /// - 0x40000000 | (anchor_hadron_index + 1) => nucleus
     pub fn set_selected_id(&self, id: u32) {
         let data = [id, 0u32, 0u32, 0u32];
         self.queue

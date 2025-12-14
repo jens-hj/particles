@@ -8,10 +8,11 @@
 // - 0                          => no selection
 // - (particle_index + 1)       => particle selection
 // - 0x80000000 | (hadron_index + 1) => hadron selection
+// - 0x40000000 | (anchor_hadron_index + 1) => nucleus selection
 //
 // Output encoding:
 // - selection_target.target.xyz = selected world-space center
-// - selection_target.target.w   = kind (0.0 = none, 1.0 = particle, 2.0 = hadron)
+// - selection_target.target.w   = kind (0.0 = none, 1.0 = particle, 2.0 = hadron, 3.0 = nucleus)
 //
 // Notes:
 // - Particles are addressed directly by index.
@@ -29,6 +30,18 @@ struct Hadron {
     indices_type: vec4<u32>, // x=p1, y=p2, z=p3, w=type_id
     center: vec4<f32>,       // xyz = center, w = radius
     velocity: vec4<f32>,     // xyz = velocity, w = padding
+}
+
+const MAX_NUCLEONS: u32 = 16u;
+
+struct Nucleus {
+    hadron_indices: array<u32, MAX_NUCLEONS>,
+    nucleon_count: u32,
+    proton_count: u32,
+    neutron_count: u32,
+    type_id: u32,      // Atomic number (Z)
+    center: vec4<f32>, // xyz = center, w = radius
+    velocity: vec4<f32>,
 }
 
 struct Selection {
@@ -57,6 +70,10 @@ var<storage, read_write> selection_target: SelectionTarget;
 const KIND_NONE: f32 = 0.0;
 const KIND_PARTICLE: f32 = 1.0;
 const KIND_HADRON: f32 = 2.0;
+const KIND_NUCLEUS: f32 = 3.0;
+
+@group(0) @binding(4)
+var<storage, read> nuclei: array<Nucleus>;
 
 fn write_none() {
     selection_target.value = vec4<f32>(0.0, 0.0, 0.0, KIND_NONE);
@@ -72,7 +89,14 @@ fn main() {
     }
 
     let is_hadron = (raw_id & 0x80000000u) != 0u;
-    let idx_1 = raw_id & 0x7FFFFFFFu; // 1-indexed payload
+    let is_nucleus = (!is_hadron) && ((raw_id & 0x40000000u) != 0u);
+
+    var idx_1 = raw_id; // 1-indexed payload
+    if (is_hadron) {
+        idx_1 = raw_id & 0x7FFFFFFFu;
+    } else if (is_nucleus) {
+        idx_1 = raw_id & 0x3FFFFFFFu;
+    }
 
     if (idx_1 == 0u) {
         write_none();
@@ -81,7 +105,7 @@ fn main() {
 
     let idx0 = idx_1 - 1u;
 
-    if (!is_hadron) {
+    if (!is_hadron && !is_nucleus) {
         // Particle selection
         let n = arrayLength(&particles);
         if (idx0 >= n) {
@@ -91,6 +115,33 @@ fn main() {
 
         let p = particles[idx0];
         selection_target.value = vec4<f32>(p.position.xyz, KIND_PARTICLE);
+        return;
+    }
+
+    if (is_nucleus) {
+        // Payload is a stable anchor hadron index; find the nucleus containing it.
+        let anchor_hadron_index = idx0;
+
+        let nn = arrayLength(&nuclei);
+        for (var n_idx: u32 = 0u; n_idx < nn; n_idx = n_idx + 1u) {
+            let nuc = nuclei[n_idx];
+            if (nuc.type_id == 0xFFFFFFFFu) {
+                continue;
+            }
+
+            for (var i: u32 = 0u; i < MAX_NUCLEONS; i = i + 1u) {
+                if (i >= nuc.nucleon_count) {
+                    break;
+                }
+
+                if (nuc.hadron_indices[i] == anchor_hadron_index) {
+                    selection_target.value = vec4<f32>(nuc.center.xyz, KIND_NUCLEUS);
+                    return;
+                }
+            }
+        }
+
+        write_none();
         return;
     }
 

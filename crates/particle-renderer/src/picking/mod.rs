@@ -7,6 +7,12 @@
 //! - 0 == "nothing"
 //! - Otherwise, the lower 31 bits are an application-defined index,
 //!   and the top bit can be used to distinguish entity classes later.
+//!
+//! Current convention:
+//! - 0                          => nothing
+//! - (particle_index + 1)       => particle
+//! - 0x8000_0000 | (hadron_index + 1)  => hadron
+//! - 0x4000_0000 | (anchor_hadron_index + 1) => nucleus
 
 pub mod renderer;
 
