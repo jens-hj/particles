@@ -28,6 +28,8 @@ pub struct UiState {
     // LOD controls
     pub lod_shell_fade_start: f32,
     pub lod_shell_fade_end: f32,
+    pub lod_bound_hadron_fade_start: f32,
+    pub lod_bound_hadron_fade_end: f32,
     pub lod_bond_fade_start: f32,
     pub lod_bond_fade_end: f32,
     pub lod_quark_fade_start: f32,
@@ -59,12 +61,14 @@ impl Default for UiState {
 
             lod_shell_fade_start: 10.0,
             lod_shell_fade_end: 30.0,
+            lod_bound_hadron_fade_start: 40.0,
+            lod_bound_hadron_fade_end: 70.0,
             lod_bond_fade_start: 10.0,
             lod_bond_fade_end: 30.0,
             lod_quark_fade_start: 10.0,
             lod_quark_fade_end: 30.0,
-            lod_nucleus_fade_start: 30.0, // Nuclei appear further out than hadrons
-            lod_nucleus_fade_end: 100.0,
+            lod_nucleus_fade_start: 40.0, // Nuclei appear further out than hadrons
+            lod_nucleus_fade_end: 70.0,
         }
     }
 }
@@ -244,6 +248,22 @@ impl Gui {
                 );
                 if state.lod_shell_fade_end < state.lod_shell_fade_start {
                     state.lod_shell_fade_end = state.lod_shell_fade_start;
+                }
+
+                ui.separator();
+                ui.label("Bound Hadron LOD (Fade Out):");
+                ui.add(
+                    egui::Slider::new(&mut state.lod_bound_hadron_fade_start, 10.0..=300.0)
+                        .text("Bound Start")
+                        .step_by(10.0),
+                );
+                ui.add(
+                    egui::Slider::new(&mut state.lod_bound_hadron_fade_end, 10.0..=300.0)
+                        .text("Bound End")
+                        .step_by(10.0),
+                );
+                if state.lod_bound_hadron_fade_end < state.lod_bound_hadron_fade_start {
+                    state.lod_bound_hadron_fade_end = state.lod_bound_hadron_fade_start;
                 }
 
                 ui.separator();

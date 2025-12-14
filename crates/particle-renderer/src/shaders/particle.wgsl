@@ -7,6 +7,8 @@ struct Camera {
     time: f32,
     lod_shell_fade_start: f32,
     lod_shell_fade_end: f32,
+    lod_bound_hadron_fade_start: f32,
+    lod_bound_hadron_fade_end: f32,
     lod_bond_fade_start: f32,
     lod_bond_fade_end: f32,
     lod_quark_fade_start: f32,

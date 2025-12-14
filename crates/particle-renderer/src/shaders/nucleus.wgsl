@@ -9,6 +9,8 @@ struct Camera {
     time: f32,
     lod_shell_fade_start: f32,
     lod_shell_fade_end: f32,
+    lod_bound_hadron_fade_start: f32,
+    lod_bound_hadron_fade_end: f32,
     lod_bond_fade_start: f32,
     lod_bond_fade_end: f32,
     lod_quark_fade_start: f32,
@@ -152,5 +154,6 @@ fn fs_shell(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     let lighting = 0.5 + diffuse * 0.5;
-    return vec4<f32>(in.color.rgb * lighting, final_alpha * in.color.a);
+    // At `lod_nucleus_fade_end`, the nucleus is fully opaque (alpha = 1).
+    return vec4<f32>(in.color.rgb * lighting, final_alpha);
 }

@@ -13,6 +13,8 @@ pub struct CameraUniform {
     pub time: f32,
     pub lod_shell_fade_start: f32,
     pub lod_shell_fade_end: f32,
+    pub lod_bound_hadron_fade_start: f32,
+    pub lod_bound_hadron_fade_end: f32,
     pub lod_bond_fade_start: f32,
     pub lod_bond_fade_end: f32,
     pub lod_quark_fade_start: f32,
@@ -20,9 +22,8 @@ pub struct CameraUniform {
     pub lod_nucleus_fade_start: f32,
     pub lod_nucleus_fade_end: f32,
 
-    // Pad to 16 bytes (4x f32) so WGSL uniform layout stays in 16-byte chunks.
-    // This avoids the shader-side struct size rounding up unexpectedly (e.g. to 144 bytes).
-    pub _pad: [f32; 4],
+    // Pad so the uniform binding size is safely >= WGSL's rounded-up struct size.
+    pub _pad: [f32; 5],
 }
 
 /// Camera for 3D scene navigation
@@ -86,6 +87,8 @@ impl Camera {
         time: f32,
         lod_shell_fade_start: f32,
         lod_shell_fade_end: f32,
+        lod_bound_hadron_fade_start: f32,
+        lod_bound_hadron_fade_end: f32,
         lod_bond_fade_start: f32,
         lod_bond_fade_end: f32,
         lod_quark_fade_start: f32,
@@ -100,13 +103,15 @@ impl Camera {
             time,
             lod_shell_fade_start,
             lod_shell_fade_end,
+            lod_bound_hadron_fade_start,
+            lod_bound_hadron_fade_end,
             lod_bond_fade_start,
             lod_bond_fade_end,
             lod_quark_fade_start,
             lod_quark_fade_end,
             lod_nucleus_fade_start,
             lod_nucleus_fade_end,
-            _pad: [0.0; 4],
+            _pad: [0.0; 5],
         }
     }
 

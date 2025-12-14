@@ -7,6 +7,8 @@ struct Camera {
     time: f32,
     lod_shell_fade_start: f32,
     lod_shell_fade_end: f32,
+    lod_bound_hadron_fade_start: f32,
+    lod_bound_hadron_fade_end: f32,
     lod_bond_fade_start: f32,
     lod_bond_fade_end: f32,
     lod_quark_fade_start: f32,
@@ -28,7 +30,7 @@ struct Particle {
 struct Hadron {
     indices_type: vec4<u32>, // x=p1, y=p2, z=p3, w=type_id
     center: vec4<f32>, // xyz, w=radius
-    velocity: vec4<f32>, // xyz, w=padding
+    velocity: vec4<f32>, // xyz, w = nucleus_id (as f32, 0 = unbound)
 }
 
 struct HadronCounter {
@@ -57,6 +59,7 @@ struct VertexOutput {
     @location(0) color: vec4<f32>,
     @location(1) uv: vec2<f32>,
     @location(2) dist_to_cam: f32,
+    @location(3) @interpolate(flat) is_bound: u32,
 }
 
 // --- COLORS ---
@@ -118,6 +121,7 @@ fn vs_shell(
     out.uv = uv;
     out.color = get_hadron_color(hadron.indices_type.w);
     out.dist_to_cam = distance(camera.position, center);
+    out.is_bound = select(0u, 1u, u32(hadron.velocity.w) != 0u);
 
     return out;
 }
@@ -139,11 +143,22 @@ fn fs_shell(in: VertexOutput) -> @location(0) vec4<f32> {
     let light_dir = normalize(vec3<f32>(0.5, 0.5, 1.0));
     let diffuse = max(dot(normal, light_dir), 0.0);
 
-    // LOD: Fade in shells from transparent to opaque (controlled by shell sliders)
+    // Base LOD: Fade in shells from transparent to opaque (controlled by shell sliders)
     // < shell_fade_start: Don't render (alpha = 0)
     // shell_fade_start to shell_fade_end: Fade from 0 to 1
     // > shell_fade_end: Fully opaque (alpha = 1)
-    let final_alpha = smoothstep(camera.lod_shell_fade_start, camera.lod_shell_fade_end, in.dist_to_cam);
+    var final_alpha = smoothstep(camera.lod_shell_fade_start, camera.lod_shell_fade_end, in.dist_to_cam);
+
+    // Crossfade: hadrons that are part of a nucleus fade out over the same distance range
+    // the nucleus fades in (separately controllable).
+    if (in.is_bound != 0u) {
+        let bound_fade = 1.0 - smoothstep(
+            camera.lod_bound_hadron_fade_start,
+            camera.lod_bound_hadron_fade_end,
+            in.dist_to_cam,
+        );
+        final_alpha = final_alpha * bound_fade;
+    }
 
     if (final_alpha < 0.01) {
         discard;
@@ -211,6 +226,7 @@ fn vs_bond(
     out.color = vec4<f32>(1.0, 1.0, 1.0, 0.5); // White lines
     out.uv = vec2<f32>(0.0, 0.0); // Unused
     out.dist_to_cam = distance(camera.position, hadron.center.xyz);
+    out.is_bound = select(0u, 1u, u32(hadron.velocity.w) != 0u);
 
     return out;
 }
@@ -221,7 +237,16 @@ fn fs_bond(in: VertexOutput) -> @location(0) vec4<f32> {
     // < bond_fade_start: Fully visible (alpha = 1)
     // bond_fade_start to bond_fade_end: Fade from 1 to 0
     // > bond_fade_end: Invisible (alpha = 0)
-    let alpha_factor = 1.0 - smoothstep(camera.lod_bond_fade_start, camera.lod_bond_fade_end, in.dist_to_cam);
+    var alpha_factor = 1.0 - smoothstep(camera.lod_bond_fade_start, camera.lod_bond_fade_end, in.dist_to_cam);
+
+    if (in.is_bound != 0u) {
+        let bound_fade = 1.0 - smoothstep(
+            camera.lod_bound_hadron_fade_start,
+            camera.lod_bound_hadron_fade_end,
+            in.dist_to_cam,
+        );
+        alpha_factor = alpha_factor * bound_fade;
+    }
 
     if (alpha_factor < 0.01) {
         discard;

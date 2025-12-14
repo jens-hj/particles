@@ -29,6 +29,8 @@ struct Camera {
     time: f32,
     lod_shell_fade_start: f32,
     lod_shell_fade_end: f32,
+    lod_bound_hadron_fade_start: f32,
+    lod_bound_hadron_fade_end: f32,
     lod_bond_fade_start: f32,
     lod_bond_fade_end: f32,
     lod_quark_fade_start: f32,
@@ -56,7 +58,7 @@ var<storage, read> particles: array<Particle>;
 struct Hadron {
     indices_type: vec4<u32>, // x=p1, y=p2, z=p3, w=type_id
     center: vec4<f32>,       // xyz=center, w=radius
-    velocity: vec4<f32>,     // xyz=velocity, w=padding
+    velocity: vec4<f32>,     // xyz=velocity, w=nucleus_id (as f32, 0=unbound)
 }
 
 @group(0) @binding(2)
@@ -256,16 +258,24 @@ fn vs_pick_hadron(
     let center = h.center.xyz;
     let radius = h.center.w;
 
-    // Match visual shell LOD: if the shell would be fully transparent (alpha=0),
+    // Match visual shell LOD: if the shell would be fully transparent (alpha≈0),
     // it should not be pickable at all.
-    //
-    // Visual shader uses:
-    //   final_alpha = smoothstep(lod_shell_fade_start, lod_shell_fade_end, dist_to_cam)
-    // and discards when final_alpha < 0.01.
-    // Here we apply the stricter requirement you asked for:
-    //   if within lod_shell_fade_start of the camera, it shouldn't be pickable.
     let dist_to_cam = distance(camera.position, center);
-    if (dist_to_cam < camera.lod_shell_fade_start) {
+
+    // Visual base shell fade-in.
+    var alpha = smoothstep(camera.lod_shell_fade_start, camera.lod_shell_fade_end, dist_to_cam);
+
+    // Visual bound-hadron crossfade-out (only if nucleus-bound).
+    if (u32(h.velocity.w) != 0u) {
+        let bound_fade = 1.0 - smoothstep(
+            camera.lod_bound_hadron_fade_start,
+            camera.lod_bound_hadron_fade_end,
+            dist_to_cam,
+        );
+        alpha = alpha * bound_fade;
+    }
+
+    if (alpha < 0.01) {
         out.clip_position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
         out.id = 0u;
         out.uv = vec2<f32>(0.0, 0.0);
