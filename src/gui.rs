@@ -17,10 +17,10 @@ pub struct UiState {
     pub other_hadron_count: u32,
 
     // Selected nucleus info (for atom card UI)
-    pub selected_nucleus_atomic_number: Option<u32>,  // Z (proton count / type_id)
+    pub selected_nucleus_atomic_number: Option<u32>, // Z (proton count / type_id)
     pub selected_nucleus_proton_count: Option<u32>,
     pub selected_nucleus_neutron_count: Option<u32>,
-    pub selected_nucleus_nucleon_count: Option<u32>,  // Total nucleons
+    pub selected_nucleus_nucleon_count: Option<u32>, // Total nucleons
 
     pub physics_params: PhysicsParams,
     pub show_shells: bool,
@@ -536,15 +536,12 @@ impl Gui {
                     }
 
                     // Show isotope notation if we have the data
-                    if let (Some(_neutrons), Some(nucleons)) =
-                        (state.selected_nucleus_neutron_count, state.selected_nucleus_nucleon_count)
-                    {
+                    if let (Some(_neutrons), Some(nucleons)) = (
+                        state.selected_nucleus_neutron_count,
+                        state.selected_nucleus_nucleon_count,
+                    ) {
                         ui.separator();
-                        ui.label(format!(
-                            "Isotope: {}-{}",
-                            element_name,
-                            nucleons
-                        ));
+                        ui.label(format!("Isotope: {}-{}", element_name, nucleons));
                     }
                 });
         }

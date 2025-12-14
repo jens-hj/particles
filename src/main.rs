@@ -12,6 +12,7 @@ use particle_renderer::{
 };
 use particle_simulation::ParticleSimulation;
 use rand::Rng;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Instant;
 use winit::{
@@ -132,7 +133,7 @@ struct GpuState {
     // Keep these in sync so the overlay represents the exact pick colliders.
     picking_particle_size: f32,
 
-    frame_times: Vec<f32>,
+    frame_times: VecDeque<f32>,
     last_frame_time: Instant,
     frame_counter: u32,
 }
@@ -198,11 +199,11 @@ impl GpuState {
             mapped_at_creation: false,
         });
 
-        let mut nucleus_encoder = self.device.create_command_encoder(
-            &wgpu::CommandEncoderDescriptor {
-                label: Some("Nucleus Readback Encoder"),
-            },
-        );
+        let mut nucleus_encoder =
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Nucleus Readback Encoder"),
+                });
 
         // Copy multiple nuclei from GPU buffer
         nucleus_encoder.copy_buffer_to_buffer(
@@ -237,25 +238,25 @@ impl GpuState {
                 }
 
                 // Read the first hadron index (the anchor)
-                let first_hadron_idx = u32::from_le_bytes(
-                    bytes[base_offset..base_offset + 4].try_into().unwrap()
-                );
+                let first_hadron_idx =
+                    u32::from_le_bytes(bytes[base_offset..base_offset + 4].try_into().unwrap());
 
                 // Check if this nucleus contains our anchor hadron
                 if first_hadron_idx == anchor_hadron_index {
                     // Parse this nucleus's data
                     let data_offset = base_offset + 64; // Skip hadron_indices[16]
-                    let nucleon_count = u32::from_le_bytes(
-                        bytes[data_offset..data_offset + 4].try_into().unwrap()
-                    );
+                    let nucleon_count =
+                        u32::from_le_bytes(bytes[data_offset..data_offset + 4].try_into().unwrap());
                     let proton_count = u32::from_le_bytes(
-                        bytes[data_offset + 4..data_offset + 8].try_into().unwrap()
+                        bytes[data_offset + 4..data_offset + 8].try_into().unwrap(),
                     );
                     let neutron_count = u32::from_le_bytes(
-                        bytes[data_offset + 8..data_offset + 12].try_into().unwrap()
+                        bytes[data_offset + 8..data_offset + 12].try_into().unwrap(),
                     );
                     let type_id = u32::from_le_bytes(
-                        bytes[data_offset + 12..data_offset + 16].try_into().unwrap()
+                        bytes[data_offset + 12..data_offset + 16]
+                            .try_into()
+                            .unwrap(),
                     );
 
                     // Only update if this is a valid nucleus
@@ -455,7 +456,7 @@ impl GpuState {
             // You can temporarily increase this for debugging (e.g. *8.0) but keep it shared.
             picking_particle_size: PARTICLE_SCALE,
 
-            frame_times: Vec::with_capacity(100),
+            frame_times: VecDeque::with_capacity(100),
             last_frame_time: Instant::now(),
             frame_counter: 0,
         }
@@ -554,7 +555,10 @@ impl GpuState {
             }
 
             // If a nucleus is locked, also re-read its data every 5 frames to update the atom card
-            if let Some(CameraLock::Nucleus { anchor_hadron_index }) = self.camera_lock {
+            if let Some(CameraLock::Nucleus {
+                anchor_hadron_index,
+            }) = self.camera_lock
+            {
                 if self.frame_counter % 5 == 0 {
                     self.update_selected_nucleus_data(anchor_hadron_index);
                 }
@@ -610,9 +614,9 @@ impl GpuState {
             }
         }
 
-        self.frame_times.push(frame_time);
+        self.frame_times.push_back(frame_time);
         if self.frame_times.len() > 100 {
-            self.frame_times.remove(0);
+            self.frame_times.pop_front();
         }
 
         let avg_frame_time = self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32;

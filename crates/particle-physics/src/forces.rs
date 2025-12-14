@@ -1,11 +1,11 @@
 //! Force calculations for the four fundamental forces
-//! 
+//!
 //! NOTE: These are reference implementations for documentation and testing.
 //! The actual simulation uses GPU compute shaders for performance.
 
-use glam::Vec3;
 use crate::constants::*;
-use crate::particle::{Particle, ParticleType, ColorCharge};
+use crate::particle::{ColorCharge, Particle, ParticleType};
+use glam::Vec3;
 
 /// Calculate gravitational force between two particles
 /// F = G * m1 * m2 / r²
@@ -19,7 +19,7 @@ pub fn gravitational_force(p1: &Particle, p2: &Particle) -> Vec3 {
         return Vec3::ZERO;
     }
 
-    let m1 = p1.velocity[3];  // mass stored in velocity.w
+    let m1 = p1.velocity[3]; // mass stored in velocity.w
     let m2 = p2.velocity[3];
     let force_magnitude = G * m1 * m2 / (r * r);
     r_vec.normalize() * force_magnitude
@@ -61,8 +61,14 @@ fn color_charges_attract(c1: Option<ColorCharge>, c2: Option<ColorCharge>) -> bo
 /// F = -dV/dr = -a/r² + b
 pub fn strong_force(p1: &Particle, p2: &Particle) -> Vec3 {
     // Strong force only affects quarks
-    let p1_is_quark = matches!(p1.get_type(), Some(ParticleType::QuarkUp) | Some(ParticleType::QuarkDown));
-    let p2_is_quark = matches!(p2.get_type(), Some(ParticleType::QuarkUp) | Some(ParticleType::QuarkDown));
+    let p1_is_quark = matches!(
+        p1.get_type(),
+        Some(ParticleType::QuarkUp) | Some(ParticleType::QuarkDown)
+    );
+    let p2_is_quark = matches!(
+        p2.get_type(),
+        Some(ParticleType::QuarkUp) | Some(ParticleType::QuarkDown)
+    );
 
     if !p1_is_quark || !p2_is_quark {
         return Vec3::ZERO;
@@ -81,7 +87,11 @@ pub fn strong_force(p1: &Particle, p2: &Particle) -> Vec3 {
     let c2 = p2.get_color();
 
     // Color factor: quarks with complementary colors attract
-    let color_factor = if color_charges_attract(c1, c2) { -1.0 } else { 1.0 };
+    let color_factor = if color_charges_attract(c1, c2) {
+        -1.0
+    } else {
+        1.0
+    };
 
     // Cornell potential derivative:
     // Short range: Coulomb-like attraction (-a/r²)
@@ -119,6 +129,6 @@ pub fn total_force(p1: &Particle, p2: &Particle) -> Vec3 {
     let f_em = electromagnetic_force(p1, p2);
     let f_strong = strong_force(p1, p2);
     let f_weak = weak_force(p1, p2);
-    
+
     f_gravity + f_em + f_strong + f_weak
 }
