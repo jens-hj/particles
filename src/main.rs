@@ -230,6 +230,8 @@ impl GpuState {
 
             let nucleus_slice = self.nucleus_readback_staging_buffer.slice(..buffer_size);
             nucleus_slice.map_async(wgpu::MapMode::Read, |_| {});
+            // TODO: Convert to async ring buffer to avoid blocking GPU pipeline
+            // See: https://toji.dev/webgpu-best-practices/buffer-uploads
             self.device
                 .poll(wgpu::PollType::Wait {
                     submission_index: None,
@@ -550,6 +552,8 @@ impl GpuState {
 
                 let slice = self.selection_target_staging_buffer.slice(..);
                 slice.map_async(wgpu::MapMode::Read, |_| {});
+                // TODO: Convert to async ring buffer to avoid blocking GPU pipeline
+                // See: https://toji.dev/webgpu-best-practices/buffer-uploads
                 self.device
                     .poll(wgpu::PollType::Wait {
                         submission_index: None,
@@ -681,6 +685,8 @@ impl GpuState {
 
             let slice = self.hadron_count_staging_buffer.slice(..);
             slice.map_async(wgpu::MapMode::Read, |_| {});
+            // TODO: Convert to async ring buffer to avoid blocking GPU pipeline
+            // See: https://toji.dev/webgpu-best-practices/buffer-uploads
             self.device
                 .poll(wgpu::PollType::Wait {
                     submission_index: None,
@@ -1031,6 +1037,8 @@ impl ApplicationHandler for App {
                         // Map + blockingly poll for the readback (clicks are rare so this is OK).
                         let slice = gpu_state.picker.staging_buffer().slice(..);
                         slice.map_async(wgpu::MapMode::Read, |_| {});
+                        // TODO: Convert to async ring buffer to avoid blocking GPU pipeline
+                        // See: https://toji.dev/webgpu-best-practices/buffer-uploads
                         gpu_state
                             .device
                             .poll(wgpu::PollType::Wait {
@@ -1083,6 +1091,8 @@ impl ApplicationHandler for App {
 
                             let slice = gpu_state.selection_target_staging_buffer.slice(..);
                             slice.map_async(wgpu::MapMode::Read, |_| {});
+                            // TODO: Convert to async ring buffer to avoid blocking GPU pipeline
+                            // See: https://toji.dev/webgpu-best-practices/buffer-uploads
                             gpu_state
                                 .device
                                 .poll(wgpu::PollType::Wait {
