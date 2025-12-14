@@ -16,6 +16,12 @@ pub struct UiState {
     pub neutron_count: u32,
     pub other_hadron_count: u32,
 
+    // Selected nucleus info (for atom card UI)
+    pub selected_nucleus_atomic_number: Option<u32>,  // Z (proton count / type_id)
+    pub selected_nucleus_proton_count: Option<u32>,
+    pub selected_nucleus_neutron_count: Option<u32>,
+    pub selected_nucleus_nucleon_count: Option<u32>,  // Total nucleons
+
     pub physics_params: PhysicsParams,
     pub show_shells: bool,
     pub show_bonds: bool,
@@ -49,6 +55,11 @@ impl Default for UiState {
             proton_count: 0,
             neutron_count: 0,
             other_hadron_count: 0,
+
+            selected_nucleus_atomic_number: None,
+            selected_nucleus_proton_count: None,
+            selected_nucleus_neutron_count: None,
+            selected_nucleus_nucleon_count: None,
 
             physics_params: PhysicsParams::default(),
             show_shells: true,
@@ -495,5 +506,100 @@ impl Gui {
                     });
                 }
             });
+
+        // Atom Card (Center - only shown when nucleus is selected)
+        if let Some(atomic_number) = state.selected_nucleus_atomic_number {
+            egui::Window::new("Atom Card")
+                .anchor(egui::Align2::CENTER_TOP, [0.0, 10.0])
+                .resizable(false)
+                .collapsible(false)
+                .show(ctx, |ui| {
+                    // Element name from atomic number
+                    let element_name = get_element_name(atomic_number);
+                    let element_symbol = get_element_symbol(atomic_number);
+
+                    ui.heading(format!("{} ({})", element_name, element_symbol));
+                    ui.separator();
+
+                    ui.label(format!("Atomic Number (Z): {}", atomic_number));
+
+                    if let Some(protons) = state.selected_nucleus_proton_count {
+                        ui.label(format!("Protons: {}", protons));
+                    }
+
+                    if let Some(neutrons) = state.selected_nucleus_neutron_count {
+                        ui.label(format!("Neutrons: {}", neutrons));
+                    }
+
+                    if let Some(nucleons) = state.selected_nucleus_nucleon_count {
+                        ui.label(format!("Total Nucleons (A): {}", nucleons));
+                    }
+
+                    // Show isotope notation if we have the data
+                    if let (Some(_neutrons), Some(nucleons)) =
+                        (state.selected_nucleus_neutron_count, state.selected_nucleus_nucleon_count)
+                    {
+                        ui.separator();
+                        ui.label(format!(
+                            "Isotope: {}-{}",
+                            element_name,
+                            nucleons
+                        ));
+                    }
+                });
+        }
+    }
+}
+
+// Element name lookup table (first 118 elements)
+fn get_element_name(z: u32) -> &'static str {
+    match z {
+        1 => "Hydrogen",
+        2 => "Helium",
+        3 => "Lithium",
+        4 => "Beryllium",
+        5 => "Boron",
+        6 => "Carbon",
+        7 => "Nitrogen",
+        8 => "Oxygen",
+        9 => "Fluorine",
+        10 => "Neon",
+        11 => "Sodium",
+        12 => "Magnesium",
+        13 => "Aluminum",
+        14 => "Silicon",
+        15 => "Phosphorus",
+        16 => "Sulfur",
+        17 => "Chlorine",
+        18 => "Argon",
+        19 => "Potassium",
+        20 => "Calcium",
+        _ => "Unknown",
+    }
+}
+
+fn get_element_symbol(z: u32) -> &'static str {
+    match z {
+        1 => "H",
+        2 => "He",
+        3 => "Li",
+        4 => "Be",
+        5 => "B",
+        6 => "C",
+        7 => "N",
+        8 => "O",
+        9 => "F",
+        10 => "Ne",
+        11 => "Na",
+        12 => "Mg",
+        13 => "Al",
+        14 => "Si",
+        15 => "P",
+        16 => "S",
+        17 => "Cl",
+        18 => "Ar",
+        19 => "K",
+        20 => "Ca",
+        _ => "?",
     }
 }
