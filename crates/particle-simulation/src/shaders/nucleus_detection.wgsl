@@ -105,6 +105,41 @@ fn get_distance_sq(h1_idx: u32, h2_idx: u32) -> f32 {
     return dot(d, d);
 }
 
+fn try_create_single_proton_nucleus(p_idx: u32) {
+    // Best-effort: if we can't form a multi-nucleon nucleus due to contention,
+    // still ensure the proton gets a shell.
+    if (!atomicCompareExchangeWeak(&locks[p_idx], 0u, 1u).exchanged) {
+        return;
+    }
+
+    if (!is_valid_hadron(p_idx) || !is_proton(hadrons[p_idx].indices_type.w) || is_bound_to_nucleus(p_idx)) {
+        atomicStore(&locks[p_idx], 0u);
+        return;
+    }
+
+    let n_idx = find_free_slot();
+    if (n_idx == 0xFFFFFFFFu) {
+        atomicStore(&locks[p_idx], 0u);
+        return;
+    }
+
+    var nucleus: Nucleus;
+    for (var i = 0u; i < MAX_NUCLEONS; i++) {
+        nucleus.hadron_indices[i] = 0xFFFFFFFFu;
+    }
+    nucleus.hadron_indices[0u] = p_idx;
+    nucleus.nucleon_count = 1u;
+    nucleus.proton_count = 1u;
+    nucleus.neutron_count = 0u;
+    nucleus.type_id = 1u;
+    nucleus.center = vec4<f32>(hadrons[p_idx].center.xyz, hadrons[p_idx].center.w + 0.5);
+    nucleus.velocity = vec4<f32>(hadrons[p_idx].velocity.xyz, 0.0);
+    nuclei[n_idx] = nucleus;
+    hadrons[p_idx].velocity.w = f32(n_idx + 1u);
+
+    atomicStore(&locks[p_idx], 0u);
+}
+
 // Find a free nucleus slot
 fn find_free_slot() -> u32 {
     let current_count = atomicLoad(&counter.count);
@@ -163,6 +198,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             continue;
         }
         if (!is_proton(hadrons[i].indices_type.w)) {
+            continue;
+        }
+        // If the lower-index proton was already claimed by another nucleus this frame,
+        // don't let it suppress seeding here.
+        if (is_bound_to_nucleus(i)) {
             continue;
         }
         if (get_distance_sq(index, i) <= binding_sq) {
@@ -227,38 +267,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 atomicStore(&locks[nearby_nucleons[i]], 0u);
             }
         }
-        // Fallback: always allow creating a single-proton nucleus so shells don't disappear
-        // due to transient lock contention.
-        if (!atomicCompareExchangeWeak(&locks[index], 0u, 1u).exchanged) {
-            return;
-        }
-
-        if (!is_valid_hadron(index) || !is_proton(hadrons[index].indices_type.w) || is_bound_to_nucleus(index)) {
-            atomicStore(&locks[index], 0u);
-            return;
-        }
-
-        let n_idx = find_free_slot();
-        if (n_idx == 0xFFFFFFFFu) {
-            atomicStore(&locks[index], 0u);
-            return;
-        }
-
-        var nucleus: Nucleus;
-        for (var i = 0u; i < MAX_NUCLEONS; i++) {
-            nucleus.hadron_indices[i] = 0xFFFFFFFFu;
-        }
-        nucleus.hadron_indices[0u] = index;
-        nucleus.nucleon_count = 1u;
-        nucleus.proton_count = 1u;
-        nucleus.neutron_count = 0u;
-        nucleus.type_id = 1u;
-        nucleus.center = vec4<f32>(hadrons[index].center.xyz, hadrons[index].center.w + 0.5);
-        nucleus.velocity = vec4<f32>(hadrons[index].velocity.xyz, 0.0);
-        nuclei[n_idx] = nucleus;
-        hadrons[index].velocity.w = f32(n_idx + 1u);
-
-        atomicStore(&locks[index], 0u);
+        // Fallback: ensure the proton still gets a shell.
+        try_create_single_proton_nucleus(index);
         return;
     }
 
@@ -269,8 +279,28 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             for (var j = 0u; j < nearby_count; j++) {
                 atomicStore(&locks[nearby_nucleons[j]], 0u);
             }
+            // Fallback: this proton may still be unbound.
+            try_create_single_proton_nucleus(index);
             return;
         }
+    }
+
+    // Deterministic winner under lock: lowest-index proton among the locked nucleons.
+    // This avoids cases where a lower-index proton is present but gets claimed as a member
+    // of another nucleus, causing nearby higher-index protons to never seed.
+    var winner = index;
+    for (var i = 0u; i < nearby_count; i++) {
+        let h_idx = nearby_nucleons[i];
+        if (is_proton(hadrons[h_idx].indices_type.w) && h_idx < winner) {
+            winner = h_idx;
+        }
+    }
+
+    if (winner != index) {
+        for (var j = 0u; j < nearby_count; j++) {
+            atomicStore(&locks[nearby_nucleons[j]], 0u);
+        }
+        return;
     }
 
     // Successfully locked all nucleons and verified they're all unbound - form a nucleus
