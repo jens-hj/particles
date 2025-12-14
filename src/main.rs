@@ -113,8 +113,8 @@ struct GpuState {
     selection_target_cached: Option<[f32; 4]>,
 
     // Selected nucleus readback (for atom card UI)
-    // Note: Currently creating temporary buffer per-click instead of reusing this
-    _selected_nucleus_staging_buffer: wgpu::Buffer,
+    nucleus_readback_staging_buffer: wgpu::Buffer,
+    nucleus_readback_capacity: u32,
 
     // Smooth distance target when locking onto a selection.
     camera_distance_target: Option<f32>,
@@ -183,107 +183,122 @@ fn decode_pick_id(raw: u32) -> Option<CameraLock> {
 impl GpuState {
     /// Read back nucleus data for the atom card UI.
     /// Searches through nuclei to find the one with the matching anchor hadron index.
+    /// Uses a cached staging buffer with dynamic search range (starts at 50, grows to 1000 if needed).
     fn update_selected_nucleus_data(&mut self, anchor_hadron_index: u32) {
-        // Search through many nuclei to ensure we find it
-        // Use a very large search range to handle large simulations
-        // Max nuclei is roughly particle_count / 3 (since we need 3+ nucleons per nucleus)
-        let max_nuclei_to_check = 1000u32;
         let nucleus_size = 112u64; // Size of Nucleus struct
-        let buffer_size = nucleus_size * max_nuclei_to_check as u64;
 
-        // Create a temporary staging buffer for multiple nuclei
-        let multi_nucleus_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Multi-Nucleus Staging Buffer"),
-            size: buffer_size,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        // Start with a small search range, grow dynamically if needed
+        let mut search_range = 50u32.min(self.nucleus_readback_capacity);
 
-        let mut nucleus_encoder =
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Nucleus Readback Encoder"),
-                });
+        // Try up to 3 iterations with increasing search ranges
+        for attempt in 0..3 {
+            if attempt > 0 {
+                // Double the search range, capped at 1000
+                search_range = (search_range * 2).min(1000);
 
-        // Copy multiple nuclei from GPU buffer
-        nucleus_encoder.copy_buffer_to_buffer(
-            self.simulation.nucleus_buffer(),
-            0,
-            &multi_nucleus_staging,
-            0,
-            buffer_size,
-        );
-
-        self.queue.submit(std::iter::once(nucleus_encoder.finish()));
-
-        let nucleus_slice = multi_nucleus_staging.slice(..);
-        nucleus_slice.map_async(wgpu::MapMode::Read, |_| {});
-        self.device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            })
-            .unwrap();
-
-        {
-            let data = nucleus_slice.get_mapped_range();
-            let bytes: &[u8] = &data;
-
-            // Search through nuclei to find the one with matching anchor hadron
-            let mut found = false;
-            for i in 0..max_nuclei_to_check {
-                let base_offset = (i as usize) * (nucleus_size as usize);
-                if base_offset + nucleus_size as usize > bytes.len() {
-                    break;
+                // Resize buffer if needed
+                if search_range > self.nucleus_readback_capacity {
+                    self.nucleus_readback_capacity = search_range;
+                    self.nucleus_readback_staging_buffer =
+                        self.device.create_buffer(&wgpu::BufferDescriptor {
+                            label: Some("Nucleus Readback Staging Buffer (Resized)"),
+                            size: nucleus_size * search_range as u64,
+                            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                            mapped_at_creation: false,
+                        });
                 }
+            }
 
-                // Read the first hadron index (the anchor)
-                let first_hadron_idx =
-                    u32::from_le_bytes(bytes[base_offset..base_offset + 4].try_into().unwrap());
+            let buffer_size = nucleus_size * search_range as u64;
 
-                // Check if this nucleus contains our anchor hadron
-                if first_hadron_idx == anchor_hadron_index {
-                    // Parse this nucleus's data
-                    let data_offset = base_offset + 64; // Skip hadron_indices[16]
-                    let nucleon_count =
-                        u32::from_le_bytes(bytes[data_offset..data_offset + 4].try_into().unwrap());
-                    let proton_count = u32::from_le_bytes(
-                        bytes[data_offset + 4..data_offset + 8].try_into().unwrap(),
-                    );
-                    let neutron_count = u32::from_le_bytes(
-                        bytes[data_offset + 8..data_offset + 12].try_into().unwrap(),
-                    );
-                    let type_id = u32::from_le_bytes(
-                        bytes[data_offset + 12..data_offset + 16]
-                            .try_into()
-                            .unwrap(),
-                    );
+            let mut nucleus_encoder =
+                self.device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("Nucleus Readback Encoder"),
+                    });
 
-                    // Only update if this is a valid nucleus
-                    if type_id != 0xFFFF_FFFF {
-                        self.ui_state.selected_nucleus_atomic_number = Some(type_id);
-                        self.ui_state.selected_nucleus_proton_count = Some(proton_count);
-                        self.ui_state.selected_nucleus_neutron_count = Some(neutron_count);
-                        self.ui_state.selected_nucleus_nucleon_count = Some(nucleon_count);
+            // Copy nuclei from GPU buffer using cached staging buffer
+            nucleus_encoder.copy_buffer_to_buffer(
+                self.simulation.nucleus_buffer(),
+                0,
+                &self.nucleus_readback_staging_buffer,
+                0,
+                buffer_size,
+            );
 
-                        found = true;
+            self.queue.submit(std::iter::once(nucleus_encoder.finish()));
+
+            let nucleus_slice = self.nucleus_readback_staging_buffer.slice(..buffer_size);
+            nucleus_slice.map_async(wgpu::MapMode::Read, |_| {});
+            self.device
+                .poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: None,
+                })
+                .unwrap();
+
+            let mut found = false;
+            {
+                let data = nucleus_slice.get_mapped_range();
+                let bytes: &[u8] = &data;
+
+                // Search through nuclei to find the one with matching anchor hadron
+                for i in 0..search_range {
+                    let base_offset = (i as usize) * (nucleus_size as usize);
+                    if base_offset + nucleus_size as usize > bytes.len() {
                         break;
+                    }
+
+                    // Read the first hadron index (the anchor)
+                    let first_hadron_idx =
+                        u32::from_le_bytes(bytes[base_offset..base_offset + 4].try_into().unwrap());
+
+                    // Check if this nucleus contains our anchor hadron
+                    if first_hadron_idx == anchor_hadron_index {
+                        // Parse this nucleus's data
+                        let data_offset = base_offset + 64; // Skip hadron_indices[16]
+                        let nucleon_count = u32::from_le_bytes(
+                            bytes[data_offset..data_offset + 4].try_into().unwrap(),
+                        );
+                        let proton_count = u32::from_le_bytes(
+                            bytes[data_offset + 4..data_offset + 8].try_into().unwrap(),
+                        );
+                        let neutron_count = u32::from_le_bytes(
+                            bytes[data_offset + 8..data_offset + 12].try_into().unwrap(),
+                        );
+                        let type_id = u32::from_le_bytes(
+                            bytes[data_offset + 12..data_offset + 16]
+                                .try_into()
+                                .unwrap(),
+                        );
+
+                        // Only update if this is a valid nucleus
+                        if type_id != 0xFFFF_FFFF {
+                            self.ui_state.selected_nucleus_atomic_number = Some(type_id);
+                            self.ui_state.selected_nucleus_proton_count = Some(proton_count);
+                            self.ui_state.selected_nucleus_neutron_count = Some(neutron_count);
+                            self.ui_state.selected_nucleus_nucleon_count = Some(nucleon_count);
+
+                            found = true;
+                            break;
+                        }
                     }
                 }
             }
 
-            if !found {
-                // Nucleus not found in search range - may be beyond max_nuclei_to_check or temporarily unavailable
-                // Keep the last known data and selection active to avoid flickering
-                log::debug!(
-                    "Nucleus with anchor_hadron_index={} not found in first {} nuclei, keeping last known data",
-                    anchor_hadron_index,
-                    max_nuclei_to_check
-                );
+            self.nucleus_readback_staging_buffer.unmap();
+
+            if found {
+                return; // Success, exit early
             }
         }
 
-        multi_nucleus_staging.unmap();
+        // Nucleus not found after all attempts
+        log::debug!(
+            "Nucleus with anchor_hadron_index={} not found after searching {} nuclei",
+            anchor_hadron_index,
+            search_range
+        );
     }
 
     async fn new(window: Arc<Window>) -> Self {
@@ -416,9 +431,11 @@ impl GpuState {
 
         // Selected nucleus readback (for atom card UI)
         // Nucleus struct size: 64 (hadron_indices) + 4*4 (counts/type_id) + 16 (center) + 16 (velocity) = 112 bytes
-        let selected_nucleus_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Selected Nucleus Staging Buffer"),
-            size: 112,
+        let initial_nucleus_capacity = 100u32;
+        let nucleus_size = 112u64;
+        let nucleus_readback_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Nucleus Readback Staging Buffer"),
+            size: nucleus_size * initial_nucleus_capacity as u64,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -446,7 +463,8 @@ impl GpuState {
             selection_target_staging_buffer,
             selection_target_cached: None,
 
-            _selected_nucleus_staging_buffer: selected_nucleus_staging_buffer,
+            nucleus_readback_staging_buffer,
+            nucleus_readback_capacity: initial_nucleus_capacity,
 
             camera_distance_target: None,
             camera_zoom_user_override: false,
