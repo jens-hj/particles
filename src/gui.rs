@@ -23,6 +23,7 @@ pub struct UiState {
     pub selected_nucleus_nucleon_count: Option<u32>, // Total nucleons
 
     pub physics_params: PhysicsParams,
+    pub physics_params_dirty: bool,
     pub show_shells: bool,
     pub show_bonds: bool,
     pub show_nuclei: bool,
@@ -62,6 +63,7 @@ impl Default for UiState {
             selected_nucleus_nucleon_count: None,
 
             physics_params: PhysicsParams::default(),
+            physics_params_dirty: true, // Initial upload needed
             show_shells: true,
             show_bonds: true,
             show_nuclei: true,
@@ -334,133 +336,254 @@ impl Gui {
             .default_open(false)
             .show(ctx, |ui| {
                 ui.heading("Forces");
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.constants[0], 0.0..=1.0e-9)
-                        .text("Gravity (G)")
-                        .logarithmic(true),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.constants[1], 0.0..=20.0)
-                        .text("Electric (K)"),
-                );
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.constants[0], 0.0..=1.0e-9)
+                            .text("Gravity (G)")
+                            .logarithmic(true),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.constants[1], 0.0..=20.0)
+                            .text("Electric (K)"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
 
                 ui.separator();
                 ui.heading("Strong Force");
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.strong_force[0], 0.0..=5.0)
-                        .text("Short Range")
-                        .step_by(0.1),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.strong_force[1], 0.0..=5.0)
-                        .text("Confinement")
-                        .step_by(0.1),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.strong_force[2], 0.0..=10.0)
-                        .text("Range Cutoff")
-                        .step_by(0.1),
-                );
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.strong_force[0], 0.0..=5.0)
+                            .text("Short Range")
+                            .step_by(0.1),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.strong_force[1], 0.0..=5.0)
+                            .text("Confinement")
+                            .step_by(0.1),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.strong_force[2], 0.0..=10.0)
+                            .text("Range Cutoff")
+                            .step_by(0.1),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
 
                 ui.separator();
                 ui.heading("Repulsion");
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.repulsion[0], 0.0..=500.0)
-                        .text("Core Strength"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.repulsion[1], 0.0..=1.0)
-                        .text("Core Radius"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.repulsion[2], 0.001..=0.1)
-                        .text("Softening"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.repulsion[3], 10.0..=200.0)
-                        .text("Max Force"),
-                );
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.repulsion[0], 0.0..=500.0)
+                            .text("Core Strength"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.repulsion[1], 0.0..=1.0)
+                            .text("Core Radius"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.repulsion[2], 0.001..=0.1)
+                            .text("Softening"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.repulsion[3], 10.0..=200.0)
+                            .text("Max Force"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
 
                 ui.separator();
                 ui.heading("Integration");
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.integration[0], 0.0001..=0.01)
-                        .text("Time Step (dt)")
-                        .logarithmic(true),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.integration[1], 0.9..=1.0)
-                        .text("Damping"),
-                );
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.integration[0], 0.0001..=0.01)
+                            .text("Time Step (dt)")
+                            .logarithmic(true),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.integration[1], 0.9..=1.0)
+                            .text("Damping"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
 
                 ui.separator();
                 ui.heading("Nucleon Physics");
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.nucleon[0], 0.0..=200.0)
-                        .text("Binding Strength"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.nucleon[1], 0.1..=10.0)
-                        .text("Binding Range"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.nucleon[2], 0.0..=300.0)
-                        .text("Exclusion Strength"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.nucleon[3], 0.5..=3.0)
-                        .text("Exclusion Radius (x Hadron R)"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.integration[3], 0.0..=100.0)
-                        .text("Nucleon Damping"),
-                );
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.nucleon[0], 0.0..=200.0)
+                            .text("Binding Strength"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.nucleon[1], 0.1..=10.0)
+                            .text("Binding Range"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.nucleon[2], 0.0..=300.0)
+                            .text("Exclusion Strength"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.nucleon[3], 0.5..=3.0)
+                            .text("Exclusion Radius (x Hadron R)"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.integration[3], 0.0..=100.0)
+                            .text("Nucleon Damping"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
 
                 ui.separator();
                 ui.heading("Electron Physics");
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.electron[0], 0.0..=200.0)
-                        .text("Attraction Strength"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.electron[1], 0.1..=10.0)
-                        .text("Attraction Range"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.electron[2], 0.0..=300.0)
-                        .text("Exclusion Strength"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.electron[3], 0.5..=3.0)
-                        .text("Exclusion Radius"),
-                );
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.electron[0], 0.0..=200.0)
+                            .text("Attraction Strength"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.electron[1], 0.1..=10.0)
+                            .text("Attraction Range"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.electron[2], 0.0..=300.0)
+                            .text("Exclusion Strength"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.electron[3], 0.5..=3.0)
+                            .text("Exclusion Radius"),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
 
                 ui.separator();
                 ui.heading("Hadron Formation");
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.hadron[0], 0.1..=3.0)
-                        .text("Binding Distance")
-                        .step_by(0.05),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.hadron[1], 0.1..=5.0)
-                        .text("Breakup Distance")
-                        .step_by(0.05),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.hadron[2], 0.1..=5.0)
-                        .text("Confinement Range Mult")
-                        .step_by(0.1),
-                );
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.hadron[3], 0.1..=5.0)
-                        .text("Confinement Strength Mult")
-                        .step_by(0.1),
-                );
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.hadron[0], 0.1..=3.0)
+                            .text("Binding Distance")
+                            .step_by(0.05),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.hadron[1], 0.1..=5.0)
+                            .text("Breakup Distance")
+                            .step_by(0.05),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.hadron[2], 0.1..=5.0)
+                            .text("Confinement Range Mult")
+                            .step_by(0.1),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.hadron[3], 0.1..=5.0)
+                            .text("Confinement Strength Mult")
+                            .step_by(0.1),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
 
                 // Keep invariants sane (avoid immediate breakup right after formation).
                 if state.physics_params.hadron[1] < state.physics_params.hadron[0] {
                     state.physics_params.hadron[1] = state.physics_params.hadron[0];
+                    state.physics_params_dirty = true;
                 }
             });
 
@@ -485,11 +608,16 @@ impl Gui {
                 });
 
                 // Improvement retained: keep dt control in this quick-access panel.
-                ui.add(
-                    egui::Slider::new(&mut state.physics_params.integration[0], 0.0001..=0.01)
-                        .text("Time Step (dt)")
-                        .step_by(0.0001),
-                );
+                if ui
+                    .add(
+                        egui::Slider::new(&mut state.physics_params.integration[0], 0.0001..=0.01)
+                            .text("Time Step (dt)")
+                            .step_by(0.0001),
+                    )
+                    .changed()
+                {
+                    state.physics_params_dirty = true;
+                }
 
                 if state.is_paused {
                     ui.separator();

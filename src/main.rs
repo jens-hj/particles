@@ -628,8 +628,14 @@ impl GpuState {
         // Pass accumulated time to shader for random seeding (using integration.z padding)
         if !self.ui_state.is_paused || self.ui_state.step_one_frame {
             self.ui_state.physics_params.integration[2] += frame_time * 0.001;
+            self.ui_state.physics_params_dirty = true;
         }
-        self.simulation.update_params(&self.ui_state.physics_params);
+
+        // Only update GPU buffer when params have changed
+        if self.ui_state.physics_params_dirty {
+            self.simulation.update_params(&self.ui_state.physics_params);
+            self.ui_state.physics_params_dirty = false;
+        }
 
         // Step simulation
         if !self.ui_state.is_paused || self.ui_state.step_one_frame {
