@@ -22,8 +22,40 @@
       "targetTime": 5.5
     },
     {
-      "name": "End Proton",
+      "name": "Show Proton Labels",
       "targetTime": 6.5
+    },
+    {
+      "name": "Scale and Move Proton",
+      "targetTime": 10.6
+    },
+    {
+      "name": "Show Neutron",
+      "targetTime": 13.1
+    },
+    {
+      "name": "Neutron Quarks Move Together",
+      "targetTime": 14.1
+    },
+    {
+      "name": "Neutron Shell Forms",
+      "targetTime": 16.1
+    },
+    {
+      "name": "Neutron Bonds Pulse",
+      "targetTime": 17.1
+    },
+    {
+      "name": "Show Neutron Labels",
+      "targetTime": 17.1
+    },
+    {
+      "name": "Scale and Move Neutron",
+      "targetTime": 21.200000000000003
+    },
+    {
+      "name": "End",
+      "targetTime": 27.15900069659825
     }
   ],
   "seed": 1141912616
