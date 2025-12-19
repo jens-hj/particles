@@ -8,3 +8,4 @@
 - Make sure to keep the README.md up to date
 - Always run `cargo run` before committing so I can inspect the result
 - Remember to format the code using `cargo fmt`
+- Always check diagnostics

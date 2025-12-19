@@ -1,0 +1,30 @@
+{
+  "version": 0,
+  "timeEvents": [
+    {
+      "name": "Title Fade In",
+      "targetTime": 0
+    },
+    {
+      "name": "Show Quark Types",
+      "targetTime": 1
+    },
+    {
+      "name": "Quarks Move Together",
+      "targetTime": 2.5
+    },
+    {
+      "name": "Proton Shell Forms",
+      "targetTime": 4.5
+    },
+    {
+      "name": "Bonds Pulse",
+      "targetTime": 5.5
+    },
+    {
+      "name": "End Proton",
+      "targetTime": 6.5
+    }
+  ],
+  "seed": 1141912616
+}

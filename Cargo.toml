@@ -14,7 +14,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 # Core wgpu for GPU programming
-wgpu = "27.0"
+wgpu = "28.0"
 # Window creation and event handling
 winit = "0.30"
 # Async runtime for wgpu initialization

@@ -1,7 +1,7 @@
-import {makeProject} from '@motion-canvas/core';
+import { makeProject } from "@motion-canvas/core";
 
-import example from './scenes/example?scene';
+import quarkFormation from "./scenes/quark-formation?scene";
 
 export default makeProject({
-  scenes: [example],
+  scenes: [quarkFormation],
 });
