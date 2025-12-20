@@ -257,7 +257,7 @@ impl Tessellator {
         // Bottom-right concave arc: center at (max_x, max_y), sweeping from PI/2 (up) to 0 (right)
         for i in 0..=segments {
             let t = i as f32 / segments as f32;
-            let angle = PI / 2.0 + t * (-PI / 2.0); // PI/2 to 0
+            let angle = -PI / 2.0 + t * (-PI / 2.0); // PI/2 to 0
             let x = max_x + radius * angle.cos();
             let y = max_y + radius * angle.sin();
             self.vertices.push(Vertex::new([x, y], color));
@@ -270,7 +270,7 @@ impl Tessellator {
         // Bottom-left concave arc: center at (min_x, max_y), sweeping from 0 (right) to -PI/2 (down)
         for i in 0..=segments {
             let t = i as f32 / segments as f32;
-            let angle = 0.0 + t * (-PI / 2.0); // 0 to -PI/2
+            let angle = t * (-PI / 2.0); // 0 to -PI/2
             let x = min_x + radius * angle.cos();
             let y = max_y + radius * angle.sin();
             self.vertices.push(Vertex::new([x, y], color));
@@ -283,7 +283,7 @@ impl Tessellator {
         // Top-left concave arc: center at (min_x, min_y), sweeping from -PI/2 (down) to -PI (left)
         for i in 0..=segments {
             let t = i as f32 / segments as f32;
-            let angle = -PI / 2.0 + t * (-PI / 2.0); // -PI/2 to -PI
+            let angle = PI / 2.0 + t * (-PI / 2.0); // -PI/2 to -PI
             let x = min_x + radius * angle.cos();
             let y = min_y + radius * angle.sin();
             self.vertices.push(Vertex::new([x, y], color));

@@ -217,7 +217,7 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 Color::new(0.3, 0.3, 0.8, 1.0),
             )
             .with_corner_shape(CornerShape::Cut(corner_size))
-            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
+            // .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
