@@ -62,23 +62,57 @@ impl Rect {
     }
 }
 
-/// Rounded rectangle with fill and optional stroke
+/// Corner shape for rectangles
+#[derive(Clone, Copy, Debug)]
+pub enum CornerShape {
+    /// No corner modification (sharp 90-degree corners)
+    None,
+    /// Circular arc rounding with specified radius
+    Round(f32),
+    /// Diagonal cut with specified distance from corner
+    Cut(f32),
+    /// Inverse circular arc (concave, like a ticket punch)
+    InverseRound(f32),
+    /// Squircle (superellipse) with specified radius and smoothness factor
+    /// smoothness: 1.0 = circle, higher values = more square-like
+    Squircle { radius: f32, smoothness: f32 },
+}
+
+impl CornerShape {
+    /// Get the maximum distance this corner shape extends from the corner point
+    pub fn extent(&self) -> f32 {
+        match self {
+            CornerShape::None => 0.0,
+            CornerShape::Round(r) => *r,
+            CornerShape::Cut(d) => *d,
+            CornerShape::InverseRound(r) => *r,
+            CornerShape::Squircle { radius, .. } => *radius,
+        }
+    }
+}
+
+/// Rectangle with customizable corner shapes, fill, and optional stroke
 #[derive(Clone, Debug)]
-pub struct RoundedRect {
+pub struct StyledRect {
     pub rect: Rect,
-    pub rounding: f32,
+    pub corner_shape: CornerShape,
     pub fill: Color,
     pub stroke: Option<Stroke>,
 }
 
-impl RoundedRect {
-    pub fn new(rect: Rect, rounding: f32, fill: Color) -> Self {
+impl StyledRect {
+    pub fn new(rect: Rect, fill: Color) -> Self {
         Self {
             rect,
-            rounding,
+            corner_shape: CornerShape::None,
             fill,
             stroke: None,
         }
+    }
+
+    pub fn with_corner_shape(mut self, corner_shape: CornerShape) -> Self {
+        self.corner_shape = corner_shape;
+        self
     }
 
     pub fn with_stroke(mut self, stroke: Stroke) -> Self {
@@ -90,7 +124,7 @@ impl RoundedRect {
 /// Shapes that can be rendered
 #[derive(Clone, Debug)]
 pub enum Shape {
-    RoundedRect(RoundedRect),
+    Rect(StyledRect),
     // Future: Circle, Line, Mesh, etc.
 }
 

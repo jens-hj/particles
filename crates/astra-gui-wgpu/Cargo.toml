@@ -8,3 +8,9 @@ description = "WGPU rendering backend for astra-gui"
 astra-gui = { workspace = true }
 wgpu = { workspace = true }
 bytemuck = { version = "1.20", features = ["derive"] }
+
+[dev-dependencies]
+winit = { workspace = true }
+pollster = { workspace = true }
+env_logger = { workspace = true }
+log = { workspace = true }

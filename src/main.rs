@@ -4,7 +4,7 @@
 
 mod gui;
 
-use astra_gui::{ClippedShape, Color, FullOutput, Rect, RoundedRect, Shape, Stroke};
+use astra_gui::{ClippedShape, Color, CornerShape, FullOutput, Rect, Shape, Stroke, StyledRect};
 use astra_gui_wgpu::Renderer as AstraRenderer;
 use glam::Vec3;
 use gui::{Gui, UiState};
@@ -844,12 +844,12 @@ impl GpuState {
                     [0.0, 0.0],
                     [self.config.width as f32, self.config.height as f32],
                 ),
-                Shape::RoundedRect(
-                    RoundedRect::new(
+                Shape::Rect(
+                    StyledRect::new(
                         Rect::new([100.0, 100.0], [300.0, 250.0]),
-                        10.0,
                         Color::new(0.2, 0.4, 0.8, 0.9),
                     )
+                    .with_corner_shape(CornerShape::Round(10.0))
                     .with_stroke(Stroke::new(2.0, Color::new(1.0, 1.0, 1.0, 1.0))),
                 ),
             )]);
