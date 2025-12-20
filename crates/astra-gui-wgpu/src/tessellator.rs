@@ -231,44 +231,67 @@ impl Tessellator {
         segments: u32,
         color: Color,
     ) {
-        // For inverse round (concave corners), the arc center is at the corner itself
-        // and the arc curves INWARD into the rectangle.
-        // We sweep clockwise (decreasing angle) by 90 degrees at each corner.
+        // For inverse round (concave corners), we need to create a shape that:
+        // 1. Has straight edges that are inset by 'radius' from the original rectangle edges
+        // 2. Has concave arcs at each corner that curve inward
         //
-        // Top-right: center at (max_x, min_y)
-        //   - Enter from top edge at (max_x - r, min_y), angle PI from center
-        //   - Exit to right edge at (max_x, min_y + r), angle PI/2 from center
-        //   - Sweep from PI to PI/2 (clockwise, -90°)
-        //
-        // Bottom-right: center at (max_x, max_y)
-        //   - Enter from right edge at (max_x, max_y - r), angle -PI/2 from center
-        //   - Exit to bottom edge at (max_x - r, max_y), angle PI from center
-        //   - Sweep from -PI/2 to -PI (clockwise, -90°), which equals 3PI/2 to PI
-        //   - Use: PI/2 to 0 going backward? No...
-        //   - Actually: enter angle is 3PI/2 (or -PI/2), exit is PI
-        //   - Sweep from 3PI/2 to PI = -PI/2 (decreasing by 90°)? That's wrong direction.
-        //   - Let's reconsider: from -PI/2 going to -PI is decreasing by PI/2 ✓
+        // The perimeter goes: straight edge -> concave arc -> straight edge -> ...
 
-        let corners = [
-            (max_x, min_y, PI, PI / 2.0),   // Top-right: PI to PI/2
-            (max_x, max_y, PI / 2.0, 0.0),  // Bottom-right: PI/2 to 0
-            (min_x, max_y, 0.0, -PI / 2.0), // Bottom-left: 0 to -PI/2
-            (min_x, min_y, -PI / 2.0, -PI), // Top-left: -PI/2 to -PI
-        ];
+        // Top edge: from (min_x + radius, min_y) to (max_x - radius, min_y)
+        self.vertices
+            .push(Vertex::new([max_x - radius, min_y], color));
 
-        for (cx, cy, start_angle, end_angle) in corners {
-            for i in 0..=segments {
-                let t = i as f32 / segments as f32;
-                let angle = start_angle + t * (end_angle - start_angle);
-                let x = cx + radius * angle.cos();
-                let y = cy + radius * angle.sin();
-                self.vertices.push(Vertex::new([x, y], color));
-            }
+        // Top-right concave arc: center at (max_x, min_y), sweeping from PI (left) to PI/2 (down)
+        for i in 0..=segments {
+            let t = i as f32 / segments as f32;
+            let angle = PI + t * (-PI / 2.0); // PI to PI/2
+            let x = max_x + radius * angle.cos();
+            let y = min_y + radius * angle.sin();
+            self.vertices.push(Vertex::new([x, y], color));
         }
 
-        // Close the loop
-        let first_perimeter = self.vertices[self.vertices.len() - (4 * (segments + 1)) as usize];
-        self.vertices.push(first_perimeter);
+        // Right edge: from (max_x, min_y + radius) to (max_x, max_y - radius)
+        self.vertices
+            .push(Vertex::new([max_x, max_y - radius], color));
+
+        // Bottom-right concave arc: center at (max_x, max_y), sweeping from PI/2 (up) to 0 (right)
+        for i in 0..=segments {
+            let t = i as f32 / segments as f32;
+            let angle = PI / 2.0 + t * (-PI / 2.0); // PI/2 to 0
+            let x = max_x + radius * angle.cos();
+            let y = max_y + radius * angle.sin();
+            self.vertices.push(Vertex::new([x, y], color));
+        }
+
+        // Bottom edge: from (max_x - radius, max_y) to (min_x + radius, max_y)
+        self.vertices
+            .push(Vertex::new([min_x + radius, max_y], color));
+
+        // Bottom-left concave arc: center at (min_x, max_y), sweeping from 0 (right) to -PI/2 (down)
+        for i in 0..=segments {
+            let t = i as f32 / segments as f32;
+            let angle = 0.0 + t * (-PI / 2.0); // 0 to -PI/2
+            let x = min_x + radius * angle.cos();
+            let y = max_y + radius * angle.sin();
+            self.vertices.push(Vertex::new([x, y], color));
+        }
+
+        // Left edge: from (min_x, max_y - radius) to (min_x, min_y + radius)
+        self.vertices
+            .push(Vertex::new([min_x, min_y + radius], color));
+
+        // Top-left concave arc: center at (min_x, min_y), sweeping from -PI/2 (down) to -PI (left)
+        for i in 0..=segments {
+            let t = i as f32 / segments as f32;
+            let angle = -PI / 2.0 + t * (-PI / 2.0); // -PI/2 to -PI
+            let x = min_x + radius * angle.cos();
+            let y = min_y + radius * angle.sin();
+            self.vertices.push(Vertex::new([x, y], color));
+        }
+
+        // Close the loop - back to the start of top edge
+        self.vertices
+            .push(Vertex::new([max_x - radius, min_y], color));
     }
 
     fn add_corner_vertices_squircle(
@@ -402,103 +425,87 @@ impl Tessellator {
                 // Calculate outer and inner positions for each vertex
                 // The cut creates 8 edge segments, each needs proper normal offset
 
-                // Top edge: from (min_x + cut, min_y) to (max_x - cut, min_y)
-                // Normal points up (-y), so outer goes up, inner goes down
+                // For cut corners, we need to handle the diagonal segments
+                // Each diagonal needs perpendicular offset based on the diagonal direction
+                let sqrt2 = (2.0_f32).sqrt();
 
-                // Top-right diagonal: from (max_x - cut, min_y) to (max_x, min_y + cut)
-                // Normal points toward top-right corner
-                let diag_normal = 1.0 / (2.0_f32).sqrt(); // 45 degree diagonal
-
-                // Build the stroke as a quad strip following the perimeter
-                // We'll go around the rectangle, adding outer/inner pairs
-
-                // Top-right corner - approaching from top edge
-                // Top edge outer/inner
+                // Top edge: horizontal, normal is vertical
                 self.vertices
                     .push(Vertex::new([max_x - cut, min_y - half_width], stroke.color));
                 self.vertices
                     .push(Vertex::new([max_x - cut, min_y + half_width], stroke.color));
 
-                // Diagonal edge from top-right
-                // Normal for diagonal (max_x - cut, min_y) to (max_x, min_y + cut) is (1, -1)/sqrt(2)
+                // Top-right diagonal: direction is (cut, cut), length is cut*sqrt(2)
+                // Perpendicular normal (normalized): (1, -1) / sqrt(2)
+                let nx = 1.0 / sqrt2;
+                let ny = -1.0 / sqrt2;
+
                 self.vertices.push(Vertex::new(
-                    [
-                        max_x + half_width * diag_normal,
-                        min_y + cut - half_width * diag_normal,
-                    ],
+                    [max_x + half_width * nx, min_y + cut - half_width * ny],
                     stroke.color,
                 ));
                 self.vertices.push(Vertex::new(
-                    [
-                        max_x - half_width * diag_normal,
-                        min_y + cut + half_width * diag_normal,
-                    ],
+                    [max_x - half_width * nx, min_y + cut + half_width * ny],
                     stroke.color,
                 ));
 
-                // Right edge
+                // Right edge: vertical, normal is horizontal
                 self.vertices
                     .push(Vertex::new([max_x + half_width, max_y - cut], stroke.color));
                 self.vertices
                     .push(Vertex::new([max_x - half_width, max_y - cut], stroke.color));
 
-                // Bottom-right diagonal
+                // Bottom-right diagonal: direction is (-cut, cut), length is cut*sqrt(2)
+                // Perpendicular normal (normalized): (1, 1) / sqrt(2)
+                let nx = 1.0 / sqrt2;
+                let ny = 1.0 / sqrt2;
+
                 self.vertices.push(Vertex::new(
-                    [
-                        max_x - cut + half_width * diag_normal,
-                        max_y + half_width * diag_normal,
-                    ],
+                    [max_x - cut + half_width * nx, max_y + half_width * ny],
                     stroke.color,
                 ));
                 self.vertices.push(Vertex::new(
-                    [
-                        max_x - cut - half_width * diag_normal,
-                        max_y - half_width * diag_normal,
-                    ],
+                    [max_x - cut - half_width * nx, max_y - half_width * ny],
                     stroke.color,
                 ));
 
-                // Bottom edge
+                // Bottom edge: horizontal, normal is vertical
                 self.vertices
                     .push(Vertex::new([min_x + cut, max_y + half_width], stroke.color));
                 self.vertices
                     .push(Vertex::new([min_x + cut, max_y - half_width], stroke.color));
 
-                // Bottom-left diagonal
+                // Bottom-left diagonal: direction is (-cut, -cut), length is cut*sqrt(2)
+                // Perpendicular normal (normalized): (-1, 1) / sqrt(2)
+                let nx = -1.0 / sqrt2;
+                let ny = 1.0 / sqrt2;
+
                 self.vertices.push(Vertex::new(
-                    [
-                        min_x - half_width * diag_normal,
-                        max_y - cut + half_width * diag_normal,
-                    ],
+                    [min_x - half_width * nx, max_y - cut + half_width * ny],
                     stroke.color,
                 ));
                 self.vertices.push(Vertex::new(
-                    [
-                        min_x + half_width * diag_normal,
-                        max_y - cut - half_width * diag_normal,
-                    ],
+                    [min_x + half_width * nx, max_y - cut - half_width * ny],
                     stroke.color,
                 ));
 
-                // Left edge
+                // Left edge: vertical, normal is horizontal
                 self.vertices
                     .push(Vertex::new([min_x - half_width, min_y + cut], stroke.color));
                 self.vertices
                     .push(Vertex::new([min_x + half_width, min_y + cut], stroke.color));
 
-                // Top-left diagonal
+                // Top-left diagonal: direction is (cut, -cut), length is cut*sqrt(2)
+                // Perpendicular normal (normalized): (-1, -1) / sqrt(2)
+                let nx = -1.0 / sqrt2;
+                let ny = -1.0 / sqrt2;
+
                 self.vertices.push(Vertex::new(
-                    [
-                        min_x + cut - half_width * diag_normal,
-                        min_y - half_width * diag_normal,
-                    ],
+                    [min_x + cut - half_width * nx, min_y - half_width * ny],
                     stroke.color,
                 ));
                 self.vertices.push(Vertex::new(
-                    [
-                        min_x + cut + half_width * diag_normal,
-                        min_y + half_width * diag_normal,
-                    ],
+                    [min_x + cut + half_width * nx, min_y + half_width * ny],
                     stroke.color,
                 ));
 
@@ -510,35 +517,122 @@ impl Tessellator {
             }
             CornerShape::InverseRound(_) => {
                 // Stroke for inverse round corners
-                // The arc center is at the corner, so we offset the radius by half_width
-                let corners = [
-                    (max_x, min_y, PI, PI / 2.0),
-                    (max_x, max_y, PI / 2.0, 0.0),
-                    (min_x, max_y, 0.0, -PI / 2.0),
-                    (min_x, min_y, -PI / 2.0, -PI),
-                ];
+                // We stroke along the perimeter created in add_corner_vertices_inverse_round
+                // The perimeter consists of: straight edge -> arc -> straight edge -> arc -> ...
 
-                for (cx, cy, start_angle, end_angle) in corners {
-                    for i in 0..=segments_per_corner {
-                        let t = i as f32 / segments_per_corner as f32;
-                        let angle = start_angle + t * (end_angle - start_angle);
-                        let cos_a = angle.cos();
-                        let sin_a = angle.sin();
+                // Top edge
+                self.vertices.push(Vertex::new(
+                    [max_x - extent, min_y - half_width],
+                    stroke.color,
+                ));
+                self.vertices.push(Vertex::new(
+                    [max_x - extent, min_y + half_width],
+                    stroke.color,
+                ));
 
-                        // For inverse round, outer is further from corner center,
-                        // inner is closer
-                        let outer_x = cx + (extent + half_width) * cos_a;
-                        let outer_y = cy + (extent + half_width) * sin_a;
-                        self.vertices
-                            .push(Vertex::new([outer_x, outer_y], stroke.color));
+                // Top-right arc: center at (max_x, min_y), sweep from PI to PI/2
+                for i in 0..=segments_per_corner {
+                    let t = i as f32 / segments_per_corner as f32;
+                    let angle = PI + t * (-PI / 2.0);
+                    let cos_a = angle.cos();
+                    let sin_a = angle.sin();
 
-                        let inner_x = cx + (extent - half_width).max(0.0) * cos_a;
-                        let inner_y = cy + (extent - half_width).max(0.0) * sin_a;
-                        self.vertices
-                            .push(Vertex::new([inner_x, inner_y], stroke.color));
-                    }
+                    let outer_x = max_x + (extent + half_width) * cos_a;
+                    let outer_y = min_y + (extent + half_width) * sin_a;
+                    self.vertices
+                        .push(Vertex::new([outer_x, outer_y], stroke.color));
+
+                    let inner_x = max_x + (extent - half_width).max(0.0) * cos_a;
+                    let inner_y = min_y + (extent - half_width).max(0.0) * sin_a;
+                    self.vertices
+                        .push(Vertex::new([inner_x, inner_y], stroke.color));
                 }
 
+                // Right edge
+                self.vertices.push(Vertex::new(
+                    [max_x + half_width, max_y - extent],
+                    stroke.color,
+                ));
+                self.vertices.push(Vertex::new(
+                    [max_x - half_width, max_y - extent],
+                    stroke.color,
+                ));
+
+                // Bottom-right arc: center at (max_x, max_y), sweep from PI/2 to 0
+                for i in 0..=segments_per_corner {
+                    let t = i as f32 / segments_per_corner as f32;
+                    let angle = PI / 2.0 + t * (-PI / 2.0);
+                    let cos_a = angle.cos();
+                    let sin_a = angle.sin();
+
+                    let outer_x = max_x + (extent + half_width) * cos_a;
+                    let outer_y = max_y + (extent + half_width) * sin_a;
+                    self.vertices
+                        .push(Vertex::new([outer_x, outer_y], stroke.color));
+
+                    let inner_x = max_x + (extent - half_width).max(0.0) * cos_a;
+                    let inner_y = max_y + (extent - half_width).max(0.0) * sin_a;
+                    self.vertices
+                        .push(Vertex::new([inner_x, inner_y], stroke.color));
+                }
+
+                // Bottom edge
+                self.vertices.push(Vertex::new(
+                    [min_x + extent, max_y + half_width],
+                    stroke.color,
+                ));
+                self.vertices.push(Vertex::new(
+                    [min_x + extent, max_y - half_width],
+                    stroke.color,
+                ));
+
+                // Bottom-left arc: center at (min_x, max_y), sweep from 0 to -PI/2
+                for i in 0..=segments_per_corner {
+                    let t = i as f32 / segments_per_corner as f32;
+                    let angle = 0.0 + t * (-PI / 2.0);
+                    let cos_a = angle.cos();
+                    let sin_a = angle.sin();
+
+                    let outer_x = min_x + (extent + half_width) * cos_a;
+                    let outer_y = max_y + (extent + half_width) * sin_a;
+                    self.vertices
+                        .push(Vertex::new([outer_x, outer_y], stroke.color));
+
+                    let inner_x = min_x + (extent - half_width).max(0.0) * cos_a;
+                    let inner_y = max_y + (extent - half_width).max(0.0) * sin_a;
+                    self.vertices
+                        .push(Vertex::new([inner_x, inner_y], stroke.color));
+                }
+
+                // Left edge
+                self.vertices.push(Vertex::new(
+                    [min_x - half_width, min_y + extent],
+                    stroke.color,
+                ));
+                self.vertices.push(Vertex::new(
+                    [min_x + half_width, min_y + extent],
+                    stroke.color,
+                ));
+
+                // Top-left arc: center at (min_x, min_y), sweep from -PI/2 to -PI
+                for i in 0..=segments_per_corner {
+                    let t = i as f32 / segments_per_corner as f32;
+                    let angle = -PI / 2.0 + t * (-PI / 2.0);
+                    let cos_a = angle.cos();
+                    let sin_a = angle.sin();
+
+                    let outer_x = min_x + (extent + half_width) * cos_a;
+                    let outer_y = min_y + (extent + half_width) * sin_a;
+                    self.vertices
+                        .push(Vertex::new([outer_x, outer_y], stroke.color));
+
+                    let inner_x = min_x + (extent - half_width).max(0.0) * cos_a;
+                    let inner_y = min_y + (extent - half_width).max(0.0) * sin_a;
+                    self.vertices
+                        .push(Vertex::new([inner_x, inner_y], stroke.color));
+                }
+
+                // Close the loop
                 let first_outer = self.vertices[base_idx as usize];
                 let first_inner = self.vertices[(base_idx + 1) as usize];
                 self.vertices.push(first_outer);
