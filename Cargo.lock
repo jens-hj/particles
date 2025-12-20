@@ -180,6 +180,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "astra-gui"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "glam",
+]
+
+[[package]]
+name = "astra-gui-wgpu"
+version = "0.1.0"
+dependencies = [
+ "astra-gui",
+ "bytemuck",
+ "wgpu",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1784,6 +1801,8 @@ dependencies = [
 name = "particles"
 version = "0.3.2"
 dependencies = [
+ "astra-gui",
+ "astra-gui-wgpu",
  "bytemuck",
  "egui",
  "egui-wgpu",

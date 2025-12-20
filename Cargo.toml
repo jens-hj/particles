@@ -3,6 +3,8 @@ members = [
     "crates/particle-physics",
     "crates/particle-simulation",
     "crates/particle-renderer",
+    "crates/astra-gui",
+    "crates/astra-gui-wgpu",
 ]
 resolver = "2"
 
@@ -34,6 +36,9 @@ env_logger = "0.11"
 egui = "0.33"
 egui-wgpu = "0.33"
 egui-winit = "0.33"
+# Astra GUI
+astra-gui = { path = "crates/astra-gui" }
+astra-gui-wgpu = { path = "crates/astra-gui-wgpu" }
 
 [package]
 name = "particles"
@@ -57,6 +62,8 @@ bytemuck.workspace = true
 egui.workspace = true
 egui-wgpu.workspace = true
 egui-winit.workspace = true
+astra-gui.workspace = true
+astra-gui-wgpu.workspace = true
 
 [profile.dev]
 opt-level = 1

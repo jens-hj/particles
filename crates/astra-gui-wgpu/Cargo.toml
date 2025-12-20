@@ -1,0 +1,10 @@
+[package]
+name = "astra-gui-wgpu"
+version = "0.1.0"
+edition = "2021"
+description = "WGPU rendering backend for astra-gui"
+
+[dependencies]
+astra-gui = { workspace = true }
+wgpu = { workspace = true }
+bytemuck = { version = "1.20", features = ["derive"] }

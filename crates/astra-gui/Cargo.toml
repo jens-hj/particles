@@ -1,0 +1,13 @@
+[package]
+name = "astra-gui"
+version = "0.1.0"
+edition = "2021"
+description = "Graphics backend agnostic UI library - core primitives and logic"
+
+[dependencies]
+glam = { workspace = true }
+bytemuck = { version = "1.20", optional = true }
+
+[features]
+default = []
+bytemuck = ["dep:bytemuck"]

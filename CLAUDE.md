@@ -10,3 +10,4 @@
 - Remember to format the code using `cargo fmt`
 - Always check diagnostics
 - This project uses bun not npm or pnpm
+- Remember to make use of the grep-mcp tool to look for known design patterns and good practices when implementing new features or refactoring existing ones.

@@ -4,6 +4,8 @@
 
 mod gui;
 
+use astra_gui::{ClippedShape, Color, FullOutput, Rect, RoundedRect, Shape, Stroke};
+use astra_gui_wgpu::Renderer as AstraRenderer;
 use glam::Vec3;
 use gui::{Gui, UiState};
 use particle_physics::{ColorCharge, Particle};
@@ -97,6 +99,7 @@ struct GpuState {
     camera: Camera,
 
     gui: Gui,
+    astra_renderer: AstraRenderer,
     ui_state: UiState,
     hadron_count_staging_buffer: wgpu::Buffer,
     _nucleus_count_staging_buffer: wgpu::Buffer,
@@ -387,6 +390,7 @@ impl GpuState {
 
         // Create GUI
         let gui = Gui::new(&device, config.format, &window);
+        let astra_renderer = AstraRenderer::new(&device, config.format);
         let ui_state = UiState::default();
 
         // GPU picking:
@@ -453,6 +457,7 @@ impl GpuState {
             nucleus_renderer,
             camera,
             gui,
+            astra_renderer,
             ui_state,
             hadron_count_staging_buffer,
             _nucleus_count_staging_buffer,
@@ -821,6 +826,42 @@ impl GpuState {
                 window,
                 &view,
                 &mut self.ui_state,
+            );
+
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
+
+        // Render Astra GUI (test container)
+        {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Astra GUI Encoder"),
+                });
+
+            let astra_output = FullOutput::with_shapes(vec![ClippedShape::new(
+                Rect::new(
+                    [0.0, 0.0],
+                    [self.config.width as f32, self.config.height as f32],
+                ),
+                Shape::RoundedRect(
+                    RoundedRect::new(
+                        Rect::new([100.0, 100.0], [300.0, 250.0]),
+                        10.0,
+                        Color::new(0.2, 0.4, 0.8, 0.9),
+                    )
+                    .with_stroke(Stroke::new(2.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+                ),
+            )]);
+
+            self.astra_renderer.render(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                &view,
+                self.config.width as f32,
+                self.config.height as f32,
+                &astra_output,
             );
 
             self.queue.submit(std::iter::once(encoder.finish()));
