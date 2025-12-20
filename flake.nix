@@ -20,13 +20,16 @@
           inherit system overlays;
         };
 
+        # Detect if we're on macOS
+        isDarwin = pkgs.stdenv.isDarwin;
+
         # Rust toolchain
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = ["rust-src" "rust-analyzer"];
         };
 
-        # Bevy dependencies for Linux
-        buildInputs = with pkgs; [
+        # Platform-specific dependencies
+        linuxInputs = with pkgs; [
           udev
           alsa-lib
           vulkan-loader
@@ -37,6 +40,19 @@
           libxkbcommon
           wayland
         ];
+
+        darwinInputs = with pkgs; [
+          darwin.apple_sdk.frameworks.Metal
+          darwin.apple_sdk.frameworks.AppKit
+          darwin.apple_sdk.frameworks.CoreGraphics
+          darwin.apple_sdk.frameworks.CoreServices
+          darwin.apple_sdk.frameworks.Foundation
+        ];
+
+        buildInputs =
+          if isDarwin
+          then darwinInputs
+          else linuxInputs;
 
         nativeBuildInputs = with pkgs; [
           pkg-config
@@ -54,8 +70,11 @@
             bun
           ];
 
-          # Environment variables for Bevy
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
+          # Environment variables for Bevy (Linux only)
+          LD_LIBRARY_PATH =
+            if isDarwin
+            then ""
+            else pkgs.lib.makeLibraryPath buildInputs;
 
           shellHook = ''
             echo "Rust + Bevy + Motion Canvas development environment"
