@@ -2,68 +2,72 @@
   "version": 0,
   "timeEvents": [
     {
-      "name": "Title Fade In",
+      "name": "P: Show",
       "targetTime": 0
     },
     {
-      "name": "Show Quark Types",
-      "targetTime": 1
+      "name": "P: Quarks",
+      "targetTime": 0.5
     },
     {
-      "name": "Quarks Move Together",
-      "targetTime": 2.5
+      "name": "P: Equation",
+      "targetTime": 0.5
     },
     {
-      "name": "Proton Shell Forms",
-      "targetTime": 4.5
+      "name": "P: Bonds",
+      "targetTime": 1.5
     },
     {
-      "name": "Bonds Pulse",
-      "targetTime": 5.5
+      "name": "P: Shell",
+      "targetTime": 1.5
     },
     {
-      "name": "Show Proton Labels",
-      "targetTime": 6.5
+      "name": "P: Label",
+      "targetTime": 3.5
     },
     {
-      "name": "Rotate Proton Quark Colors",
-      "targetTime": 8.05
+      "name": "P: Colors",
+      "targetTime": 5.050000000000001
     },
     {
-      "name": "Scale and Move Proton",
-      "targetTime": 10.6
+      "name": "P: Move",
+      "targetTime": 7.050000000000001
     },
     {
-      "name": "Show Neutron",
-      "targetTime": 13.1
+      "name": "N: Show",
+      "targetTime": 9.55
     },
     {
-      "name": "Neutron Quarks Move Together",
-      "targetTime": 14.1
+      "name": "N: Quarks",
+      "targetTime": 10.05
     },
     {
-      "name": "Neutron Shell Forms",
-      "targetTime": 16.1
+      "name": "N: Equation",
+      "targetTime": 11.05
     },
     {
-      "name": "Neutron Bonds Pulse",
+      "name": "N: Bonds",
+      "targetTime": 11.55
+    },
+    {
+      "name": "N: Shell",
+      "targetTime": 11.55
+    },
+    {
+      "name": "N: Label",
+      "targetTime": 13.55
+    },
+    {
+      "name": "N: Colors",
+      "targetTime": 15.1
+    },
+    {
+      "name": "N: Move",
       "targetTime": 17.1
-    },
-    {
-      "name": "Show Neutron Labels",
-      "targetTime": 17.1
-    },
-    {
-      "name": "Rotate Neutron Quark Colors",
-      "targetTime": 18.65
-    },
-    {
-      "name": "Scale and Move Neutron",
-      "targetTime": 21.200000000000003
     },
     {
       "name": "End",
-      "targetTime": 27.15900069659825
+      "targetTime": 22.559460990344164
     }
   ],
   "seed": 1141912616

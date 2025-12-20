@@ -252,13 +252,30 @@ export class Hadron extends Layout {
     yield* this.shell().opacity(0.6, duration, easeOutCubic);
   }
 
-  public *animateBonds() {
-    yield loop(() =>
-      all(
-        this.bond12().lineDashOffset(0).lineDashOffset(-200, 1, linear),
-        this.bond23().lineDashOffset(0).lineDashOffset(-200, 1, linear),
-        this.bond31().lineDashOffset(0).lineDashOffset(-200, 1, linear),
-      ),
+  public *animateBonds(speed: number = 200) {
+    // Ensure there's a dash pattern set (without this, dash offset does nothing).
+    this.bond12().lineDash([20, 20]);
+    this.bond23().lineDash([20, 20]);
+    this.bond31().lineDash([20, 20]);
+
+    // Motion Canvas `loop()` is a generator that must be run on a separate thread
+    // to keep going forever while the main timeline continues.
+    //
+    // Also: `lineDashOffset` needs to *accumulate* over time. We do that by
+    // incrementing an offset every frame.
+    let offset = this.bond12().lineDashOffset();
+
+    yield* all(
+      loop(Infinity, () => {
+        offset -= speed * (1 / 60);
+
+        this.bond12().lineDashOffset(offset);
+        this.bond23().lineDashOffset(offset);
+        this.bond31().lineDashOffset(offset);
+
+        // Advance one frame.
+        return;
+      }),
     );
   }
 
@@ -376,7 +393,7 @@ export class Hadron extends Layout {
    *
    * Note: this cycles the *displayed* colors only; it does not change the hadron config/flavors.
    */
-  public *rotateQuarkColors(delaySeconds: number = 0.75, cycles: number = 1) {
+  public *rotateQuarkColors(delaySeconds: number = 0.5, cycles: number = 1) {
     const permutations: Array<[QuarkColor, QuarkColor, QuarkColor]> = [
       ["red", "green", "blue"],
       ["red", "blue", "green"],
