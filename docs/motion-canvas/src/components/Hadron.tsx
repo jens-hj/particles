@@ -7,6 +7,8 @@ import {
   linear,
   loop,
   waitFor,
+  waitUntil,
+  spawn,
 } from "@motion-canvas/core";
 import { Quark, QuarkColor, QuarkFlavor } from "./Quark";
 
@@ -250,6 +252,89 @@ export class Hadron extends Layout {
 
   public *showShell(duration: number = 1) {
     yield* this.shell().opacity(0.6, duration, easeOutCubic);
+  }
+
+  /**
+   * Run the full "hadron formation" beat sequence used by the quark formation scene.
+   *
+   * This exists to avoid duplicating the same timeline logic for proton + neutron.
+   * The scene should be responsible only for:
+   * - creating hadrons
+   * - calling this helper with a prefix (e.g. "P" / "N")
+   * - doing any cross-hadron choreography (scaling/moving/fading groups, etc.)
+   *
+   * This helper will:
+   * - wait for the prefixed time events
+   * - fade in the hadron
+   * - animate quark formation
+   * - type equation (base -> full)
+   * - start bond animation
+   * - show shell
+   * - collapse equation to label+composition
+   * - rotate displayed quark colors
+   */
+  public *animateSequence(options: {
+    prefix: string;
+    formationSeconds?: number;
+    equationDelaySeconds?: number;
+    baseEquationSeconds?: number;
+    fullEquationSeconds?: number;
+    collapseSeconds?: number;
+    colorRotationDelaySeconds?: number;
+    colorRotationCycles?: number;
+    postColorsHoldSeconds?: number;
+    bondSpeed?: number;
+  }): Generator<any, void, any> {
+    const {
+      prefix,
+      formationSeconds = 2,
+      equationDelaySeconds = 0.5,
+      baseEquationSeconds = 1,
+      fullEquationSeconds = 1,
+      collapseSeconds = 0.8,
+      colorRotationDelaySeconds = 0.5,
+      colorRotationCycles = 1,
+      postColorsHoldSeconds = 2,
+      bondSpeed = 200,
+    } = options;
+
+    // 1) Show
+    yield* waitUntil(`${prefix}: Show`);
+    yield* this.opacity(1, 0.5);
+
+    // 2) Quarks (formation is concurrent with equation typing)
+    yield* waitUntil(`${prefix}: Quarks`);
+    const formationTask = yield this.animateFormation(formationSeconds);
+
+    yield* waitFor(equationDelaySeconds);
+    yield* waitUntil(`${prefix}: Equation`);
+    yield* this.typeBaseEquation(baseEquationSeconds);
+
+    yield* formationTask;
+    this.updateBondPositions();
+
+    // 3) Bonds + shell + full equation
+    yield* waitUntil(`${prefix}: Bonds`);
+    spawn(this.animateBonds(bondSpeed));
+
+    yield* waitUntil(`${prefix}: Shell`);
+    yield* all(this.showShell(1), this.typeFullEquation(fullEquationSeconds));
+    yield* waitFor(1);
+
+    // 4) Collapse to label
+    yield* waitUntil(`${prefix}: Label`);
+    yield* this.collapseToLabel(collapseSeconds);
+
+    // 5) Rotate colors
+    yield* waitUntil(`${prefix}: Colors`);
+    yield* this.rotateQuarkColors(
+      colorRotationDelaySeconds,
+      colorRotationCycles,
+    );
+    yield* waitFor(postColorsHoldSeconds);
+
+    // 6) Done (movement is intentionally left to the scene)
+    yield* waitUntil(`${prefix}: Move`);
   }
 
   public *animateBonds(speed: number = 200) {

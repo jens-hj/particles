@@ -2,72 +2,72 @@
   "version": 0,
   "timeEvents": [
     {
-      "name": "P: Show",
-      "targetTime": 0
-    },
-    {
-      "name": "P: Quarks",
-      "targetTime": 0.5
-    },
-    {
-      "name": "P: Equation",
-      "targetTime": 0.5
-    },
-    {
-      "name": "P: Bonds",
-      "targetTime": 1.5
-    },
-    {
-      "name": "P: Shell",
-      "targetTime": 1.5
-    },
-    {
-      "name": "P: Label",
-      "targetTime": 3.5
-    },
-    {
-      "name": "P: Colors",
-      "targetTime": 5.050000000000001
-    },
-    {
       "name": "P: Move",
-      "targetTime": 7.050000000000001
+      "targetTime": 8.064668263219039
+    },
+    {
+      "name": "P: Show",
+      "targetTime": 0.016666666666666666
     },
     {
       "name": "N: Show",
-      "targetTime": 9.55
+      "targetTime": 10.549999999999999
     },
     {
-      "name": "N: Quarks",
-      "targetTime": 10.05
+      "name": "P: Quarks",
+      "targetTime": 0.5166666666666667
     },
     {
-      "name": "N: Equation",
-      "targetTime": 11.05
+      "name": "P: Equation",
+      "targetTime": 1.0166666666666666
     },
     {
-      "name": "N: Bonds",
-      "targetTime": 11.55
+      "name": "P: Bonds",
+      "targetTime": 2.516666666666665
     },
     {
-      "name": "N: Shell",
-      "targetTime": 11.55
+      "name": "P: Shell",
+      "targetTime": 2.516666666666665
     },
     {
-      "name": "N: Label",
-      "targetTime": 13.55
+      "name": "P: Label",
+      "targetTime": 4.516666666666665
     },
     {
-      "name": "N: Colors",
-      "targetTime": 15.1
+      "name": "P: Colors",
+      "targetTime": 6.0666666666666655
     },
     {
       "name": "N: Move",
-      "targetTime": 17.1
+      "targetTime": 18.614668263219087
+    },
+    {
+      "name": "N: Quarks",
+      "targetTime": 11.049999999999999
+    },
+    {
+      "name": "N: Equation",
+      "targetTime": 11.549999999999999
+    },
+    {
+      "name": "N: Bonds",
+      "targetTime": 13.050000000000049
+    },
+    {
+      "name": "N: Shell",
+      "targetTime": 13.050000000000049
+    },
+    {
+      "name": "N: Label",
+      "targetTime": 15.050000000000049
+    },
+    {
+      "name": "N: Colors",
+      "targetTime": 16.600000000000048
     },
     {
       "name": "End",
-      "targetTime": 22.559460990344164
+      "targetTime": 21.114668263219087
     }
   ],
   "seed": 1141912616

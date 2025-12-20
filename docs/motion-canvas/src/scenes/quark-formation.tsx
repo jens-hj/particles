@@ -49,35 +49,21 @@ export default makeScene2D(function* (view) {
     </>,
   );
 
-  // 1.1. Proton: Fade in
-  yield* waitUntil("P: Show");
-  yield* proton().opacity(1, 0.5);
+  // Kick off each hadron's internal sequence.
+  // The scene should only do cross-hadron choreography (movement/scaling/relative placement).
+  yield* proton().animateSequence({
+    prefix: "P",
+    formationSeconds: 2,
+    equationDelaySeconds: 0.5,
+    baseEquationSeconds: 1,
+    fullEquationSeconds: 1,
+    collapseSeconds: 0.8,
+    colorRotationDelaySeconds: 0.5,
+    colorRotationCycles: 1,
+    postColorsHoldSeconds: 2,
+  });
 
-  // 1.2. Proton: Move quarks and write equation
-  yield* waitUntil("P: Quarks");
-  const pTask = yield proton().animateFormation(2);
-  yield* waitFor(0.5);
-  yield* waitUntil("P: Equation");
-  yield* proton().typeBaseEquation(1);
-
-  yield* pTask;
-  proton().updateBondPositions();
-
-  // 1.3. Proton: Bonds and shell
-  yield* waitUntil("P: Bonds");
-  yield proton().animateBonds();
-  yield* waitUntil("P: Shell");
-  yield* all(proton().showShell(1), proton().typeFullEquation(1));
-  yield* waitFor(1);
-
-  // 1.4. Proton: Collapse to label
-  yield* waitUntil("P: Label");
-  yield* proton().collapseToLabel(0.8);
-  yield* waitUntil("P: Colors");
-  yield proton().rotateQuarkColors();
-  yield* waitFor(2);
-
-  // 1.5. Proton: Scale and move
+  // Cross-hadron choreography: Proton move
   yield* waitUntil("P: Move");
   yield* all(
     proton().scale(0.6, 1.5, easeInOutCubic),
@@ -85,35 +71,19 @@ export default makeScene2D(function* (view) {
   );
   yield* waitFor(1);
 
-  // 2.1. Neutron: Fade in
-  yield* waitUntil("N: Show");
-  yield* neutron().opacity(1, 0.5);
+  yield* neutron().animateSequence({
+    prefix: "N",
+    formationSeconds: 2,
+    equationDelaySeconds: 0.5,
+    baseEquationSeconds: 0.5,
+    fullEquationSeconds: 1,
+    collapseSeconds: 0.8,
+    colorRotationDelaySeconds: 0.5,
+    colorRotationCycles: 1,
+    postColorsHoldSeconds: 2,
+  });
 
-  // 2.2. Neutron: Move quarks and write equation
-  yield* waitUntil("N: Quarks");
-  const nTask = yield neutron().animateFormation(2);
-  yield* waitFor(0.5);
-  yield* waitUntil("N: Equation");
-  yield* neutron().typeBaseEquation(0.5);
-
-  yield* nTask;
-  neutron().updateBondPositions();
-
-  // 2.3. Neutron: Bonds and shell
-  yield* waitUntil("N: Bonds");
-  yield neutron().animateBonds();
-  yield* waitUntil("N: Shell");
-  yield* all(neutron().showShell(1), neutron().typeFullEquation(1));
-  yield* waitFor(1);
-
-  // 2.4. Neutron: Collapse to label
-  yield* waitUntil("N: Label");
-  yield* neutron().collapseToLabel(0.8);
-  yield* waitUntil("N: Colors");
-  yield neutron().rotateQuarkColors();
-  yield* waitFor(2);
-
-  // 2.5. Neutron: Scale and move
+  // Cross-hadron choreography: Neutron move (also repositions proton vertically)
   yield* waitUntil("N: Move");
   yield* all(
     proton().position.y(-500, 1.5, easeInOutCubic),
@@ -123,6 +93,6 @@ export default makeScene2D(function* (view) {
   );
   yield* waitFor(1);
 
-  // 3. End
+  // End
   yield* waitUntil("End");
 });
