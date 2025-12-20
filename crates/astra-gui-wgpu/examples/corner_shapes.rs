@@ -183,7 +183,7 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 Color::new(0.8, 0.3, 0.3, 1.0),
             )
             .with_corner_shape(CornerShape::None)
-            .with_stroke(Stroke::new(2.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
@@ -199,7 +199,7 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 Color::new(0.3, 0.8, 0.3, 1.0),
             )
             .with_corner_shape(CornerShape::Round(20.0))
-            .with_stroke(Stroke::new(2.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
@@ -215,7 +215,7 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 Color::new(0.3, 0.3, 0.8, 1.0),
             )
             .with_corner_shape(CornerShape::Cut(20.0))
-            .with_stroke(Stroke::new(2.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
@@ -234,7 +234,7 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 Color::new(0.8, 0.8, 0.3, 1.0),
             )
             .with_corner_shape(CornerShape::InverseRound(20.0))
-            .with_stroke(Stroke::new(2.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
@@ -253,7 +253,7 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 radius: 20.0,
                 smoothness: 0.5,
             })
-            .with_stroke(Stroke::new(2.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
@@ -272,7 +272,7 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 radius: 20.0,
                 smoothness: 3.0,
             })
-            .with_stroke(Stroke::new(2.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 

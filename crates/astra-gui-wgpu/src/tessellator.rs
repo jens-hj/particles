@@ -168,6 +168,8 @@ impl Tessellator {
         segments: u32,
         color: Color,
     ) {
+        // Corner centers and start angles for clockwise traversal
+        // Each corner sweeps PI/2 radians
         let corners = [
             (max_x - radius, min_y + radius, -PI / 2.0), // Top-right
             (max_x - radius, max_y - radius, 0.0),       // Bottom-right
@@ -229,11 +231,29 @@ impl Tessellator {
         segments: u32,
         color: Color,
     ) {
+        // For inverse round (concave corners), the arc center is at the corner itself
+        // and the arc curves INWARD into the rectangle.
+        // We sweep clockwise (decreasing angle) by 90 degrees at each corner.
+        //
+        // Top-right: center at (max_x, min_y)
+        //   - Enter from top edge at (max_x - r, min_y), angle PI from center
+        //   - Exit to right edge at (max_x, min_y + r), angle PI/2 from center
+        //   - Sweep from PI to PI/2 (clockwise, -90°)
+        //
+        // Bottom-right: center at (max_x, max_y)
+        //   - Enter from right edge at (max_x, max_y - r), angle -PI/2 from center
+        //   - Exit to bottom edge at (max_x - r, max_y), angle PI from center
+        //   - Sweep from -PI/2 to -PI (clockwise, -90°), which equals 3PI/2 to PI
+        //   - Use: PI/2 to 0 going backward? No...
+        //   - Actually: enter angle is 3PI/2 (or -PI/2), exit is PI
+        //   - Sweep from 3PI/2 to PI = -PI/2 (decreasing by 90°)? That's wrong direction.
+        //   - Let's reconsider: from -PI/2 going to -PI is decreasing by PI/2 ✓
+
         let corners = [
-            (max_x, min_y, PI, -PI / 2.0),  // Top-right (inverse)
-            (max_x, max_y, -PI / 2.0, 0.0), // Bottom-right (inverse)
-            (min_x, max_y, 0.0, PI / 2.0),  // Bottom-left (inverse)
-            (min_x, min_y, PI / 2.0, PI),   // Top-left (inverse)
+            (max_x, min_y, PI, PI / 2.0),   // Top-right: PI to PI/2
+            (max_x, max_y, PI / 2.0, 0.0),  // Bottom-right: PI/2 to 0
+            (min_x, max_y, 0.0, -PI / 2.0), // Bottom-left: 0 to -PI/2
+            (min_x, min_y, -PI / 2.0, -PI), // Top-left: -PI/2 to -PI
         ];
 
         for (cx, cy, start_angle, end_angle) in corners {
@@ -263,24 +283,31 @@ impl Tessellator {
         color: Color,
     ) {
         // Squircle using superellipse formula: |x|^n + |y|^n = r^n
+        // n = 2 gives a circle, higher values give more square-like shapes
         let n = 2.0 + smoothness;
 
+        // Use same corner centers and start angles as Round
         let corners = [
-            (max_x - radius, min_y + radius, 0), // Top-right
-            (max_x - radius, max_y - radius, 1), // Bottom-right
-            (min_x + radius, max_y - radius, 2), // Bottom-left
-            (min_x + radius, min_y + radius, 3), // Top-left
+            (max_x - radius, min_y + radius, -PI / 2.0), // Top-right
+            (max_x - radius, max_y - radius, 0.0),       // Bottom-right
+            (min_x + radius, max_y - radius, PI / 2.0),  // Bottom-left
+            (min_x + radius, min_y + radius, PI),        // Top-left
         ];
 
-        for (cx, cy, quadrant) in corners {
+        for (cx, cy, start_angle) in corners {
             for i in 0..=segments {
                 let t = i as f32 / segments as f32;
-                let angle = (quadrant as f32 * PI / 2.0) + t * (PI / 2.0);
+                let angle = start_angle + t * (PI / 2.0);
 
                 // Superellipse parametric form
                 let cos_theta = angle.cos();
                 let sin_theta = angle.sin();
-                let r = radius / (cos_theta.abs().powf(n) + sin_theta.abs().powf(n)).powf(1.0 / n);
+
+                // Avoid division by zero at cardinal directions
+                let cos_abs = cos_theta.abs().max(1e-10);
+                let sin_abs = sin_theta.abs().max(1e-10);
+
+                let r = radius / (cos_abs.powf(n) + sin_abs.powf(n)).powf(1.0 / n);
 
                 let x = cx + r * cos_theta;
                 let y = cy + r * sin_theta;
@@ -294,8 +321,6 @@ impl Tessellator {
     }
 
     fn add_rect_stroke(&mut self, rect: &StyledRect, stroke: &astra_gui::Stroke) {
-        // For now, implement stroke for Round corners only
-        // Other corner shapes will follow the same pattern
         let min_x = rect.rect.min[0];
         let min_y = rect.rect.min[1];
         let max_x = rect.rect.max[0];
@@ -313,13 +338,14 @@ impl Tessellator {
 
         match rect.corner_shape {
             CornerShape::None => {
-                // Simple rectangle stroke - outer and inner quad strip
+                // Simple rectangle stroke - outer expands outward, inner shrinks inward
+                // This centers the stroke on the rectangle edge
                 let outer = [
-                    [max_x, min_y],
-                    [max_x, max_y],
-                    [min_x, max_y],
-                    [min_x, min_y],
-                    [max_x, min_y],
+                    [max_x + half_width, min_y - half_width],
+                    [max_x + half_width, max_y + half_width],
+                    [min_x - half_width, max_y + half_width],
+                    [min_x - half_width, min_y - half_width],
+                    [max_x + half_width, min_y - half_width],
                 ];
                 let inner = [
                     [max_x - half_width, min_y + half_width],
@@ -334,12 +360,12 @@ impl Tessellator {
                     self.vertices.push(Vertex::new(inner[i], stroke.color));
                 }
             }
-            CornerShape::Round(radius) => {
+            CornerShape::Round(_) => {
                 let corners = [
-                    (max_x - radius, min_y + radius, -PI / 2.0),
-                    (max_x - radius, max_y - radius, 0.0),
-                    (min_x + radius, max_y - radius, PI / 2.0),
-                    (min_x + radius, min_y + radius, PI),
+                    (max_x - extent, min_y + extent, -PI / 2.0),
+                    (max_x - extent, max_y - extent, 0.0),
+                    (min_x + extent, max_y - extent, PI / 2.0),
+                    (min_x + extent, min_y + extent, PI),
                 ];
 
                 for (cx, cy, start_angle) in corners {
@@ -366,28 +392,201 @@ impl Tessellator {
                 self.vertices.push(first_outer);
                 self.vertices.push(first_inner);
             }
-            _ => {
-                // For other corner shapes, use simple stroke for now
-                // TODO: Implement proper stroke for Cut, InverseRound, Squircle
-                let outer = [
-                    [max_x, min_y],
-                    [max_x, max_y],
-                    [min_x, max_y],
-                    [min_x, min_y],
-                    [max_x, min_y],
-                ];
-                let inner = [
-                    [max_x - half_width, min_y + half_width],
-                    [max_x - half_width, max_y - half_width],
-                    [min_x + half_width, max_y - half_width],
-                    [min_x + half_width, min_y + half_width],
-                    [max_x - half_width, min_y + half_width],
+            CornerShape::Cut(_) => {
+                // Stroke follows the cut corners
+                // For each corner, we have 2 vertices on the cut diagonal
+                // The stroke needs to expand outward along the normal to each edge
+
+                let cut = extent;
+
+                // Calculate outer and inner positions for each vertex
+                // The cut creates 8 edge segments, each needs proper normal offset
+
+                // Top edge: from (min_x + cut, min_y) to (max_x - cut, min_y)
+                // Normal points up (-y), so outer goes up, inner goes down
+
+                // Top-right diagonal: from (max_x - cut, min_y) to (max_x, min_y + cut)
+                // Normal points toward top-right corner
+                let diag_normal = 1.0 / (2.0_f32).sqrt(); // 45 degree diagonal
+
+                // Build the stroke as a quad strip following the perimeter
+                // We'll go around the rectangle, adding outer/inner pairs
+
+                // Top-right corner - approaching from top edge
+                // Top edge outer/inner
+                self.vertices
+                    .push(Vertex::new([max_x - cut, min_y - half_width], stroke.color));
+                self.vertices
+                    .push(Vertex::new([max_x - cut, min_y + half_width], stroke.color));
+
+                // Diagonal edge from top-right
+                // Normal for diagonal (max_x - cut, min_y) to (max_x, min_y + cut) is (1, -1)/sqrt(2)
+                self.vertices.push(Vertex::new(
+                    [
+                        max_x + half_width * diag_normal,
+                        min_y + cut - half_width * diag_normal,
+                    ],
+                    stroke.color,
+                ));
+                self.vertices.push(Vertex::new(
+                    [
+                        max_x - half_width * diag_normal,
+                        min_y + cut + half_width * diag_normal,
+                    ],
+                    stroke.color,
+                ));
+
+                // Right edge
+                self.vertices
+                    .push(Vertex::new([max_x + half_width, max_y - cut], stroke.color));
+                self.vertices
+                    .push(Vertex::new([max_x - half_width, max_y - cut], stroke.color));
+
+                // Bottom-right diagonal
+                self.vertices.push(Vertex::new(
+                    [
+                        max_x - cut + half_width * diag_normal,
+                        max_y + half_width * diag_normal,
+                    ],
+                    stroke.color,
+                ));
+                self.vertices.push(Vertex::new(
+                    [
+                        max_x - cut - half_width * diag_normal,
+                        max_y - half_width * diag_normal,
+                    ],
+                    stroke.color,
+                ));
+
+                // Bottom edge
+                self.vertices
+                    .push(Vertex::new([min_x + cut, max_y + half_width], stroke.color));
+                self.vertices
+                    .push(Vertex::new([min_x + cut, max_y - half_width], stroke.color));
+
+                // Bottom-left diagonal
+                self.vertices.push(Vertex::new(
+                    [
+                        min_x - half_width * diag_normal,
+                        max_y - cut + half_width * diag_normal,
+                    ],
+                    stroke.color,
+                ));
+                self.vertices.push(Vertex::new(
+                    [
+                        min_x + half_width * diag_normal,
+                        max_y - cut - half_width * diag_normal,
+                    ],
+                    stroke.color,
+                ));
+
+                // Left edge
+                self.vertices
+                    .push(Vertex::new([min_x - half_width, min_y + cut], stroke.color));
+                self.vertices
+                    .push(Vertex::new([min_x + half_width, min_y + cut], stroke.color));
+
+                // Top-left diagonal
+                self.vertices.push(Vertex::new(
+                    [
+                        min_x + cut - half_width * diag_normal,
+                        min_y - half_width * diag_normal,
+                    ],
+                    stroke.color,
+                ));
+                self.vertices.push(Vertex::new(
+                    [
+                        min_x + cut + half_width * diag_normal,
+                        min_y + half_width * diag_normal,
+                    ],
+                    stroke.color,
+                ));
+
+                // Close the loop - back to top edge start
+                self.vertices
+                    .push(Vertex::new([max_x - cut, min_y - half_width], stroke.color));
+                self.vertices
+                    .push(Vertex::new([max_x - cut, min_y + half_width], stroke.color));
+            }
+            CornerShape::InverseRound(_) => {
+                // Stroke for inverse round corners
+                // The arc center is at the corner, so we offset the radius by half_width
+                let corners = [
+                    (max_x, min_y, PI, PI / 2.0),
+                    (max_x, max_y, PI / 2.0, 0.0),
+                    (min_x, max_y, 0.0, -PI / 2.0),
+                    (min_x, min_y, -PI / 2.0, -PI),
                 ];
 
-                for i in 0..5 {
-                    self.vertices.push(Vertex::new(outer[i], stroke.color));
-                    self.vertices.push(Vertex::new(inner[i], stroke.color));
+                for (cx, cy, start_angle, end_angle) in corners {
+                    for i in 0..=segments_per_corner {
+                        let t = i as f32 / segments_per_corner as f32;
+                        let angle = start_angle + t * (end_angle - start_angle);
+                        let cos_a = angle.cos();
+                        let sin_a = angle.sin();
+
+                        // For inverse round, outer is further from corner center,
+                        // inner is closer
+                        let outer_x = cx + (extent + half_width) * cos_a;
+                        let outer_y = cy + (extent + half_width) * sin_a;
+                        self.vertices
+                            .push(Vertex::new([outer_x, outer_y], stroke.color));
+
+                        let inner_x = cx + (extent - half_width).max(0.0) * cos_a;
+                        let inner_y = cy + (extent - half_width).max(0.0) * sin_a;
+                        self.vertices
+                            .push(Vertex::new([inner_x, inner_y], stroke.color));
+                    }
                 }
+
+                let first_outer = self.vertices[base_idx as usize];
+                let first_inner = self.vertices[(base_idx + 1) as usize];
+                self.vertices.push(first_outer);
+                self.vertices.push(first_inner);
+            }
+            CornerShape::Squircle { smoothness, .. } => {
+                // Stroke for squircle corners
+                let n = 2.0 + smoothness;
+
+                let corners = [
+                    (max_x - extent, min_y + extent, -PI / 2.0),
+                    (max_x - extent, max_y - extent, 0.0),
+                    (min_x + extent, max_y - extent, PI / 2.0),
+                    (min_x + extent, min_y + extent, PI),
+                ];
+
+                for (cx, cy, start_angle) in corners {
+                    for i in 0..=segments_per_corner {
+                        let t = i as f32 / segments_per_corner as f32;
+                        let angle = start_angle + t * (PI / 2.0);
+
+                        let cos_theta = angle.cos();
+                        let sin_theta = angle.sin();
+
+                        let cos_abs = cos_theta.abs().max(1e-10);
+                        let sin_abs = sin_theta.abs().max(1e-10);
+
+                        let base_r = extent / (cos_abs.powf(n) + sin_abs.powf(n)).powf(1.0 / n);
+
+                        let outer_r = base_r + half_width;
+                        let inner_r = (base_r - half_width).max(0.0);
+
+                        let outer_x = cx + outer_r * cos_theta;
+                        let outer_y = cy + outer_r * sin_theta;
+                        self.vertices
+                            .push(Vertex::new([outer_x, outer_y], stroke.color));
+
+                        let inner_x = cx + inner_r * cos_theta;
+                        let inner_y = cy + inner_r * sin_theta;
+                        self.vertices
+                            .push(Vertex::new([inner_x, inner_y], stroke.color));
+                    }
+                }
+
+                let first_outer = self.vertices[base_idx as usize];
+                let first_inner = self.vertices[(base_idx + 1) as usize];
+                self.vertices.push(first_outer);
+                self.vertices.push(first_inner);
             }
         }
 
