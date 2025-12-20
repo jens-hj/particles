@@ -42,11 +42,7 @@
         ];
 
         darwinInputs = with pkgs; [
-          darwin.apple_sdk.frameworks.Metal
-          darwin.apple_sdk.frameworks.AppKit
-          darwin.apple_sdk.frameworks.CoreGraphics
-          darwin.apple_sdk.frameworks.CoreServices
-          darwin.apple_sdk.frameworks.Foundation
+          libiconv
         ];
 
         buildInputs =
