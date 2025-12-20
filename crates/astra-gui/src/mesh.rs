@@ -1,4 +1,4 @@
-use crate::primitives::Color;
+use crate::color::Color;
 
 /// Vertex format for UI rendering with position and color
 #[derive(Copy, Clone, Debug)]

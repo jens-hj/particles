@@ -1,5 +1,6 @@
+use crate::color::Color;
 use crate::mesh::{Mesh, Vertex};
-use crate::primitives::{ClippedShape, Color, CornerShape, Shape, StyledRect};
+use crate::primitives::{ClippedShape, CornerShape, Shape, StyledRect};
 use std::f32::consts::PI;
 
 /// Tessellator converts shapes into triangle meshes
