@@ -6,6 +6,7 @@ import {
   easeOutCubic,
   linear,
   loop,
+  waitFor,
 } from "@motion-canvas/core";
 import { Quark, QuarkColor, QuarkFlavor } from "./Quark";
 
@@ -345,5 +346,53 @@ export class Hadron extends Layout {
     yield* letters[0].opacity(1, perChar, easeOutCubic);
     yield* letters[1].opacity(1, perChar, easeOutCubic);
     yield* letters[2].opacity(1, perChar, easeOutCubic);
+  }
+
+  private setCompositionLetterColors(
+    colors: [QuarkColor, QuarkColor, QuarkColor],
+  ) {
+    if (!this.showText) return;
+
+    const letters = this.composition().children().slice(0, 3) as Txt[];
+    if (letters.length < 3) return;
+
+    letters[0].fill(COLORS[colors[0]]);
+    letters[1].fill(COLORS[colors[1]]);
+    letters[2].fill(COLORS[colors[2]]);
+  }
+
+  private setQuarkColors(colors: [QuarkColor, QuarkColor, QuarkColor]) {
+    this.quark1().setQuarkColor(colors[0]);
+    this.quark2().setQuarkColor(colors[1]);
+    this.quark3().setQuarkColor(colors[2]);
+  }
+
+  /**
+   * Rotate quark colors (and the composition text letter colors) synchronously through
+   * all 3! permutations.
+   *
+   * - `delaySeconds`: pause between each color change
+   * - `cycles`: how many full permutation cycles to run (defaults to 1)
+   *
+   * Note: this cycles the *displayed* colors only; it does not change the hadron config/flavors.
+   */
+  public *rotateQuarkColors(delaySeconds: number = 0.75, cycles: number = 1) {
+    const permutations: Array<[QuarkColor, QuarkColor, QuarkColor]> = [
+      ["red", "green", "blue"],
+      ["red", "blue", "green"],
+      ["green", "red", "blue"],
+      ["green", "blue", "red"],
+      ["blue", "red", "green"],
+      ["blue", "green", "red"],
+    ];
+
+    const total = Math.max(0, Math.floor(cycles));
+    for (let c = 0; c < total; c++) {
+      for (const p of permutations) {
+        this.setQuarkColors(p);
+        this.setCompositionLetterColors(p);
+        yield* waitFor(delaySeconds);
+      }
+    }
   }
 }

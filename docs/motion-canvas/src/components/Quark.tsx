@@ -17,7 +17,7 @@ export interface QuarkProps extends CircleProps {
 }
 
 export class Quark extends Circle {
-  private readonly _quarkColor: QuarkColor;
+  private _quarkColor: QuarkColor;
   private readonly _quarkFlavor: QuarkFlavor;
 
   public constructor(props: QuarkProps) {
@@ -54,5 +54,17 @@ export class Quark extends Circle {
 
   public get quarkFlavor(): QuarkFlavor {
     return this._quarkFlavor;
+  }
+
+  /**
+   * Update the quark's displayed color (fill + glow) at runtime.
+   * This is used by higher-level animations (e.g. hadron color rotation).
+   */
+  public setQuarkColor(quarkColor: QuarkColor) {
+    this._quarkColor = quarkColor;
+
+    const colorHex = COLORS[quarkColor];
+    this.fill(colorHex);
+    this.shadowColor(colorHex);
   }
 }

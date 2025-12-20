@@ -63,10 +63,12 @@ export default makeScene2D(function* (view) {
 
   yield* waitUntil("Bonds Pulse");
   yield proton().animateBonds();
-  yield* waitFor(1);
 
   yield* waitUntil("Show Proton Labels");
   yield* proton().collapseToLabel(0.8);
+
+  yield* waitUntil("Rotate Proton Quark Colors");
+  yield proton().rotateQuarkColors();
   yield* waitFor(2);
 
   yield* waitUntil("Scale and Move Proton");
@@ -93,6 +95,9 @@ export default makeScene2D(function* (view) {
 
   yield* waitUntil("Show Neutron Labels");
   yield* neutron().collapseToLabel(0.8);
+
+  yield* waitUntil("Rotate Neutron Quark Colors");
+  yield neutron().rotateQuarkColors();
   yield* waitFor(2);
 
   yield* waitUntil("Scale and Move Neutron");

@@ -26,6 +26,10 @@
       "targetTime": 6.5
     },
     {
+      "name": "Rotate Proton Quark Colors",
+      "targetTime": 8.05
+    },
+    {
       "name": "Scale and Move Proton",
       "targetTime": 10.6
     },
@@ -48,6 +52,10 @@
     {
       "name": "Show Neutron Labels",
       "targetTime": 17.1
+    },
+    {
+      "name": "Rotate Neutron Quark Colors",
+      "targetTime": 18.65
     },
     {
       "name": "Scale and Move Neutron",
