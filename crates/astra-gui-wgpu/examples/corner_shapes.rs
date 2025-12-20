@@ -162,10 +162,12 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
     let clip_rect = Rect::new([0.0, 0.0], [width, height]);
     let mut shapes = Vec::new();
 
-    let rect_width = 180.0;
-    let rect_height = 120.0;
-    let margin = 40.0;
-    let spacing = 220.0;
+    let rect_width = 500.0;
+    let rect_height = 300.0;
+    let margin = 100.0;
+    let spacing = 600.0;
+    let corner_size = 50.0;
+    let stroke_width = 20.0;
 
     let start_x = margin;
     let start_y = margin;
@@ -183,7 +185,7 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 Color::new(0.8, 0.3, 0.3, 1.0),
             )
             .with_corner_shape(CornerShape::None)
-            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
@@ -198,8 +200,8 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 ),
                 Color::new(0.3, 0.8, 0.3, 1.0),
             )
-            .with_corner_shape(CornerShape::Round(20.0))
-            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_corner_shape(CornerShape::Round(corner_size))
+            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
@@ -214,8 +216,8 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 ),
                 Color::new(0.3, 0.3, 0.8, 1.0),
             )
-            .with_corner_shape(CornerShape::Cut(20.0))
-            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_corner_shape(CornerShape::Cut(corner_size))
+            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
@@ -233,8 +235,8 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 ),
                 Color::new(0.8, 0.8, 0.3, 1.0),
             )
-            .with_corner_shape(CornerShape::InverseRound(20.0))
-            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_corner_shape(CornerShape::InverseRound(corner_size))
+            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
@@ -250,10 +252,10 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 Color::new(0.8, 0.3, 0.8, 1.0),
             )
             .with_corner_shape(CornerShape::Squircle {
-                radius: 20.0,
+                radius: corner_size,
                 smoothness: 0.5,
             })
-            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
@@ -269,10 +271,10 @@ fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
                 Color::new(0.3, 0.8, 0.8, 1.0),
             )
             .with_corner_shape(CornerShape::Squircle {
-                radius: 20.0,
+                radius: corner_size,
                 smoothness: 3.0,
             })
-            .with_stroke(Stroke::new(5.0, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
         ),
     ));
 
