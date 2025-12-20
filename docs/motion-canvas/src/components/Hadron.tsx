@@ -143,6 +143,7 @@ export class Hadron extends Layout {
           lineWidth={8}
           opacity={0}
           lineDash={[20, 20]}
+          points={null}
         />
         <Line
           ref={this.bond23}
@@ -150,6 +151,7 @@ export class Hadron extends Layout {
           lineWidth={8}
           opacity={0}
           lineDash={[20, 20]}
+          points={null}
         />
         <Line
           ref={this.bond31}
@@ -157,6 +159,7 @@ export class Hadron extends Layout {
           lineWidth={8}
           opacity={0}
           lineDash={[20, 20]}
+          points={null}
         />
 
         {/* Shell */}
@@ -332,9 +335,6 @@ export class Hadron extends Layout {
       colorRotationCycles,
     );
     yield* waitFor(postColorsHoldSeconds);
-
-    // 6) Done (movement is intentionally left to the scene)
-    yield* waitUntil(`${prefix}: Move`);
   }
 
   public *animateBonds(speed: number = 200) {
