@@ -2,10 +2,10 @@
 //!
 //! WGPU rendering backend for astra-gui.
 
-mod tessellator;
+mod vertex;
 
-use astra_gui::FullOutput;
-use tessellator::{Tessellator, Vertex};
+use astra_gui::{FullOutput, Tessellator};
+use vertex::WgpuVertex;
 
 const INITIAL_VERTEX_CAPACITY: usize = 1024;
 const INITIAL_INDEX_CAPACITY: usize = 2048;
@@ -20,6 +20,7 @@ pub struct Renderer {
     tessellator: Tessellator,
     vertex_capacity: usize,
     index_capacity: usize,
+    wgpu_vertices: Vec<WgpuVertex>,
 }
 
 impl Renderer {
@@ -77,7 +78,7 @@ impl Renderer {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc()],
+                buffers: &[WgpuVertex::desc()],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -108,7 +109,7 @@ impl Renderer {
         // Create initial buffers
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Astra UI Vertex Buffer"),
-            size: (INITIAL_VERTEX_CAPACITY * std::mem::size_of::<Vertex>()) as u64,
+            size: (INITIAL_VERTEX_CAPACITY * std::mem::size_of::<WgpuVertex>()) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -129,6 +130,7 @@ impl Renderer {
             tessellator: Tessellator::new(),
             vertex_capacity: INITIAL_VERTEX_CAPACITY,
             index_capacity: INITIAL_INDEX_CAPACITY,
+            wgpu_vertices: Vec::new(),
         }
     }
 
@@ -143,26 +145,33 @@ impl Renderer {
         output: &FullOutput,
     ) {
         // Tessellate shapes
-        let (vertices, indices) = self.tessellator.tessellate(&output.shapes);
+        let mesh = self.tessellator.tessellate(&output.shapes);
 
-        if vertices.is_empty() || indices.is_empty() {
+        if mesh.is_empty() {
             return; // Nothing to render
         }
 
+        // Convert to wgpu vertices
+        self.wgpu_vertices.clear();
+        self.wgpu_vertices.reserve(mesh.vertices.len());
+        for vertex in &mesh.vertices {
+            self.wgpu_vertices.push(WgpuVertex::from(*vertex));
+        }
+
         // Resize vertex buffer if needed
-        if vertices.len() > self.vertex_capacity {
-            self.vertex_capacity = (vertices.len() * 2).next_power_of_two();
+        if self.wgpu_vertices.len() > self.vertex_capacity {
+            self.vertex_capacity = (self.wgpu_vertices.len() * 2).next_power_of_two();
             self.vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Astra UI Vertex Buffer"),
-                size: (self.vertex_capacity * std::mem::size_of::<Vertex>()) as u64,
+                size: (self.vertex_capacity * std::mem::size_of::<WgpuVertex>()) as u64,
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
         }
 
         // Resize index buffer if needed
-        if indices.len() > self.index_capacity {
-            self.index_capacity = (indices.len() * 2).next_power_of_two();
+        if mesh.indices.len() > self.index_capacity {
+            self.index_capacity = (mesh.indices.len() * 2).next_power_of_two();
             self.index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Astra UI Index Buffer"),
                 size: (self.index_capacity * std::mem::size_of::<u32>()) as u64,
@@ -172,8 +181,12 @@ impl Renderer {
         }
 
         // Upload data
-        queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(vertices));
-        queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(indices));
+        queue.write_buffer(
+            &self.vertex_buffer,
+            0,
+            bytemuck::cast_slice(&self.wgpu_vertices),
+        );
+        queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&mesh.indices));
 
         // Update uniforms
         let uniforms = [screen_width, screen_height];
@@ -200,6 +213,6 @@ impl Renderer {
         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        render_pass.draw_indexed(0..indices.len() as u32, 0, 0..1);
+        render_pass.draw_indexed(0..mesh.indices.len() as u32, 0, 0..1);
     }
 }

@@ -1,61 +1,20 @@
-use astra_gui::{ClippedShape, Color, CornerShape, Shape, StyledRect};
+use crate::mesh::{Mesh, Vertex};
+use crate::primitives::{ClippedShape, Color, CornerShape, Shape, StyledRect};
 use std::f32::consts::PI;
 
-/// Vertex format for UI rendering
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Vertex {
-    pub pos: [f32; 2],
-    pub color: [f32; 4],
-}
-
-impl Vertex {
-    pub fn new(pos: [f32; 2], color: Color) -> Self {
-        Self {
-            pos,
-            color: [color.r, color.g, color.b, color.a],
-        }
-    }
-
-    pub const fn desc() -> wgpu::VertexBufferLayout<'static> {
-        const ATTRIBUTES: &[wgpu::VertexAttribute] = &[
-            wgpu::VertexAttribute {
-                offset: 0,
-                shader_location: 0,
-                format: wgpu::VertexFormat::Float32x2,
-            },
-            wgpu::VertexAttribute {
-                offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
-                shader_location: 1,
-                format: wgpu::VertexFormat::Float32x4,
-            },
-        ];
-
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: ATTRIBUTES,
-        }
-    }
-}
-
-/// Tessellator converts shapes into vertices and indices
+/// Tessellator converts shapes into triangle meshes
 pub struct Tessellator {
-    vertices: Vec<Vertex>,
-    indices: Vec<u32>,
+    mesh: Mesh,
 }
 
 impl Tessellator {
     pub fn new() -> Self {
-        Self {
-            vertices: Vec::new(),
-            indices: Vec::new(),
-        }
+        Self { mesh: Mesh::new() }
     }
 
-    pub fn tessellate(&mut self, shapes: &[ClippedShape]) -> (&[Vertex], &[u32]) {
-        self.vertices.clear();
-        self.indices.clear();
+    /// Tessellate shapes into a mesh. Returns a reference to the internal mesh.
+    pub fn tessellate(&mut self, shapes: &[ClippedShape]) -> &Mesh {
+        self.mesh.clear();
 
         for clipped in shapes {
             match &clipped.shape {
@@ -63,7 +22,7 @@ impl Tessellator {
             }
         }
 
-        (&self.vertices, &self.indices)
+        &self.mesh
     }
 
     fn tessellate_rect(&mut self, rect: &StyledRect) {
@@ -94,21 +53,31 @@ impl Tessellator {
 
         // Number of segments per corner (more = smoother corners)
         let segments_per_corner = 8;
-        let base_idx = self.vertices.len() as u32;
+        let base_idx = self.mesh.vertices.len() as u32;
 
         // Add center vertex for triangle fan
         let center = [(min_x + max_x) * 0.5, (min_y + max_y) * 0.5];
-        self.vertices.push(Vertex::new(center, rect.fill));
+        self.mesh.vertices.push(Vertex::new(center, rect.fill));
 
         // Generate vertices around the rectangle based on corner shape
         match rect.corner_shape {
             CornerShape::None => {
                 // Simple rectangle - 4 corners
-                self.vertices.push(Vertex::new([max_x, min_y], rect.fill)); // Top-right
-                self.vertices.push(Vertex::new([max_x, max_y], rect.fill)); // Bottom-right
-                self.vertices.push(Vertex::new([min_x, max_y], rect.fill)); // Bottom-left
-                self.vertices.push(Vertex::new([min_x, min_y], rect.fill)); // Top-left
-                self.vertices.push(Vertex::new([max_x, min_y], rect.fill)); // Close loop
+                self.mesh
+                    .vertices
+                    .push(Vertex::new([max_x, min_y], rect.fill)); // Top-right
+                self.mesh
+                    .vertices
+                    .push(Vertex::new([max_x, max_y], rect.fill)); // Bottom-right
+                self.mesh
+                    .vertices
+                    .push(Vertex::new([min_x, max_y], rect.fill)); // Bottom-left
+                self.mesh
+                    .vertices
+                    .push(Vertex::new([min_x, min_y], rect.fill)); // Top-left
+                self.mesh
+                    .vertices
+                    .push(Vertex::new([max_x, min_y], rect.fill)); // Close loop
             }
             CornerShape::Round(_) => {
                 self.add_corner_vertices_round(
@@ -150,11 +119,11 @@ impl Tessellator {
         }
 
         // Create triangle fan indices
-        let vertex_count = self.vertices.len() as u32 - base_idx;
+        let vertex_count = self.mesh.vertices.len() as u32 - base_idx;
         for i in 1..(vertex_count - 1) {
-            self.indices.push(base_idx);
-            self.indices.push(base_idx + i);
-            self.indices.push(base_idx + i + 1);
+            self.mesh.indices.push(base_idx);
+            self.mesh.indices.push(base_idx + i);
+            self.mesh.indices.push(base_idx + i + 1);
         }
     }
 
@@ -182,13 +151,14 @@ impl Tessellator {
                 let angle = start_angle + (i as f32 / segments as f32) * (PI / 2.0);
                 let x = cx + radius * angle.cos();
                 let y = cy + radius * angle.sin();
-                self.vertices.push(Vertex::new([x, y], color));
+                self.mesh.vertices.push(Vertex::new([x, y], color));
             }
         }
 
         // Close the loop
-        let first_perimeter = self.vertices[self.vertices.len() - (4 * (segments + 1)) as usize];
-        self.vertices.push(first_perimeter);
+        let first_perimeter =
+            self.mesh.vertices[self.mesh.vertices.len() - (4 * (segments + 1)) as usize];
+        self.mesh.vertices.push(first_perimeter);
     }
 
     fn add_corner_vertices_cut(
@@ -202,23 +172,41 @@ impl Tessellator {
     ) {
         // Each corner has 2 vertices (the two points where the cut intersects the edges)
         // Top-right corner
-        self.vertices.push(Vertex::new([max_x - cut, min_y], color));
-        self.vertices.push(Vertex::new([max_x, min_y + cut], color));
+        self.mesh
+            .vertices
+            .push(Vertex::new([max_x - cut, min_y], color));
+        self.mesh
+            .vertices
+            .push(Vertex::new([max_x, min_y + cut], color));
 
         // Bottom-right corner
-        self.vertices.push(Vertex::new([max_x, max_y - cut], color));
-        self.vertices.push(Vertex::new([max_x - cut, max_y], color));
+        self.mesh
+            .vertices
+            .push(Vertex::new([max_x, max_y - cut], color));
+        self.mesh
+            .vertices
+            .push(Vertex::new([max_x - cut, max_y], color));
 
         // Bottom-left corner
-        self.vertices.push(Vertex::new([min_x + cut, max_y], color));
-        self.vertices.push(Vertex::new([min_x, max_y - cut], color));
+        self.mesh
+            .vertices
+            .push(Vertex::new([min_x + cut, max_y], color));
+        self.mesh
+            .vertices
+            .push(Vertex::new([min_x, max_y - cut], color));
 
         // Top-left corner
-        self.vertices.push(Vertex::new([min_x, min_y + cut], color));
-        self.vertices.push(Vertex::new([min_x + cut, min_y], color));
+        self.mesh
+            .vertices
+            .push(Vertex::new([min_x, min_y + cut], color));
+        self.mesh
+            .vertices
+            .push(Vertex::new([min_x + cut, min_y], color));
 
         // Close loop
-        self.vertices.push(Vertex::new([max_x - cut, min_y], color));
+        self.mesh
+            .vertices
+            .push(Vertex::new([max_x - cut, min_y], color));
     }
 
     fn add_corner_vertices_inverse_round(
@@ -238,7 +226,8 @@ impl Tessellator {
         // The perimeter goes: straight edge -> concave arc -> straight edge -> ...
 
         // Top edge: from (min_x + radius, min_y) to (max_x - radius, min_y)
-        self.vertices
+        self.mesh
+            .vertices
             .push(Vertex::new([max_x - radius, min_y], color));
 
         // Top-right concave arc: center at (max_x, min_y), sweeping from PI (left) to PI/2 (down)
@@ -247,11 +236,12 @@ impl Tessellator {
             let angle = PI + t * (-PI / 2.0); // PI to PI/2
             let x = max_x + radius * angle.cos();
             let y = min_y + radius * angle.sin();
-            self.vertices.push(Vertex::new([x, y], color));
+            self.mesh.vertices.push(Vertex::new([x, y], color));
         }
 
         // Right edge: from (max_x, min_y + radius) to (max_x, max_y - radius)
-        self.vertices
+        self.mesh
+            .vertices
             .push(Vertex::new([max_x, max_y - radius], color));
 
         // Bottom-right concave arc: center at (max_x, max_y), sweeping from PI/2 (up) to 0 (right)
@@ -260,11 +250,12 @@ impl Tessellator {
             let angle = -PI / 2.0 + t * (-PI / 2.0); // PI/2 to 0
             let x = max_x + radius * angle.cos();
             let y = max_y + radius * angle.sin();
-            self.vertices.push(Vertex::new([x, y], color));
+            self.mesh.vertices.push(Vertex::new([x, y], color));
         }
 
         // Bottom edge: from (max_x - radius, max_y) to (min_x + radius, max_y)
-        self.vertices
+        self.mesh
+            .vertices
             .push(Vertex::new([min_x + radius, max_y], color));
 
         // Bottom-left concave arc: center at (min_x, max_y), sweeping from 0 (right) to -PI/2 (down)
@@ -273,11 +264,12 @@ impl Tessellator {
             let angle = t * (-PI / 2.0); // 0 to -PI/2
             let x = min_x + radius * angle.cos();
             let y = max_y + radius * angle.sin();
-            self.vertices.push(Vertex::new([x, y], color));
+            self.mesh.vertices.push(Vertex::new([x, y], color));
         }
 
         // Left edge: from (min_x, max_y - radius) to (min_x, min_y + radius)
-        self.vertices
+        self.mesh
+            .vertices
             .push(Vertex::new([min_x, min_y + radius], color));
 
         // Top-left concave arc: center at (min_x, min_y), sweeping from -PI/2 (down) to -PI (left)
@@ -286,11 +278,12 @@ impl Tessellator {
             let angle = PI / 2.0 + t * (-PI / 2.0); // -PI/2 to -PI
             let x = min_x + radius * angle.cos();
             let y = min_y + radius * angle.sin();
-            self.vertices.push(Vertex::new([x, y], color));
+            self.mesh.vertices.push(Vertex::new([x, y], color));
         }
 
         // Close the loop - back to the start of top edge
-        self.vertices
+        self.mesh
+            .vertices
             .push(Vertex::new([max_x - radius, min_y], color));
     }
 
@@ -334,16 +327,17 @@ impl Tessellator {
 
                 let x = cx + r * cos_theta;
                 let y = cy + r * sin_theta;
-                self.vertices.push(Vertex::new([x, y], color));
+                self.mesh.vertices.push(Vertex::new([x, y], color));
             }
         }
 
         // Close the loop
-        let first_perimeter = self.vertices[self.vertices.len() - (4 * (segments + 1)) as usize];
-        self.vertices.push(first_perimeter);
+        let first_perimeter =
+            self.mesh.vertices[self.mesh.vertices.len() - (4 * (segments + 1)) as usize];
+        self.mesh.vertices.push(first_perimeter);
     }
 
-    fn add_rect_stroke(&mut self, rect: &StyledRect, stroke: &astra_gui::Stroke) {
+    fn add_rect_stroke(&mut self, rect: &StyledRect, stroke: &crate::primitives::Stroke) {
         let min_x = rect.rect.min[0];
         let min_y = rect.rect.min[1];
         let max_x = rect.rect.max[0];
@@ -357,7 +351,7 @@ impl Tessellator {
         let half_width = stroke.width * 0.5;
 
         let segments_per_corner = 8;
-        let base_idx = self.vertices.len() as u32;
+        let base_idx = self.mesh.vertices.len() as u32;
 
         match rect.corner_shape {
             CornerShape::None => {
@@ -379,8 +373,8 @@ impl Tessellator {
                 ];
 
                 for i in 0..5 {
-                    self.vertices.push(Vertex::new(outer[i], stroke.color));
-                    self.vertices.push(Vertex::new(inner[i], stroke.color));
+                    self.mesh.vertices.push(Vertex::new(outer[i], stroke.color));
+                    self.mesh.vertices.push(Vertex::new(inner[i], stroke.color));
                 }
             }
             CornerShape::Round(_) => {
@@ -400,20 +394,22 @@ impl Tessellator {
 
                         let outer_x = cx + (extent + half_width) * cos_a;
                         let outer_y = cy + (extent + half_width) * sin_a;
-                        self.vertices
+                        self.mesh
+                            .vertices
                             .push(Vertex::new([outer_x, outer_y], stroke.color));
 
                         let inner_x = cx + (extent - half_width).max(0.0) * cos_a;
                         let inner_y = cy + (extent - half_width).max(0.0) * sin_a;
-                        self.vertices
+                        self.mesh
+                            .vertices
                             .push(Vertex::new([inner_x, inner_y], stroke.color));
                     }
                 }
 
-                let first_outer = self.vertices[base_idx as usize];
-                let first_inner = self.vertices[(base_idx + 1) as usize];
-                self.vertices.push(first_outer);
-                self.vertices.push(first_inner);
+                let first_outer = self.mesh.vertices[base_idx as usize];
+                let first_inner = self.mesh.vertices[(base_idx + 1) as usize];
+                self.mesh.vertices.push(first_outer);
+                self.mesh.vertices.push(first_inner);
             }
             CornerShape::Cut(_) => {
                 // Stroke follows the cut corners
@@ -430,9 +426,11 @@ impl Tessellator {
                 let sqrt2 = (2.0_f32).sqrt();
 
                 // Top edge: horizontal, normal is vertical
-                self.vertices
+                self.mesh
+                    .vertices
                     .push(Vertex::new([max_x - cut, min_y - half_width], stroke.color));
-                self.vertices
+                self.mesh
+                    .vertices
                     .push(Vertex::new([max_x - cut, min_y + half_width], stroke.color));
 
                 // Top-right diagonal: direction is (cut, cut), length is cut*sqrt(2)
@@ -440,19 +438,21 @@ impl Tessellator {
                 let nx = 1.0 / sqrt2;
                 let ny = -1.0 / sqrt2;
 
-                self.vertices.push(Vertex::new(
+                self.mesh.vertices.push(Vertex::new(
                     [max_x + half_width * nx, min_y + cut - half_width * ny],
                     stroke.color,
                 ));
-                self.vertices.push(Vertex::new(
+                self.mesh.vertices.push(Vertex::new(
                     [max_x - half_width * nx, min_y + cut + half_width * ny],
                     stroke.color,
                 ));
 
                 // Right edge: vertical, normal is horizontal
-                self.vertices
+                self.mesh
+                    .vertices
                     .push(Vertex::new([max_x + half_width, max_y - cut], stroke.color));
-                self.vertices
+                self.mesh
+                    .vertices
                     .push(Vertex::new([max_x - half_width, max_y - cut], stroke.color));
 
                 // Bottom-right diagonal: direction is (-cut, cut), length is cut*sqrt(2)
@@ -460,19 +460,21 @@ impl Tessellator {
                 let nx = 1.0 / sqrt2;
                 let ny = 1.0 / sqrt2;
 
-                self.vertices.push(Vertex::new(
+                self.mesh.vertices.push(Vertex::new(
                     [max_x - cut + half_width * nx, max_y + half_width * ny],
                     stroke.color,
                 ));
-                self.vertices.push(Vertex::new(
+                self.mesh.vertices.push(Vertex::new(
                     [max_x - cut - half_width * nx, max_y - half_width * ny],
                     stroke.color,
                 ));
 
                 // Bottom edge: horizontal, normal is vertical
-                self.vertices
+                self.mesh
+                    .vertices
                     .push(Vertex::new([min_x + cut, max_y + half_width], stroke.color));
-                self.vertices
+                self.mesh
+                    .vertices
                     .push(Vertex::new([min_x + cut, max_y - half_width], stroke.color));
 
                 // Bottom-left diagonal: direction is (-cut, -cut), length is cut*sqrt(2)
@@ -480,19 +482,21 @@ impl Tessellator {
                 let nx = -1.0 / sqrt2;
                 let ny = 1.0 / sqrt2;
 
-                self.vertices.push(Vertex::new(
+                self.mesh.vertices.push(Vertex::new(
                     [min_x - half_width * nx, max_y - cut + half_width * ny],
                     stroke.color,
                 ));
-                self.vertices.push(Vertex::new(
+                self.mesh.vertices.push(Vertex::new(
                     [min_x + half_width * nx, max_y - cut - half_width * ny],
                     stroke.color,
                 ));
 
                 // Left edge: vertical, normal is horizontal
-                self.vertices
+                self.mesh
+                    .vertices
                     .push(Vertex::new([min_x - half_width, min_y + cut], stroke.color));
-                self.vertices
+                self.mesh
+                    .vertices
                     .push(Vertex::new([min_x + half_width, min_y + cut], stroke.color));
 
                 // Top-left diagonal: direction is (cut, -cut), length is cut*sqrt(2)
@@ -500,19 +504,21 @@ impl Tessellator {
                 let nx = -1.0 / sqrt2;
                 let ny = -1.0 / sqrt2;
 
-                self.vertices.push(Vertex::new(
+                self.mesh.vertices.push(Vertex::new(
                     [min_x + cut - half_width * nx, min_y - half_width * ny],
                     stroke.color,
                 ));
-                self.vertices.push(Vertex::new(
+                self.mesh.vertices.push(Vertex::new(
                     [min_x + cut + half_width * nx, min_y + half_width * ny],
                     stroke.color,
                 ));
 
                 // Close the loop - back to top edge start
-                self.vertices
+                self.mesh
+                    .vertices
                     .push(Vertex::new([max_x - cut, min_y - half_width], stroke.color));
-                self.vertices
+                self.mesh
+                    .vertices
                     .push(Vertex::new([max_x - cut, min_y + half_width], stroke.color));
             }
             CornerShape::InverseRound(_) => {
@@ -652,13 +658,13 @@ impl Tessellator {
 
                 // Add vertices in quad strip order (outer, inner alternating)
                 for i in 0..outer_verts.len() {
-                    self.vertices.push(outer_verts[i]);
-                    self.vertices.push(inner_verts[i]);
+                    self.mesh.vertices.push(outer_verts[i]);
+                    self.mesh.vertices.push(inner_verts[i]);
                 }
 
                 // Close the loop
-                self.vertices.push(outer_verts[0]);
-                self.vertices.push(inner_verts[0]);
+                self.mesh.vertices.push(outer_verts[0]);
+                self.mesh.vertices.push(inner_verts[0]);
             }
             CornerShape::Squircle { smoothness, .. } => {
                 // Stroke for squircle corners
@@ -689,35 +695,37 @@ impl Tessellator {
 
                         let outer_x = cx + outer_r * cos_theta;
                         let outer_y = cy + outer_r * sin_theta;
-                        self.vertices
+                        self.mesh
+                            .vertices
                             .push(Vertex::new([outer_x, outer_y], stroke.color));
 
                         let inner_x = cx + inner_r * cos_theta;
                         let inner_y = cy + inner_r * sin_theta;
-                        self.vertices
+                        self.mesh
+                            .vertices
                             .push(Vertex::new([inner_x, inner_y], stroke.color));
                     }
                 }
 
-                let first_outer = self.vertices[base_idx as usize];
-                let first_inner = self.vertices[(base_idx + 1) as usize];
-                self.vertices.push(first_outer);
-                self.vertices.push(first_inner);
+                let first_outer = self.mesh.vertices[base_idx as usize];
+                let first_inner = self.mesh.vertices[(base_idx + 1) as usize];
+                self.mesh.vertices.push(first_outer);
+                self.mesh.vertices.push(first_inner);
             }
         }
 
         // Create quad strip indices
-        let pairs = (self.vertices.len() as u32 - base_idx) / 2;
+        let pairs = (self.mesh.vertices.len() as u32 - base_idx) / 2;
         for i in 0..(pairs - 1) {
             let idx = base_idx + i * 2;
 
-            self.indices.push(idx);
-            self.indices.push(idx + 1);
-            self.indices.push(idx + 2);
+            self.mesh.indices.push(idx);
+            self.mesh.indices.push(idx + 1);
+            self.mesh.indices.push(idx + 2);
 
-            self.indices.push(idx + 1);
-            self.indices.push(idx + 3);
-            self.indices.push(idx + 2);
+            self.mesh.indices.push(idx + 1);
+            self.mesh.indices.push(idx + 3);
+            self.mesh.indices.push(idx + 2);
         }
     }
 }

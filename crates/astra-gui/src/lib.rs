@@ -6,8 +6,12 @@
 //! on any specific graphics API. Rendering is handled by separate backend crates
 //! like `astra-gui-wgpu`.
 
+mod mesh;
 mod output;
 mod primitives;
+mod tessellate;
 
+pub use mesh::*;
 pub use output::*;
 pub use primitives::*;
+pub use tessellate::*;
