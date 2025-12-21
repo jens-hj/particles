@@ -171,13 +171,13 @@ impl Node {
                         total += child.margin.left;
                     }
 
-                    // Between this child and the next, use the max of right and next's left, plus gap
+                    // Between this child and the next, collapse gap with margins
                     if i + 1 < self.children.len() {
                         let next_child = &self.children[i + 1];
                         // Collapsed margin is the max of the two adjacent margins
-                        total += child.margin.right.max(next_child.margin.left);
-                        // Add gap between children
-                        total += self.gap;
+                        let collapsed_margin = child.margin.right.max(next_child.margin.left);
+                        // Collapse gap with margin - use the larger of gap or collapsed margin
+                        total += self.gap.max(collapsed_margin);
                     } else {
                         // Last child: just add its right margin
                         total += child.margin.right;
@@ -193,13 +193,13 @@ impl Node {
                         total += child.margin.top;
                     }
 
-                    // Between this child and the next, use the max of bottom and next's top, plus gap
+                    // Between this child and the next, collapse gap with margins
                     if i + 1 < self.children.len() {
                         let next_child = &self.children[i + 1];
                         // Collapsed margin is the max of the two adjacent margins
-                        total += child.margin.bottom.max(next_child.margin.top);
-                        // Add gap between children
-                        total += self.gap;
+                        let collapsed_margin = child.margin.bottom.max(next_child.margin.top);
+                        // Collapse gap with margin - use the larger of gap or collapsed margin
+                        total += self.gap.max(collapsed_margin);
                     } else {
                         // Last child: just add its bottom margin
                         total += child.margin.bottom;
@@ -313,27 +313,31 @@ impl Node {
                 child_parent_height,
             );
 
-            // Advance position for next child with collapsed margins and gap
+            // Advance position for next child with collapsed spacing (gap collapsed with margins)
             if let Some(child_layout) = self.children[i].computed_layout() {
                 let child_rect = child_layout.rect;
 
                 if i + 1 < num_children {
                     match self.layout_direction {
                         LayoutDirection::Horizontal => {
-                            // Move to end of current child, then add collapsed margin and gap
+                            // Move to end of current child, then add collapsed spacing
                             let collapsed_margin = self.children[i]
                                 .margin
                                 .right
                                 .max(self.children[i + 1].margin.left);
-                            current_x = child_rect.max[0] + collapsed_margin + self.gap;
+                            // Collapse gap with margin - use the larger value
+                            let spacing = self.gap.max(collapsed_margin);
+                            current_x = child_rect.max[0] + spacing;
                         }
                         LayoutDirection::Vertical => {
-                            // Move to end of current child, then add collapsed margin and gap
+                            // Move to end of current child, then add collapsed spacing
                             let collapsed_margin = self.children[i]
                                 .margin
                                 .bottom
                                 .max(self.children[i + 1].margin.top);
-                            current_y = child_rect.max[1] + collapsed_margin + self.gap;
+                            // Collapse gap with margin - use the larger value
+                            let spacing = self.gap.max(collapsed_margin);
+                            current_y = child_rect.max[1] + spacing;
                         }
                     }
                 }

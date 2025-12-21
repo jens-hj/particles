@@ -338,10 +338,13 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                         .with_corner_shape(CornerShape::Round(50.0)),
                 ))
                 .with_children(vec![
-                    Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
-                        StyledRect::new(Default::default(), Color::new(0.4, 0.3, 0.5, 1.0))
-                            .with_corner_shape(CornerShape::Round(25.0)),
-                    )),
+                    Node::new()
+                        .with_margin(Spacing::right(10.0))
+                        .with_width(Size::Fill)
+                        .with_shape(Shape::Rect(
+                            StyledRect::new(Default::default(), Color::new(0.4, 0.3, 0.5, 1.0))
+                                .with_corner_shape(CornerShape::Round(25.0)),
+                        )),
                     Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
                         StyledRect::new(Default::default(), Color::new(0.3, 0.4, 0.5, 1.0))
                             .with_corner_shape(CornerShape::Round(25.0)),
