@@ -374,15 +374,12 @@ impl Node {
                         )),
                     ));
                 }
-                // Draw right margin
+                // Draw right margin (excluding top and bottom corners)
                 if self.margin.right > 0.0 {
                     shapes.push((
                         Rect::new(
-                            [rect.max[0], rect.min[1] - self.margin.top],
-                            [
-                                rect.max[0] + self.margin.right,
-                                rect.max[1] + self.margin.bottom,
-                            ],
+                            [rect.max[0], rect.min[1]],
+                            [rect.max[0] + self.margin.right, rect.max[1]],
                         ),
                         Shape::Rect(StyledRect::new(
                             Default::default(),
@@ -390,7 +387,7 @@ impl Node {
                         )),
                     ));
                 }
-                // Draw bottom margin
+                // Draw bottom margin (full width including corners)
                 if self.margin.bottom > 0.0 {
                     shapes.push((
                         Rect::new(
@@ -406,15 +403,12 @@ impl Node {
                         )),
                     ));
                 }
-                // Draw left margin
+                // Draw left margin (excluding top and bottom corners)
                 if self.margin.left > 0.0 {
                     shapes.push((
                         Rect::new(
-                            [
-                                rect.min[0] - self.margin.left,
-                                rect.min[1] - self.margin.top,
-                            ],
-                            [rect.min[0], rect.max[1] + self.margin.bottom],
+                            [rect.min[0] - self.margin.left, rect.min[1]],
+                            [rect.min[0], rect.max[1]],
                         ),
                         Shape::Rect(StyledRect::new(
                             Default::default(),
@@ -457,7 +451,7 @@ impl Node {
                     || self.padding.bottom > 0.0
                     || self.padding.left > 0.0)
             {
-                // Draw top padding
+                // Draw top padding (full width)
                 if self.padding.top > 0.0 {
                     shapes.push((
                         Rect::new(
@@ -470,12 +464,15 @@ impl Node {
                         )),
                     ));
                 }
-                // Draw right padding
+                // Draw right padding (excluding top and bottom corners)
                 if self.padding.right > 0.0 {
                     shapes.push((
                         Rect::new(
-                            [rect.max[0] - self.padding.right, rect.min[1]],
-                            [rect.max[0], rect.max[1]],
+                            [
+                                rect.max[0] - self.padding.right,
+                                rect.min[1] + self.padding.top,
+                            ],
+                            [rect.max[0], rect.max[1] - self.padding.bottom],
                         ),
                         Shape::Rect(StyledRect::new(
                             Default::default(),
@@ -483,7 +480,7 @@ impl Node {
                         )),
                     ));
                 }
-                // Draw bottom padding
+                // Draw bottom padding (full width)
                 if self.padding.bottom > 0.0 {
                     shapes.push((
                         Rect::new(
@@ -496,12 +493,15 @@ impl Node {
                         )),
                     ));
                 }
-                // Draw left padding
+                // Draw left padding (excluding top and bottom corners)
                 if self.padding.left > 0.0 {
                     shapes.push((
                         Rect::new(
-                            [rect.min[0], rect.min[1]],
-                            [rect.min[0] + self.padding.left, rect.max[1]],
+                            [rect.min[0], rect.min[1] + self.padding.top],
+                            [
+                                rect.min[0] + self.padding.left,
+                                rect.max[1] - self.padding.bottom,
+                            ],
                         ),
                         Shape::Rect(StyledRect::new(
                             Default::default(),
