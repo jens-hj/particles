@@ -326,31 +326,26 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                                 )),
                         ]),
                 ]),
-            // Footer - 10% height with three Fill children laid out horizontally
+            // Footer - 10% height with three Fill children laid out horizontally with gap
             Node::new()
                 .with_height(Size::fraction(0.1))
                 .with_offset(Offset::new(0.0, 0.0))
                 .with_padding(Spacing::all(10.0))
+                .with_gap(10.0)
                 .with_layout_direction(LayoutDirection::Horizontal)
                 .with_shape(Shape::Rect(
                     StyledRect::new(Default::default(), Color::new(0.2, 0.2, 0.25, 1.0))
                         .with_corner_shape(CornerShape::Round(50.0)),
                 ))
                 .with_children(vec![
-                    Node::new()
-                        .with_width(Size::Fill)
-                        .with_margin(Spacing::new(0.0, 10.0, 0.0, 0.0))
-                        .with_shape(Shape::Rect(
-                            StyledRect::new(Default::default(), Color::new(0.4, 0.3, 0.5, 1.0))
-                                .with_corner_shape(CornerShape::Round(25.0)),
-                        )),
-                    Node::new()
-                        .with_width(Size::Fill)
-                        .with_margin(Spacing::new(0.0, 10.0, 0.0, 0.0))
-                        .with_shape(Shape::Rect(
-                            StyledRect::new(Default::default(), Color::new(0.3, 0.4, 0.5, 1.0))
-                                .with_corner_shape(CornerShape::Round(25.0)),
-                        )),
+                    Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
+                        StyledRect::new(Default::default(), Color::new(0.4, 0.3, 0.5, 1.0))
+                            .with_corner_shape(CornerShape::Round(25.0)),
+                    )),
+                    Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
+                        StyledRect::new(Default::default(), Color::new(0.3, 0.4, 0.5, 1.0))
+                            .with_corner_shape(CornerShape::Round(25.0)),
+                    )),
                     Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
                         StyledRect::new(Default::default(), Color::new(0.5, 0.4, 0.3, 1.0))
                             .with_corner_shape(CornerShape::Round(25.0)),

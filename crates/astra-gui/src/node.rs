@@ -13,6 +13,8 @@ pub struct Node {
     pub padding: Spacing,
     /// Margin outside the node
     pub margin: Spacing,
+    /// Gap between children in the layout direction
+    pub gap: f32,
     /// Layout direction for children
     pub layout_direction: LayoutDirection,
     /// Optional shape to render for this node
@@ -32,6 +34,7 @@ impl Node {
             offset: Offset::zero(),
             padding: Spacing::zero(),
             margin: Spacing::zero(),
+            gap: 0.0,
             layout_direction: LayoutDirection::Vertical,
             shape: None,
             children: Vec::new(),
@@ -72,6 +75,12 @@ impl Node {
     /// Set the margin
     pub fn with_margin(mut self, margin: Spacing) -> Self {
         self.margin = margin;
+        self
+    }
+
+    /// Set the gap between children
+    pub fn with_gap(mut self, gap: f32) -> Self {
+        self.gap = gap;
         self
     }
 
@@ -152,8 +161,8 @@ impl Node {
         let mut current_x = content_x;
         let mut current_y = content_y;
 
-        // Calculate total margin space in the layout direction (with collapsing)
-        let (total_horizontal_margin, total_vertical_margin) = match self.layout_direction {
+        // Calculate total spacing in the layout direction (margins + gaps)
+        let (total_horizontal_spacing, total_vertical_spacing) = match self.layout_direction {
             LayoutDirection::Horizontal => {
                 let mut total = 0.0f32;
                 for (i, child) in self.children.iter().enumerate() {
@@ -162,11 +171,13 @@ impl Node {
                         total += child.margin.left;
                     }
 
-                    // Between this child and the next, use the max of right and next's left
+                    // Between this child and the next, use the max of right and next's left, plus gap
                     if i + 1 < self.children.len() {
                         let next_child = &self.children[i + 1];
                         // Collapsed margin is the max of the two adjacent margins
                         total += child.margin.right.max(next_child.margin.left);
+                        // Add gap between children
+                        total += self.gap;
                     } else {
                         // Last child: just add its right margin
                         total += child.margin.right;
@@ -182,11 +193,13 @@ impl Node {
                         total += child.margin.top;
                     }
 
-                    // Between this child and the next, use the max of bottom and next's top
+                    // Between this child and the next, use the max of bottom and next's top, plus gap
                     if i + 1 < self.children.len() {
                         let next_child = &self.children[i + 1];
                         // Collapsed margin is the max of the two adjacent margins
                         total += child.margin.bottom.max(next_child.margin.top);
+                        // Add gap between children
+                        total += self.gap;
                     } else {
                         // Last child: just add its bottom margin
                         total += child.margin.bottom;
@@ -196,9 +209,9 @@ impl Node {
             }
         };
 
-        // Space available for children after subtracting margins
-        let available_width = (content_width - total_horizontal_margin).max(0.0);
-        let available_height = (content_height - total_vertical_margin).max(0.0);
+        // Space available for children after subtracting spacing (margins + gaps)
+        let available_width = (content_width - total_horizontal_spacing).max(0.0);
+        let available_height = (content_height - total_vertical_spacing).max(0.0);
 
         // Calculate remaining space for Fill children
         let (fill_size_width, fill_size_height) = match self.layout_direction {
@@ -300,27 +313,27 @@ impl Node {
                 child_parent_height,
             );
 
-            // Advance position for next child with collapsed margins
+            // Advance position for next child with collapsed margins and gap
             if let Some(child_layout) = self.children[i].computed_layout() {
                 let child_rect = child_layout.rect;
 
                 if i + 1 < num_children {
                     match self.layout_direction {
                         LayoutDirection::Horizontal => {
-                            // Move to end of current child, then add collapsed margin
+                            // Move to end of current child, then add collapsed margin and gap
                             let collapsed_margin = self.children[i]
                                 .margin
                                 .right
                                 .max(self.children[i + 1].margin.left);
-                            current_x = child_rect.max[0] + collapsed_margin;
+                            current_x = child_rect.max[0] + collapsed_margin + self.gap;
                         }
                         LayoutDirection::Vertical => {
-                            // Move to end of current child, then add collapsed margin
+                            // Move to end of current child, then add collapsed margin and gap
                             let collapsed_margin = self.children[i]
                                 .margin
                                 .bottom
                                 .max(self.children[i + 1].margin.top);
-                            current_y = child_rect.max[1] + collapsed_margin;
+                            current_y = child_rect.max[1] + collapsed_margin + self.gap;
                         }
                     }
                 }
