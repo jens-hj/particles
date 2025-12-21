@@ -7,6 +7,8 @@ pub enum Size {
     Fixed(f32),
     /// Relative size as a fraction of parent (0.0 to 1.0)
     Relative(f32),
+    /// Fill all remaining available space
+    Fill,
 }
 
 impl Size {
@@ -21,11 +23,19 @@ impl Size {
     }
 
     /// Resolve the size given the parent's dimension
+    /// Note: For Fill variant, this returns the full parent_size as a fallback.
+    /// The actual size should be calculated by the layout algorithm based on remaining space.
     pub fn resolve(&self, parent_size: f32) -> f32 {
         match self {
             Size::Fixed(px) => *px,
             Size::Relative(fraction) => parent_size * fraction,
+            Size::Fill => parent_size,
         }
+    }
+
+    /// Check if this size is Fill
+    pub const fn is_fill(&self) -> bool {
+        matches!(self, Size::Fill)
     }
 }
 

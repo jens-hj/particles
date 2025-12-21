@@ -200,6 +200,54 @@ impl Node {
         let adjusted_content_width = (content_width - total_horizontal_margin).max(0.0);
         let adjusted_content_height = (content_height - total_vertical_margin).max(0.0);
 
+        // Calculate remaining space for Fill children
+        let (fill_size_width, fill_size_height) = match self.layout_direction {
+            LayoutDirection::Horizontal => {
+                // Count Fill children and calculate space used by non-Fill children
+                let mut fill_count = 0;
+                let mut used_width = 0.0;
+
+                for child in &self.children {
+                    if child.width.is_fill() {
+                        fill_count += 1;
+                    } else {
+                        used_width += child.width.resolve(adjusted_content_width);
+                    }
+                }
+
+                let remaining_width = (adjusted_content_width - used_width).max(0.0);
+                let fill_width = if fill_count > 0 {
+                    remaining_width / fill_count as f32
+                } else {
+                    0.0
+                };
+
+                (fill_width, adjusted_content_height)
+            }
+            LayoutDirection::Vertical => {
+                // Count Fill children and calculate space used by non-Fill children
+                let mut fill_count = 0;
+                let mut used_height = 0.0;
+
+                for child in &self.children {
+                    if child.height.is_fill() {
+                        fill_count += 1;
+                    } else {
+                        used_height += child.height.resolve(adjusted_content_height);
+                    }
+                }
+
+                let remaining_height = (adjusted_content_height - used_height).max(0.0);
+                let fill_height = if fill_count > 0 {
+                    remaining_height / fill_count as f32
+                } else {
+                    0.0
+                };
+
+                (adjusted_content_width, fill_height)
+            }
+        };
+
         let num_children = self.children.len();
         for i in 0..num_children {
             // Apply leading margin for first child or collapsed margin was already added for subsequent children
@@ -232,10 +280,22 @@ impl Node {
             };
 
             // Pass the adjusted parent dimensions (after margin deduction) so percentages are calculated correctly
+            // For Fill children, use the calculated fill size instead
+            let child_parent_width = if self.children[i].width.is_fill() {
+                fill_size_width
+            } else {
+                adjusted_content_width
+            };
+            let child_parent_height = if self.children[i].height.is_fill() {
+                fill_size_height
+            } else {
+                adjusted_content_height
+            };
+
             self.children[i].compute_layout_with_parent_size(
                 child_available_rect,
-                adjusted_content_width,
-                adjusted_content_height,
+                child_parent_width,
+                child_parent_height,
             );
 
             // Advance position for next child with collapsed margins
