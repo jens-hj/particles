@@ -19,7 +19,19 @@ impl FullOutput {
     /// Create output from a node tree
     ///
     /// `window_size` is the (width, height) of the window
-    pub fn from_node(mut root: Node, window_size: (f32, f32)) -> Self {
+    pub fn from_node(root: Node, window_size: (f32, f32)) -> Self {
+        Self::from_node_with_debug(root, window_size, None)
+    }
+
+    /// Create output from a node tree with optional debug visualization
+    ///
+    /// `window_size` is the (width, height) of the window
+    /// `debug_options` configures which debug visualizations to show
+    pub fn from_node_with_debug(
+        mut root: Node,
+        window_size: (f32, f32),
+        debug_options: Option<crate::debug::DebugOptions>,
+    ) -> Self {
         // Compute layout starting from the full window
         let window_rect = Rect::new([0.0, 0.0], [window_size.0, window_size.1]);
         root.compute_layout(window_rect);
@@ -27,6 +39,13 @@ impl FullOutput {
         // Collect all shapes
         let mut collected_shapes = Vec::new();
         root.collect_shapes(&mut collected_shapes);
+
+        // Add debug shapes if enabled
+        if let Some(options) = debug_options {
+            if options.is_enabled() {
+                root.collect_debug_shapes(&mut collected_shapes, &options);
+            }
+        }
 
         // Convert to ClippedShapes
         let shapes = collected_shapes

@@ -1,7 +1,7 @@
 ///! Demonstrates the node-based layout system with nested elements
 use astra_gui::{
-    Color, CornerShape, FullOutput, LayoutDirection, Node, Offset, Shape, Size, Spacing, Stroke,
-    StyledRect,
+    Color, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node, Offset, Shape, Size,
+    Spacing, Stroke, StyledRect,
 };
 use astra_gui_wgpu::Renderer;
 use std::sync::Arc;
@@ -15,6 +15,7 @@ use winit::{
 struct App {
     window: Option<Arc<Window>>,
     gpu_state: Option<GpuState>,
+    debug_options: DebugOptions,
 }
 
 struct GpuState {
@@ -96,7 +97,7 @@ impl GpuState {
         }
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    fn render(&mut self, debug_options: &DebugOptions) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -134,8 +135,12 @@ impl GpuState {
 
         self.queue.submit(std::iter::once(encoder.finish()));
 
-        // Create UI node tree and render
-        let ui_output = create_demo_ui(self.config.width as f32, self.config.height as f32);
+        // Create UI node tree and render (with debug visualization)
+        let ui_output = create_demo_ui(
+            self.config.width as f32,
+            self.config.height as f32,
+            debug_options,
+        );
 
         let mut encoder = self
             .device
@@ -160,7 +165,7 @@ impl GpuState {
     }
 }
 
-fn create_demo_ui(width: f32, height: f32) -> FullOutput {
+fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> FullOutput {
     // Root container - full window with padding
     let root = Node::new()
         .with_padding(Spacing::all(20.0))
@@ -353,7 +358,15 @@ fn create_demo_ui(width: f32, height: f32) -> FullOutput {
                 ]),
         ]);
 
-    FullOutput::from_node(root, (width, height))
+    FullOutput::from_node_with_debug(
+        root,
+        (width, height),
+        if debug_options.is_enabled() {
+            Some(*debug_options)
+        } else {
+            None
+        },
+    )
 }
 
 impl ApplicationHandler for App {
@@ -387,6 +400,43 @@ impl ApplicationHandler for App {
                 ..
             } => event_loop.exit(),
 
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key: winit::keyboard::PhysicalKey::Code(key_code),
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                ..
+            } => match key_code {
+                winit::keyboard::KeyCode::KeyM => {
+                    self.debug_options.show_margins = !self.debug_options.show_margins;
+                    println!("Margins: {}", self.debug_options.show_margins);
+                }
+                winit::keyboard::KeyCode::KeyP => {
+                    self.debug_options.show_padding = !self.debug_options.show_padding;
+                    println!("Padding: {}", self.debug_options.show_padding);
+                }
+                winit::keyboard::KeyCode::KeyB => {
+                    self.debug_options.show_borders = !self.debug_options.show_borders;
+                    println!("Borders: {}", self.debug_options.show_borders);
+                }
+                winit::keyboard::KeyCode::KeyC => {
+                    self.debug_options.show_content_area = !self.debug_options.show_content_area;
+                    println!("Content area: {}", self.debug_options.show_content_area);
+                }
+                winit::keyboard::KeyCode::KeyD => {
+                    if self.debug_options.is_enabled() {
+                        self.debug_options = DebugOptions::none();
+                        println!("Debug: OFF");
+                    } else {
+                        self.debug_options = DebugOptions::all();
+                        println!("Debug: ALL ON");
+                    }
+                }
+                _ => {}
+            },
+
             WindowEvent::Resized(physical_size) => {
                 if let Some(gpu_state) = &mut self.gpu_state {
                     gpu_state.resize(physical_size);
@@ -395,7 +445,7 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 if let Some(gpu_state) = &mut self.gpu_state {
-                    match gpu_state.render() {
+                    match gpu_state.render(&self.debug_options) {
                         Ok(_) => {}
                         Err(wgpu::SurfaceError::Lost) => {
                             if let Some(window) = &self.window {
@@ -426,7 +476,16 @@ fn main() {
     let mut app = App {
         window: None,
         gpu_state: None,
+        debug_options: DebugOptions::none(), // Start with debug off
     };
+
+    println!("Debug controls:");
+    println!("  D - Toggle all debug visualizations");
+    println!("  M - Toggle margins (red)");
+    println!("  P - Toggle padding (blue)");
+    println!("  B - Toggle borders (green)");
+    println!("  C - Toggle content area (yellow)");
+    println!("  ESC - Exit");
 
     event_loop.run_app(&mut app).unwrap();
 }

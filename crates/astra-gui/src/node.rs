@@ -196,9 +196,9 @@ impl Node {
             }
         };
 
-        // Adjusted content dimensions after subtracting margins
-        let adjusted_content_width = (content_width - total_horizontal_margin).max(0.0);
-        let adjusted_content_height = (content_height - total_vertical_margin).max(0.0);
+        // Space available for children after subtracting margins
+        let available_width = (content_width - total_horizontal_margin).max(0.0);
+        let available_height = (content_height - total_vertical_margin).max(0.0);
 
         // Calculate remaining space for Fill children
         let (fill_size_width, fill_size_height) = match self.layout_direction {
@@ -211,18 +211,19 @@ impl Node {
                     if child.width.is_fill() {
                         fill_count += 1;
                     } else {
-                        used_width += child.width.resolve(adjusted_content_width);
+                        used_width += child.width.resolve(available_width);
                     }
                 }
 
-                let remaining_width = (adjusted_content_width - used_width).max(0.0);
+                // Fill children divide the remaining space after non-Fill children
+                let remaining_width = (available_width - used_width).max(0.0);
                 let fill_width = if fill_count > 0 {
                     remaining_width / fill_count as f32
                 } else {
                     0.0
                 };
 
-                (fill_width, adjusted_content_height)
+                (fill_width, available_height)
             }
             LayoutDirection::Vertical => {
                 // Count Fill children and calculate space used by non-Fill children
@@ -233,18 +234,19 @@ impl Node {
                     if child.height.is_fill() {
                         fill_count += 1;
                     } else {
-                        used_height += child.height.resolve(adjusted_content_height);
+                        used_height += child.height.resolve(available_height);
                     }
                 }
 
-                let remaining_height = (adjusted_content_height - used_height).max(0.0);
+                // Fill children divide the remaining space after non-Fill children
+                let remaining_height = (available_height - used_height).max(0.0);
                 let fill_height = if fill_count > 0 {
                     remaining_height / fill_count as f32
                 } else {
                     0.0
                 };
 
-                (adjusted_content_width, fill_height)
+                (available_width, fill_height)
             }
         };
 
@@ -279,17 +281,17 @@ impl Node {
                 }
             };
 
-            // Pass the adjusted parent dimensions (after margin deduction) so percentages are calculated correctly
-            // For Fill children, use the calculated fill size instead
+            // Pass the available dimensions for size calculations
+            // For Fill children, we need to add back their own margins since they'll subtract them
             let child_parent_width = if self.children[i].width.is_fill() {
-                fill_size_width
+                fill_size_width + self.children[i].margin.left + self.children[i].margin.right
             } else {
-                adjusted_content_width
+                available_width + self.children[i].margin.left + self.children[i].margin.right
             };
             let child_parent_height = if self.children[i].height.is_fill() {
-                fill_size_height
+                fill_size_height + self.children[i].margin.top + self.children[i].margin.bottom
             } else {
-                adjusted_content_height
+                available_height + self.children[i].margin.top + self.children[i].margin.bottom
             };
 
             self.children[i].compute_layout_with_parent_size(
@@ -334,6 +336,195 @@ impl Node {
 
         for child in &self.children {
             child.collect_shapes(shapes);
+        }
+    }
+
+    /// Collect debug visualization shapes showing margins, padding, and content areas
+    pub fn collect_debug_shapes(
+        &self,
+        shapes: &mut Vec<(Rect, Shape)>,
+        options: &crate::debug::DebugOptions,
+    ) {
+        use crate::color::Color;
+        use crate::primitives::{Stroke, StyledRect};
+
+        if let Some(layout) = &self.computed {
+            let rect = layout.rect;
+
+            // Draw margin area (outermost, semi-transparent red showing margin space)
+            if options.show_margins
+                && (self.margin.top > 0.0
+                    || self.margin.right > 0.0
+                    || self.margin.bottom > 0.0
+                    || self.margin.left > 0.0)
+            {
+                // Draw top margin
+                if self.margin.top > 0.0 {
+                    shapes.push((
+                        Rect::new(
+                            [
+                                rect.min[0] - self.margin.left,
+                                rect.min[1] - self.margin.top,
+                            ],
+                            [rect.max[0] + self.margin.right, rect.min[1]],
+                        ),
+                        Shape::Rect(StyledRect::new(
+                            Default::default(),
+                            Color::new(1.0, 0.0, 0.0, 0.2),
+                        )),
+                    ));
+                }
+                // Draw right margin
+                if self.margin.right > 0.0 {
+                    shapes.push((
+                        Rect::new(
+                            [rect.max[0], rect.min[1] - self.margin.top],
+                            [
+                                rect.max[0] + self.margin.right,
+                                rect.max[1] + self.margin.bottom,
+                            ],
+                        ),
+                        Shape::Rect(StyledRect::new(
+                            Default::default(),
+                            Color::new(1.0, 0.0, 0.0, 0.2),
+                        )),
+                    ));
+                }
+                // Draw bottom margin
+                if self.margin.bottom > 0.0 {
+                    shapes.push((
+                        Rect::new(
+                            [rect.min[0] - self.margin.left, rect.max[1]],
+                            [
+                                rect.max[0] + self.margin.right,
+                                rect.max[1] + self.margin.bottom,
+                            ],
+                        ),
+                        Shape::Rect(StyledRect::new(
+                            Default::default(),
+                            Color::new(1.0, 0.0, 0.0, 0.2),
+                        )),
+                    ));
+                }
+                // Draw left margin
+                if self.margin.left > 0.0 {
+                    shapes.push((
+                        Rect::new(
+                            [
+                                rect.min[0] - self.margin.left,
+                                rect.min[1] - self.margin.top,
+                            ],
+                            [rect.min[0], rect.max[1] + self.margin.bottom],
+                        ),
+                        Shape::Rect(StyledRect::new(
+                            Default::default(),
+                            Color::new(1.0, 0.0, 0.0, 0.2),
+                        )),
+                    ));
+                }
+            }
+
+            // Draw content area (yellow outline - area inside padding)
+            if options.show_content_area
+                && (self.padding.top > 0.0
+                    || self.padding.right > 0.0
+                    || self.padding.bottom > 0.0
+                    || self.padding.left > 0.0)
+            {
+                let content_rect = Rect::new(
+                    [
+                        rect.min[0] + self.padding.left,
+                        rect.min[1] + self.padding.top,
+                    ],
+                    [
+                        rect.max[0] - self.padding.right,
+                        rect.max[1] - self.padding.bottom,
+                    ],
+                );
+                shapes.push((
+                    content_rect,
+                    Shape::Rect(
+                        StyledRect::new(Default::default(), Color::transparent())
+                            .with_stroke(Stroke::new(1.0, Color::new(1.0, 1.0, 0.0, 0.5))),
+                    ),
+                ));
+            }
+
+            // Draw padding area (semi-transparent blue showing the padding inset)
+            if options.show_padding
+                && (self.padding.top > 0.0
+                    || self.padding.right > 0.0
+                    || self.padding.bottom > 0.0
+                    || self.padding.left > 0.0)
+            {
+                // Draw top padding
+                if self.padding.top > 0.0 {
+                    shapes.push((
+                        Rect::new(
+                            [rect.min[0], rect.min[1]],
+                            [rect.max[0], rect.min[1] + self.padding.top],
+                        ),
+                        Shape::Rect(StyledRect::new(
+                            Default::default(),
+                            Color::new(0.0, 0.0, 1.0, 0.2),
+                        )),
+                    ));
+                }
+                // Draw right padding
+                if self.padding.right > 0.0 {
+                    shapes.push((
+                        Rect::new(
+                            [rect.max[0] - self.padding.right, rect.min[1]],
+                            [rect.max[0], rect.max[1]],
+                        ),
+                        Shape::Rect(StyledRect::new(
+                            Default::default(),
+                            Color::new(0.0, 0.0, 1.0, 0.2),
+                        )),
+                    ));
+                }
+                // Draw bottom padding
+                if self.padding.bottom > 0.0 {
+                    shapes.push((
+                        Rect::new(
+                            [rect.min[0], rect.max[1] - self.padding.bottom],
+                            [rect.max[0], rect.max[1]],
+                        ),
+                        Shape::Rect(StyledRect::new(
+                            Default::default(),
+                            Color::new(0.0, 0.0, 1.0, 0.2),
+                        )),
+                    ));
+                }
+                // Draw left padding
+                if self.padding.left > 0.0 {
+                    shapes.push((
+                        Rect::new(
+                            [rect.min[0], rect.min[1]],
+                            [rect.min[0] + self.padding.left, rect.max[1]],
+                        ),
+                        Shape::Rect(StyledRect::new(
+                            Default::default(),
+                            Color::new(0.0, 0.0, 1.0, 0.2),
+                        )),
+                    ));
+                }
+            }
+
+            // Draw node border (green outline for the actual node rect)
+            if options.show_borders {
+                shapes.push((
+                    rect,
+                    Shape::Rect(
+                        StyledRect::new(Default::default(), Color::transparent())
+                            .with_stroke(Stroke::new(1.0, Color::new(0.0, 1.0, 0.0, 0.5))),
+                    ),
+                ));
+            }
+        }
+
+        for child in &self.children {
+            child.collect_debug_shapes(shapes, options);
         }
     }
 }
