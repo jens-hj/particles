@@ -534,13 +534,15 @@ impl Tessellator {
                 let mut inner_vertices = Vec::new();
 
                 // Top right outer
-                outer_vertices.push(Vertex::new(
+                let outer_vertex = Vertex::new(
                     [
                         max_x - extent + stroke_half_width,
                         min_y - stroke_half_width,
                     ],
                     stroke.color,
-                ));
+                );
+                outer_vertices.push(outer_vertex);
+                outer_vertices.push(outer_vertex);
                 // Top right inner
                 inner_vertices.push(Vertex::new(
                     [
@@ -572,13 +574,18 @@ impl Tessellator {
                         ],
                         stroke.color,
                     ));
-                    inner_vertices.push(Vertex::new(
+
+                    let inner_vertex = Vertex::new(
                         [
                             arc_x - stroke_half_width * cos_a,
                             arc_y - stroke_half_width * sin_a,
                         ],
                         stroke.color,
-                    ));
+                    );
+                    inner_vertices.push(inner_vertex);
+                    if i == 0 {
+                        inner_vertices.push(inner_vertex);
+                    }
                 }
 
                 // Right top outer
@@ -599,13 +606,15 @@ impl Tessellator {
                 ));
 
                 // Right bottom outer
-                outer_vertices.push(Vertex::new(
+                let outer_vertex = Vertex::new(
                     [
                         max_x + stroke_half_width,
                         max_y - extent + stroke_half_width,
                     ],
                     stroke.color,
-                ));
+                );
+                outer_vertices.push(outer_vertex);
+                outer_vertices.push(outer_vertex);
                 // Right bottom inner
                 inner_vertices.push(Vertex::new(
                     [
@@ -637,13 +646,18 @@ impl Tessellator {
                         ],
                         stroke.color,
                     ));
-                    inner_vertices.push(Vertex::new(
+
+                    let inner_vertex = Vertex::new(
                         [
                             arc_x - stroke_half_width * cos_a,
                             arc_y - stroke_half_width * sin_a,
                         ],
                         stroke.color,
-                    ));
+                    );
+                    inner_vertices.push(inner_vertex);
+                    if i == 0 {
+                        inner_vertices.push(inner_vertex);
+                    }
                 }
 
                 // Bottom right outer
@@ -664,13 +678,15 @@ impl Tessellator {
                 ));
 
                 // Bottom left outer
-                outer_vertices.push(Vertex::new(
+                let outer_vertex = Vertex::new(
                     [
                         min_x + extent - stroke_half_width,
                         max_y + stroke_half_width,
                     ],
                     stroke.color,
-                ));
+                );
+                outer_vertices.push(outer_vertex);
+                outer_vertices.push(outer_vertex);
                 // Bottom left inner
                 inner_vertices.push(Vertex::new(
                     [
@@ -702,13 +718,17 @@ impl Tessellator {
                         ],
                         stroke.color,
                     ));
-                    inner_vertices.push(Vertex::new(
+                    let inner_vertex = Vertex::new(
                         [
                             arc_x - stroke_half_width * cos_a,
                             arc_y - stroke_half_width * sin_a,
                         ],
                         stroke.color,
-                    ));
+                    );
+                    inner_vertices.push(inner_vertex);
+                    if i == 0 {
+                        inner_vertices.push(inner_vertex);
+                    }
                 }
 
                 // Right bottom outer
@@ -729,13 +749,15 @@ impl Tessellator {
                 ));
 
                 // Right top outer
-                outer_vertices.push(Vertex::new(
+                let outer_vertex = Vertex::new(
                     [
                         min_x - stroke_half_width,
                         min_y + extent - stroke_half_width,
                     ],
                     stroke.color,
-                ));
+                );
+                outer_vertices.push(outer_vertex);
+                outer_vertices.push(outer_vertex);
                 // Right top inner
                 inner_vertices.push(Vertex::new(
                     [
@@ -767,13 +789,17 @@ impl Tessellator {
                         ],
                         stroke.color,
                     ));
-                    inner_vertices.push(Vertex::new(
+                    let inner_vertex = Vertex::new(
                         [
                             arc_x - stroke_half_width * cos_a,
                             arc_y - stroke_half_width * sin_a,
                         ],
                         stroke.color,
-                    ));
+                    );
+                    inner_vertices.push(inner_vertex);
+                    if i == 0 {
+                        inner_vertices.push(inner_vertex);
+                    }
                 }
 
                 // Top right outer
