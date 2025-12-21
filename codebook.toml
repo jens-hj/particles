@@ -1,6 +1,7 @@
 words = [
     "bytemuck",
     "lerps",
+    "superellipse",
     "udd",
     "uud",
     "winit",
