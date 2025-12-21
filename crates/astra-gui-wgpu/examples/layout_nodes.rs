@@ -169,6 +169,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
     // Root container - full window with padding
     let root = Node::new()
         .with_padding(Spacing::all(20.0))
+        .with_gap(25.0)
         .with_layout_direction(LayoutDirection::Vertical)
         .with_shape(Shape::Rect(
             StyledRect::new(Default::default(), Color::transparent())
@@ -179,7 +180,6 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
             // Header
             Node::new()
                 .with_height(Size::fraction(0.15))
-                .with_margin(Spacing::new(0.0, 0.0, 25.0, 0.0))
                 .with_shape(Shape::Rect(
                     StyledRect::new(Default::default(), Color::new(0.2, 0.3, 0.5, 1.0))
                         .with_corner_shape(CornerShape::Round(50.0))
@@ -188,14 +188,14 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
             // Main content area - horizontal layout
             Node::new()
                 .with_height(Size::fraction(0.75))
-                .with_margin(Spacing::new(0.0, 0.0, 25.0, 0.0))
+                .with_gap(25.0)
                 .with_layout_direction(LayoutDirection::Horizontal)
                 .with_children(vec![
                     // Left sidebar - 25% width
                     Node::new()
                         .with_width(Size::fraction(0.25))
-                        .with_margin(Spacing::new(0.0, 25.0, 0.0, 0.0))
                         .with_padding(Spacing::all(10.0))
+                        .with_gap(10.0)
                         .with_shape(Shape::Rect(
                             StyledRect::new(Default::default(), Color::new(0.3, 0.2, 0.4, 1.0))
                                 .with_corner_shape(CornerShape::Round(50.0)),
@@ -205,7 +205,6 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                             // Sidebar items
                             Node::new()
                                 .with_height(Size::px(150.0))
-                                .with_margin(Spacing::new(0.0, 0.0, 10.0, 0.0))
                                 .with_shape(Shape::Rect(
                                     StyledRect::new(
                                         Default::default(),
@@ -215,7 +214,6 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                                 )),
                             Node::new()
                                 .with_height(Size::px(150.0))
-                                .with_margin(Spacing::new(0.0, 0.0, 10.0, 0.0))
                                 .with_shape(Shape::Rect(
                                     StyledRect::new(
                                         Default::default(),
@@ -225,7 +223,6 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                                 )),
                             Node::new()
                                 .with_height(Size::px(150.0))
-                                .with_margin(Spacing::new(0.0, 0.0, 10.0, 0.0))
                                 .with_shape(Shape::Rect(
                                     StyledRect::new(
                                         Default::default(),
@@ -235,7 +232,6 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                                 )),
                             Node::new()
                                 .with_height(Size::px(150.0))
-                                .with_margin(Spacing::new(0.0, 0.0, 10.0, 0.0))
                                 .with_shape(Shape::Rect(
                                     StyledRect::new(
                                         Default::default(),
@@ -245,7 +241,6 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                                 )),
                             Node::new()
                                 .with_height(Size::px(150.0))
-                                .with_margin(Spacing::new(0.0, 0.0, 10.0, 0.0))
                                 .with_shape(Shape::Rect(
                                     StyledRect::new(
                                         Default::default(),
@@ -258,6 +253,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                     Node::new()
                         .with_width(Size::fraction(0.75))
                         .with_padding(Spacing::all(25.0))
+                        .with_gap(25.0)
                         .with_shape(Shape::Rect(
                             StyledRect::new(Default::default(), Color::new(0.15, 0.15, 0.2, 1.0))
                                 .with_corner_shape(CornerShape::Round(50.0))
@@ -268,7 +264,6 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                             // Content cards in vertical layout
                             Node::new()
                                 .with_height(Size::fraction(0.3))
-                                .with_margin(Spacing::new(0.0, 0.0, 25.0, 0.0))
                                 .with_shape(Shape::Rect(
                                     StyledRect::new(
                                         Default::default(),
@@ -279,13 +274,11 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                             // Horizontal row of smaller cards
                             Node::new()
                                 .with_height(Size::fraction(0.3))
-                                .with_margin(Spacing::new(0.0, 0.0, 25.0, 0.0))
+                                .with_gap(25.0)
                                 .with_layout_direction(LayoutDirection::Horizontal)
                                 .with_children(vec![
-                                    Node::new()
-                                        .with_width(Size::fraction(0.5))
-                                        .with_margin(Spacing::new(0.0, 25.0, 0.0, 0.0))
-                                        .with_shape(Shape::Rect(
+                                    Node::new().with_width(Size::fraction(0.5)).with_shape(
+                                        Shape::Rect(
                                             StyledRect::new(
                                                 Default::default(),
                                                 Color::new(0.5, 0.3, 0.3, 1.0),
@@ -295,7 +288,8 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                                                 5.0,
                                                 Color::new(0.4, 0.2, 0.2, 1.0),
                                             )),
-                                        )),
+                                        ),
+                                    ),
                                     Node::new().with_width(Size::fraction(0.5)).with_shape(
                                         Shape::Rect(
                                             StyledRect::new(
@@ -338,13 +332,10 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                         .with_corner_shape(CornerShape::Round(50.0)),
                 ))
                 .with_children(vec![
-                    Node::new()
-                        .with_margin(Spacing::right(10.0))
-                        .with_width(Size::Fill)
-                        .with_shape(Shape::Rect(
-                            StyledRect::new(Default::default(), Color::new(0.4, 0.3, 0.5, 1.0))
-                                .with_corner_shape(CornerShape::Round(25.0)),
-                        )),
+                    Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
+                        StyledRect::new(Default::default(), Color::new(0.4, 0.3, 0.5, 1.0))
+                            .with_corner_shape(CornerShape::Round(25.0)),
+                    )),
                     Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
                         StyledRect::new(Default::default(), Color::new(0.3, 0.4, 0.5, 1.0))
                             .with_corner_shape(CornerShape::Round(25.0)),
