@@ -16,7 +16,7 @@ impl Size {
     }
 
     /// Create a relative size as a percentage (0.0 to 1.0)
-    pub const fn percent(fraction: f32) -> Self {
+    pub const fn fraction(fraction: f32) -> Self {
         Self::Relative(fraction)
     }
 

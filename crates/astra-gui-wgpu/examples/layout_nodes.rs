@@ -163,33 +163,31 @@ impl GpuState {
 fn create_demo_ui(width: f32, height: f32) -> FullOutput {
     // Root container - full window with padding
     let root = Node::new()
-        .with_width(Size::percent(1.0))
-        .with_height(Size::percent(1.0))
+        .with_width(Size::fraction(1.0))
+        .with_height(Size::fraction(1.0))
         .with_padding(Spacing::all(20.0))
         .with_layout_direction(LayoutDirection::Vertical)
-        .with_child(
+        .with_children(vec![
             // Header bar - 15% of height
             Node::new()
-                .with_width(Size::percent(1.0))
-                .with_height(Size::percent(0.15))
+                .with_width(Size::fraction(1.0))
+                .with_height(Size::fraction(0.15))
                 .with_margin(Spacing::new(0.0, 0.0, 10.0, 0.0))
                 .with_shape(Shape::Rect(
                     StyledRect::new(Default::default(), Color::new(0.2, 0.3, 0.5, 1.0))
                         .with_corner_shape(CornerShape::Round(10.0))
                         .with_stroke(Stroke::new(2.0, Color::new(0.4, 0.5, 0.7, 1.0))),
                 )),
-        )
-        .with_child(
             // Main content area - horizontal layout
             Node::new()
-                .with_width(Size::percent(1.0))
-                .with_height(Size::percent(0.75))
+                .with_width(Size::fraction(1.0))
+                .with_height(Size::fraction(0.75))
                 .with_layout_direction(LayoutDirection::Horizontal)
-                .with_child(
+                .with_children(vec![
                     // Left sidebar - 25% width
                     Node::new()
-                        .with_width(Size::percent(0.25))
-                        .with_height(Size::percent(1.0))
+                        .with_width(Size::fraction(0.25))
+                        .with_height(Size::fraction(1.0))
                         .with_margin(Spacing::new(0.0, 10.0, 0.0, 0.0))
                         .with_padding(Spacing::all(10.0))
                         .with_shape(Shape::Rect(
@@ -200,7 +198,7 @@ fn create_demo_ui(width: f32, height: f32) -> FullOutput {
                         .with_children(vec![
                             // Sidebar items
                             Node::new()
-                                .with_width(Size::percent(1.0))
+                                .with_width(Size::fraction(1.0))
                                 .with_height(Size::px(60.0))
                                 .with_margin(Spacing::new(0.0, 0.0, 10.0, 0.0))
                                 .with_shape(Shape::Rect(StyledRect::new(
@@ -208,7 +206,7 @@ fn create_demo_ui(width: f32, height: f32) -> FullOutput {
                                     Color::new(0.5, 0.3, 0.6, 1.0),
                                 ))),
                             Node::new()
-                                .with_width(Size::percent(1.0))
+                                .with_width(Size::fraction(1.0))
                                 .with_height(Size::px(60.0))
                                 .with_margin(Spacing::new(0.0, 0.0, 10.0, 0.0))
                                 .with_shape(Shape::Rect(StyledRect::new(
@@ -216,19 +214,16 @@ fn create_demo_ui(width: f32, height: f32) -> FullOutput {
                                     Color::new(0.5, 0.3, 0.6, 1.0),
                                 ))),
                             Node::new()
-                                .with_width(Size::percent(1.0))
+                                .with_width(Size::fraction(1.0))
                                 .with_height(Size::px(60.0))
                                 .with_shape(Shape::Rect(StyledRect::new(
                                     Default::default(),
                                     Color::new(0.5, 0.3, 0.6, 1.0),
                                 ))),
                         ]),
-                )
-                .with_child(
-                    // Main content area - 75% width
                     Node::new()
-                        .with_width(Size::percent(0.75))
-                        .with_height(Size::percent(1.0))
+                        .with_width(Size::fraction(0.75))
+                        .with_height(Size::fraction(1.0))
                         .with_padding(Spacing::all(15.0))
                         .with_shape(Shape::Rect(
                             StyledRect::new(Default::default(), Color::new(0.15, 0.15, 0.2, 1.0))
@@ -239,8 +234,8 @@ fn create_demo_ui(width: f32, height: f32) -> FullOutput {
                         .with_children(vec![
                             // Content cards in vertical layout
                             Node::new()
-                                .with_width(Size::percent(1.0))
-                                .with_height(Size::percent(0.3))
+                                .with_width(Size::fraction(1.0))
+                                .with_height(Size::fraction(0.3))
                                 .with_margin(Spacing::new(0.0, 0.0, 15.0, 0.0))
                                 .with_shape(Shape::Rect(
                                     StyledRect::new(
@@ -251,14 +246,14 @@ fn create_demo_ui(width: f32, height: f32) -> FullOutput {
                                 )),
                             // Horizontal row of smaller cards
                             Node::new()
-                                .with_width(Size::percent(1.0))
-                                .with_height(Size::percent(0.3))
+                                .with_width(Size::fraction(1.0))
+                                .with_height(Size::fraction(0.3))
                                 .with_margin(Spacing::new(0.0, 0.0, 15.0, 0.0))
                                 .with_layout_direction(LayoutDirection::Horizontal)
                                 .with_children(vec![
                                     Node::new()
-                                        .with_width(Size::percent(0.48))
-                                        .with_height(Size::percent(1.0))
+                                        .with_width(Size::fraction(0.48))
+                                        .with_height(Size::fraction(1.0))
                                         .with_margin(Spacing::new(0.0, 10.0, 0.0, 0.0))
                                         .with_shape(Shape::Rect(
                                             StyledRect::new(
@@ -268,8 +263,8 @@ fn create_demo_ui(width: f32, height: f32) -> FullOutput {
                                             .with_corner_shape(CornerShape::Cut(8.0)),
                                         )),
                                     Node::new()
-                                        .with_width(Size::percent(0.48))
-                                        .with_height(Size::percent(1.0))
+                                        .with_width(Size::fraction(0.48))
+                                        .with_height(Size::fraction(1.0))
                                         .with_shape(Shape::Rect(
                                             StyledRect::new(
                                                 Default::default(),
@@ -279,8 +274,8 @@ fn create_demo_ui(width: f32, height: f32) -> FullOutput {
                                         )),
                                 ]),
                             Node::new()
-                                .with_width(Size::percent(1.0))
-                                .with_height(Size::percent(0.3))
+                                .with_width(Size::fraction(1.0))
+                                .with_height(Size::fraction(0.3))
                                 .with_shape(Shape::Rect(
                                     StyledRect::new(
                                         Default::default(),
@@ -294,19 +289,17 @@ fn create_demo_ui(width: f32, height: f32) -> FullOutput {
                                     ),
                                 )),
                         ]),
-                ),
-        )
-        .with_child(
+                ]),
             // Footer - 10% height
             Node::new()
-                .with_width(Size::percent(1.0))
-                .with_height(Size::percent(0.10))
+                .with_width(Size::fraction(1.0))
+                .with_height(Size::fraction(0.10))
                 .with_offset(Offset::new(0.0, 10.0))
                 .with_shape(Shape::Rect(
                     StyledRect::new(Default::default(), Color::new(0.2, 0.2, 0.25, 1.0))
                         .with_corner_shape(CornerShape::Round(10.0)),
                 )),
-        );
+        ]);
 
     FullOutput::from_node(root, (width, height))
 }
