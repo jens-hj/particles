@@ -14,7 +14,7 @@ impl Stroke {
 }
 
 /// Axis-aligned rectangle defined by min and max corners
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Rect {
     pub min: [f32; 2],
     pub max: [f32; 2],
