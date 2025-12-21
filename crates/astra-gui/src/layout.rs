@@ -108,4 +108,58 @@ impl Spacing {
             left: horizontal,
         }
     }
+
+    pub const fn horizontal(horizontal: f32) -> Self {
+        Self {
+            top: 0.0,
+            right: horizontal,
+            bottom: 0.0,
+            left: horizontal,
+        }
+    }
+
+    pub const fn vertical(vertical: f32) -> Self {
+        Self {
+            top: vertical,
+            right: 0.0,
+            bottom: vertical,
+            left: 0.0,
+        }
+    }
+
+    pub const fn top(top: f32) -> Self {
+        Self {
+            top,
+            right: 0.0,
+            bottom: 0.0,
+            left: 0.0,
+        }
+    }
+
+    pub const fn right(right: f32) -> Self {
+        Self {
+            top: 0.0,
+            right,
+            bottom: 0.0,
+            left: 0.0,
+        }
+    }
+
+    pub const fn bottom(bottom: f32) -> Self {
+        Self {
+            top: 0.0,
+            right: 0.0,
+            bottom,
+            left: 0.0,
+        }
+    }
+
+    pub const fn left(left: f32) -> Self {
+        Self {
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+            left,
+        }
+    }
 }
