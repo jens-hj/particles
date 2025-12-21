@@ -129,10 +129,9 @@ impl Node {
         let width = self.width.resolve(available_width);
         let height = self.height.resolve(available_height);
 
-        // Apply margin to get the outer rect (offset is applied later)
-        // Note: margin is added here, but will be factored into size calculations in parent's layout
-        let outer_x = available_rect.min[0] + self.margin.left;
-        let outer_y = available_rect.min[1] + self.margin.top;
+        // Position is already adjusted for margins by parent, don't add them again
+        let outer_x = available_rect.min[0];
+        let outer_y = available_rect.min[1];
 
         // Content area (after subtracting padding)
         let content_x = outer_x + self.padding.left;
@@ -203,6 +202,18 @@ impl Node {
 
         let num_children = self.children.len();
         for i in 0..num_children {
+            // Apply leading margin for first child or collapsed margin was already added for subsequent children
+            if i == 0 {
+                match self.layout_direction {
+                    LayoutDirection::Horizontal => {
+                        current_x += self.children[i].margin.left;
+                    }
+                    LayoutDirection::Vertical => {
+                        current_y += self.children[i].margin.top;
+                    }
+                }
+            }
+
             let child_available_rect = match self.layout_direction {
                 LayoutDirection::Horizontal => {
                     // In horizontal layout, each child gets remaining width and full height

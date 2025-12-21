@@ -301,7 +301,7 @@ fn create_demo_ui(width: f32, height: f32) -> FullOutput {
             // Footer - 10% height
             Node::new()
                 .with_height(Size::fraction(0.1))
-                .with_margin(Spacing::new(0.0, 50.0, 10.0, 0.0))
+                .with_margin(Spacing::new(10.0, 0.0, 0.0, 0.0))
                 .with_offset(Offset::new(0.0, 0.0))
                 .with_shape(Shape::Rect(
                     StyledRect::new(Default::default(), Color::new(0.2, 0.2, 0.25, 1.0))
