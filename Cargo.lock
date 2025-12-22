@@ -206,6 +206,7 @@ name = "astra-gui-wgpu"
 version = "0.1.0"
 dependencies = [
  "astra-gui",
+ "astra-gui-text",
  "bytemuck",
  "cosmic-text",
  "env_logger",

@@ -10,6 +10,7 @@ text-cosmic = ["dep:cosmic-text"]
 
 [dependencies]
 astra-gui = { workspace = true }
+astra-gui-text = { workspace = true }
 wgpu = { workspace = true }
 bytemuck = { version = "1.24", features = ["derive"] }
 cosmic-text = { version = "0.15", optional = true }

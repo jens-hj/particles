@@ -211,16 +211,17 @@ pub mod cosmic {
         ShapeLineRequest, ShapedLine, TextEngine,
     };
 
-    use cosmic_text::{Attrs, Buffer, FontSystem, Metrics, Shaping};
+    use cosmic_text::{fontdb, Attrs, Buffer, FontSystem, Metrics, Shaping};
 
     /// Concrete engine backed by `cosmic-text`.
     pub struct CosmicEngine {
         font_system: FontSystem,
-        // In a more complete implementation we would keep:
-        // - a font database handle / mapping from family to `FontId`
-        // - a raster cache (swash cache) to avoid re-rasterizing
-        //
-        // For now, we keep it minimal and defer caching to later work.
+
+        // Raster cache for swash (used by cosmic-text under the hood).
+        swash_cache: cosmic_text::SwashCache,
+
+        // NOTE: For now we treat font identity as a single default font. We'll expand this to
+        // multiple faces/families later once we define a stable mapping from family/style -> fontdb::ID.
         default_font_id: FontId,
     }
 
@@ -241,12 +242,13 @@ pub mod cosmic {
                 .db_mut()
                 .load_font_data(astra_gui_fonts::inter::italic_variable_opsz_wght().to_vec());
 
-            // We don't currently have a stable font ID from cosmic-text that we can expose.
+            // We don't currently have a stable font ID mapping surfaced in this crate.
             // Use a constant engine-local ID for now; callers should treat it as opaque.
             let default_font_id = FontId(0);
 
             Self {
                 font_system,
+                swash_cache: cosmic_text::SwashCache::new(),
                 default_font_id,
             }
         }
@@ -258,13 +260,36 @@ pub mod cosmic {
 
         fn make_attrs(&self, req: &ShapeLineRequest<'_>) -> Attrs<'static> {
             // `Attrs` holds references internally, so returning `Attrs<'static>` must not borrow
-            // from `req`. We keep this backend-agnostic and simple for now:
-            // - If a caller specifies a family, we ignore it until we introduce a stable owned
-            //   font selection mechanism in this crate.
-            // - Default to Inter by name.
+            // from `req`. Keep this simple for now:
+            // - ignore caller-supplied family until we define an owned/stable font selection API
+            // - default to Inter by family name
             let attrs = Attrs::new().family(cosmic_text::Family::Name("Inter"));
             let _req = req;
             attrs
+        }
+
+        fn find_fontdb_id_for_default(&mut self) -> Option<fontdb::ID> {
+            // Prefer Inter by family name; fall back to any available face.
+            let db = self.font_system.db();
+            let mut out = None;
+
+            db.faces().for_each(|face| {
+                if out.is_some() {
+                    return;
+                }
+
+                let family_name = face
+                    .families
+                    .get(0)
+                    .map(|f| f.0.as_str())
+                    .unwrap_or_default();
+
+                if family_name.eq_ignore_ascii_case("Inter") {
+                    out = Some(face.id);
+                }
+            });
+
+            out.or_else(|| db.faces().next().map(|face| face.id))
         }
     }
 
@@ -301,24 +326,59 @@ pub mod cosmic {
             };
 
             // `layout_runs()` may yield multiple runs even for one line; we treat them as one line.
+            //
+            // IMPORTANT:
+            // We must use cosmic-text's *physical* positioning to correctly align glyph bitmaps.
+            // `LayoutGlyph::{x,y}` are hitbox offsets, and the bitmap placement returned from swash
+            // is computed relative to a `CacheKey` that includes subpixel bins and hinting decisions.
+            //
+            // `LayoutGlyph::physical(offset, scale)` returns:
+            // - `cache_key`: the exact cache key to rasterize with `SwashCache`
+            // - `x`,`y`: integer placement offsets that must be applied to the bitmap placement
+            //
+            // We emit `PositionedGlyph::{x_px,y_px}` in LINE-TOP-LEFT space:
+            // - x/y are relative to the top-left of the line box (not baseline)
+            // - y increases downward
+            //
+            // Then the renderer can place quads with:
+            //   quad_pos = origin_px + (glyph.x_px, glyph.y_px) + bearing_px
+            // where `bearing_px` is derived from swash placement.
             for run in buffer.layout_runs() {
                 out.metrics.width_px = out.metrics.width_px.max(run.line_w);
+                out.metrics.height_px = run.line_height;
+
+                // Baseline offset measured from the top of the run’s line box.
+                // Useful for future baseline-aware layout but not required for quad placement here.
+                let baseline_px = (run.line_y - run.line_top).max(0.0);
+                out.metrics.baseline_px = baseline_px;
 
                 for glyph in run.glyphs.iter() {
-                    // `glyph_id` is the font glyph index.
-                    // `font_id` is currently a placeholder until we define a stable font identity mapping.
+                    let physical = glyph.physical((0.0, 0.0), 1.0);
+
+                    // Encode the physical cache key data into our backend-agnostic key.
+                    // NOTE: For now we still treat `FontId` as a single default font.
                     let key = GlyphKey::new(
                         self.default_font_id,
-                        glyph.glyph_id as u32,
-                        req.font_px.round().max(1.0) as u16,
+                        physical.cache_key.glyph_id as u32,
+                        f32::from_bits(physical.cache_key.font_size_bits)
+                            .round()
+                            .max(1.0) as u16,
                         0,
                     );
+
+                    // Convert to line-top-left space:
+                    // - `run.line_y` is the baseline y from the top of the line box
+                    // - `physical.y` is in baseline space
+                    // Therefore: top-left y = baseline_y + physical_y.
                     out.glyphs.push(PositionedGlyph {
                         key,
-                        x_px: glyph.x,
-                        y_px: glyph.y,
+                        x_px: physical.x as f32,
+                        y_px: run.line_y + physical.y as f32,
                     });
                 }
+
+                // Single line requested; use the first visible run.
+                break;
             }
 
             let origin_px = align_origin(
@@ -332,16 +392,70 @@ pub mod cosmic {
             (out, LinePlacement { origin_px })
         }
 
-        fn rasterize_glyph(&mut self, _key: GlyphKey) -> Option<GlyphBitmap> {
-            // TODO: Implement using cosmic-text + swash cache.
+        fn rasterize_glyph(&mut self, key: GlyphKey) -> Option<GlyphBitmap> {
+            // NOTE: This is a first cut. We currently:
+            // - map our opaque `FontId` to a fontdb::ID by picking a default face (Inter)
+            // - rasterize to an Alpha mask (R8) via cosmic-text SwashCache
             //
-            // This requires:
-            // - stable mapping from our `FontId` to a cosmic font face in the DB
-            // - selecting size and potentially variations (opsz/wght/slnt)
-            // - producing an R8 coverage mask + bearing/advance
+            // Later we should:
+            // - make `FontId` map to a specific fontdb::ID deterministically
+            // - thread through weight / italic / variations
+            // - consider subpixel bins in our public `GlyphKey`
+            let font_id = self.find_fontdb_id_for_default()?;
+
+            // Build a cosmic CacheKey and rasterize using SwashCache.
             //
-            // For now, leave as unimplemented; the WGPU backend currently still uses its fallback.
-            None
+            // `CacheKey::new` returns (cache_key, x, y) where x/y are the integer placement offsets.
+            // Those offsets must be applied when placing the bitmap quad.
+            let (cache_key, x, y) = cosmic_text::CacheKey::new(
+                font_id,
+                key.glyph_id as u16,
+                key.px_size as f32,
+                (0.0, 0.0),
+                fontdb::Weight(400),
+                cosmic_text::CacheKeyFlags::empty(),
+            );
+
+            let image_opt = self
+                .swash_cache
+                .get_image(&mut self.font_system, cache_key)
+                .clone();
+
+            let image = image_opt?;
+
+            // We only support coverage masks for now (which is what the WGPU shader expects).
+            // If we ever encounter color glyphs, implement conversion or switch the atlas format.
+            if image.content != cosmic_text::SwashContent::Mask {
+                return None;
+            }
+
+            let w = image.placement.width as u32;
+            let h = image.placement.height as u32;
+
+            let pixels = image.data;
+
+            // Coordinate convention: x right, y down.
+            // Swash placement uses:
+            // - left: x offset to the left edge of bitmap
+            // - top: distance from baseline to top edge (positive up)
+            //
+            // Our convention wants bearing (left, top) in a y-down space, so top becomes -top.
+            //
+            // Also apply the integer placement offsets returned by `CacheKey::new`:
+            // - `x`/`y` shift the bitmap box for pixel-grid alignment.
+            let bearing_px = [image.placement.left + x, -image.placement.top + y];
+
+            // Advance isn't directly available from the image; for now the renderer should rely on
+            // shaped positioning. Keep a reasonable default.
+            let advance_px = [0.0, 0.0];
+
+            Some(GlyphBitmap {
+                key,
+                size_px: [w, h],
+                bearing_px,
+                advance_px,
+                pixels,
+            })
         }
     }
 }

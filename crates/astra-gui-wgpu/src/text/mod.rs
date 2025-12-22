@@ -7,7 +7,6 @@
 //! Current structure:
 //! - `atlas`: CPU-side glyph atlas placement + cache
 //! - `cosmic`: shaping/rasterization via `cosmic-text`
-//! - `debug_font`: tiny built-in ASCII bitmap font used as a temporary fallback to unblock rendering
 //! - `vertex`: GPU vertex format for glyph quads
 //!
 //! This module is conditionally compiled behind the `text-cosmic` feature.
@@ -17,9 +16,6 @@ pub mod atlas;
 
 #[cfg(feature = "text-cosmic")]
 pub mod cosmic;
-
-#[cfg(feature = "text-cosmic")]
-pub mod debug_font;
 
 #[cfg(feature = "text-cosmic")]
 pub mod vertex;

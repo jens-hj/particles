@@ -11,6 +11,11 @@ use astra_gui::{FullOutput, Shape, Tessellator};
 use vertex::WgpuVertex;
 
 #[cfg(feature = "text-cosmic")]
+use astra_gui_text as gui_text;
+#[cfg(feature = "text-cosmic")]
+use gui_text::TextEngine;
+
+#[cfg(feature = "text-cosmic")]
 #[derive(Clone, Copy, Debug)]
 struct TextDraw {
     scissor: (u32, u32, u32, u32),
@@ -30,6 +35,11 @@ const INITIAL_TEXT_INDEX_CAPACITY: usize = 8192;
 const ATLAS_SIZE_PX: u32 = 1024;
 #[cfg(feature = "text-cosmic")]
 const ATLAS_PADDING_PX: u32 = 1;
+
+#[cfg(feature = "text-cosmic")]
+const TEXT_DEBUG_BASELINE_SHIFT_PX: f32 = 0.0;
+#[cfg(feature = "text-cosmic")]
+const TEXT_DEBUG_BEARING_Y_SHIFT_PX: f32 = -20.0;
 
 /// WGPU renderer for astra-gui
 pub struct Renderer {
@@ -65,8 +75,10 @@ pub struct Renderer {
     atlas_bind_group: wgpu::BindGroup,
     #[cfg(feature = "text-cosmic")]
     atlas: text::atlas::GlyphAtlas,
+
+    // Backend-agnostic text shaping/raster engine (Inter via astra-gui-fonts).
     #[cfg(feature = "text-cosmic")]
-    debug_font: text::debug_font::DebugFont,
+    text_engine: gui_text::Engine,
 }
 
 impl Renderer {
@@ -354,7 +366,7 @@ impl Renderer {
             #[cfg(feature = "text-cosmic")]
             atlas,
             #[cfg(feature = "text-cosmic")]
-            debug_font: text::debug_font::DebugFont::new(),
+            text_engine: gui_text::Engine::new_default(),
         }
     }
 
@@ -440,7 +452,7 @@ impl Renderer {
             render_pass.draw_indexed(0..mesh.indices.len() as u32, 0, 0..1);
         }
 
-        // Draw text (minimal first cut): debug-font raster to atlas + quads.
+        // Draw text: shape (backend-agnostic) + rasterize (backend-agnostic) + atlas upload + quads.
         //
         // IMPORTANT: scissor/clipping is render-pass state. To respect `ClippedShape::clip_rect`,
         // we must issue separate draw calls for distinct clip rect ranges.
@@ -451,8 +463,6 @@ impl Renderer {
 
             let mut draws: Vec<TextDraw> = Vec::new();
 
-            // Build quads per text shape and record draw ranges for clipping.
-            // We place a monospaced baseline at rect.min (top-left), then apply alignment.
             for clipped in &output.shapes {
                 let Shape::Text(text_shape) = &clipped.shape else {
                     continue;
@@ -461,7 +471,6 @@ impl Renderer {
                 let rect = text_shape.rect;
                 let text = text_shape.text.as_str();
 
-                // Skip empty
                 if text.is_empty() {
                     continue;
                 }
@@ -484,55 +493,33 @@ impl Renderer {
                 // Start of this shape's indices in the final index buffer.
                 let index_start = self.text_indices.len() as u32;
 
-                // Compute scale from font size (debug font base is 8px tall).
-                let base_h = self.debug_font.metrics().height_px.max(1) as f32;
-                let scale = (text_shape.font_size / base_h).round().max(1.0) as u32;
+                // Shape + placement (backend-agnostic).
+                let (shaped, placement) = self.text_engine.shape_line(gui_text::ShapeLineRequest {
+                    text,
+                    rect,
+                    font_px: text_shape.font_size,
+                    h_align: text_shape.h_align,
+                    v_align: text_shape.v_align,
+                    family: None,
+                });
 
-                // Compute rough line size in pixels for alignment.
-                let glyph_advance = self.debug_font.metrics().advance_px as f32 * scale as f32;
-                let line_w = glyph_advance * (text.chars().count() as f32);
-                let line_h = (self.debug_font.metrics().height_px * scale) as f32;
+                for g in &shaped.glyphs {
+                    let Some(bitmap) = self.text_engine.rasterize_glyph(g.key) else {
+                        continue;
+                    };
 
-                let origin_x = match text_shape.h_align {
-                    astra_gui::HorizontalAlign::Left => rect.min[0],
-                    astra_gui::HorizontalAlign::Center => {
-                        rect.min[0] + (rect.width() - line_w) * 0.5
-                    }
-                    astra_gui::HorizontalAlign::Right => rect.max[0] - line_w,
-                };
-
-                let origin_y = match text_shape.v_align {
-                    astra_gui::VerticalAlign::Top => rect.min[1],
-                    astra_gui::VerticalAlign::Center => {
-                        rect.min[1] + (rect.height() - line_h) * 0.5
-                    }
-                    astra_gui::VerticalAlign::Bottom => rect.max[1] - line_h,
-                };
-
-                let mut pen_x = origin_x;
-                let pen_y = origin_y
-                    + (self.debug_font.metrics().baseline_from_top_px as f32 * scale as f32);
-
-                for ch in text.chars() {
-                    let glyph = self.debug_font.rasterize_glyph(ch, scale);
-
-                    // Atlas cache key uses glyph_id as ASCII codepoint.
-                    let glyph_id = glyph.ch as u32;
+                    // Map backend-agnostic `GlyphKey` to the atlas key used by this backend.
                     let key = text::atlas::GlyphKey::new(
-                        0,
-                        glyph_id,
-                        text_shape.font_size.round().max(1.0) as u16,
-                        0,
+                        bitmap.key.font_id.0,
+                        bitmap.key.glyph_id,
+                        bitmap.key.px_size,
+                        bitmap.key.subpixel_x_64 as u16,
                     );
 
-                    let placed = match self.atlas.insert(key.clone(), glyph.size_px) {
+                    let placed = match self.atlas.insert(key.clone(), bitmap.size_px) {
                         text::atlas::AtlasInsert::AlreadyPresent => self.atlas.get(&key),
                         text::atlas::AtlasInsert::Placed(p) => {
-                            // Upload into atlas
                             let rect_px = text::atlas::GlyphAtlas::upload_rect_px(p);
-                            // Upload glyph bitmap into the glyph area (excluding padding).
-                            // We keep our atlas placement UVs pointing to the glyph area; padding reserved
-                            // in packing reduces sampling artifacts.
                             let pad = p.padding_px;
                             queue.write_texture(
                                 wgpu::TexelCopyTextureInfo {
@@ -545,18 +532,15 @@ impl Renderer {
                                     },
                                     aspect: wgpu::TextureAspect::All,
                                 },
-                                &glyph.pixels,
+                                &bitmap.pixels,
                                 wgpu::TexelCopyBufferLayout {
                                     offset: 0,
-                                    // `wgpu` expects bytes per row to be a multiple of 256, but for small glyph
-                                    // uploads many backends accept tightly packed rows. If this triggers
-                                    // validation errors on your platform, we should stage into a padded buffer.
-                                    bytes_per_row: Some(glyph.size_px[0]),
-                                    rows_per_image: Some(glyph.size_px[1]),
+                                    bytes_per_row: Some(bitmap.size_px[0]),
+                                    rows_per_image: Some(bitmap.size_px[1]),
                                 },
                                 wgpu::Extent3d {
-                                    width: glyph.size_px[0],
-                                    height: glyph.size_px[1],
+                                    width: bitmap.size_px[0],
+                                    height: bitmap.size_px[1],
                                     depth_or_array_layers: 1,
                                 },
                             );
@@ -566,15 +550,21 @@ impl Renderer {
                     };
 
                     let Some(placed) = placed else {
-                        pen_x += glyph.advance_px[0];
                         continue;
                     };
 
-                    // Quad in screen px
-                    let x0 = pen_x + glyph.bearing_px[0] as f32;
-                    let y0 = pen_y + glyph.bearing_px[1] as f32;
-                    let x1 = x0 + glyph.size_px[0] as f32;
-                    let y1 = y0 + glyph.size_px[1] as f32;
+                    // Quad in screen px (origin from placement + shaped glyph offset).
+                    //
+                    // Temporary debug knobs:
+                    // - TEXT_DEBUG_BASELINE_SHIFT_PX: shifts the glyph run down/up uniformly
+                    // - TEXT_DEBUG_BEARING_Y_SHIFT_PX: shifts the glyph bitmap bearing y (i.e. baseline relationship)
+                    let x0 = placement.origin_px[0] + g.x_px + bitmap.bearing_px[0] as f32;
+                    let y0 = placement.origin_px[1]
+                        + g.y_px
+                        + (bitmap.bearing_px[1] as f32 + TEXT_DEBUG_BEARING_Y_SHIFT_PX)
+                        + TEXT_DEBUG_BASELINE_SHIFT_PX;
+                    let x1 = x0 + bitmap.size_px[0] as f32;
+                    let y1 = y0 + bitmap.size_px[1] as f32;
 
                     let color = [
                         text_shape.color.r,
@@ -606,7 +596,6 @@ impl Renderer {
                         color,
                     ));
 
-                    // Two triangles
                     self.text_indices.extend_from_slice(&[
                         base,
                         base + 1,
@@ -615,11 +604,8 @@ impl Renderer {
                         base + 2,
                         base + 3,
                     ]);
-
-                    pen_x += glyph.advance_px[0];
                 }
 
-                // End of this shape's indices. Record a draw if we emitted anything.
                 let index_end = self.text_indices.len() as u32;
                 if index_end > index_start {
                     draws.push(TextDraw {
@@ -631,7 +617,6 @@ impl Renderer {
             }
 
             if !draws.is_empty() {
-                // Resize buffers if needed
                 if self.text_vertices.len() > self.text_vertex_capacity {
                     self.text_vertex_capacity = (self.text_vertices.len() * 2).next_power_of_two();
                     self.text_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -654,7 +639,6 @@ impl Renderer {
                     });
                 }
 
-                // Upload once
                 queue.write_buffer(
                     &self.text_vertex_buffer,
                     0,
@@ -666,7 +650,6 @@ impl Renderer {
                     bytemuck::cast_slice(&self.text_indices),
                 );
 
-                // Draw: multiple indexed draws, one scissor per clip rect range.
                 render_pass.set_pipeline(&self.text_pipeline);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 render_pass.set_bind_group(1, &self.atlas_bind_group, &[]);
@@ -680,7 +663,6 @@ impl Renderer {
                     render_pass.draw_indexed(draw.index_start..draw.index_end, 0, 0..1);
                 }
 
-                // Reset scissor for any later passes (defensive; currently no later draws).
                 render_pass.set_scissor_rect(0, 0, screen_width as u32, screen_height as u32);
             }
         }

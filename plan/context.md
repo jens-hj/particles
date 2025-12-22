@@ -4,13 +4,13 @@ This file tracks the current working state so you (or another AI) can pick up th
 
 ## Current focus
 
-Move text shaping / rasterization and bundled fonts into backend-agnostic crates, then wire `astra-gui-wgpu` to use them:
+Finish migrating text rendering to backend-agnostic crates and remove remaining backend-only fallbacks:
 
-- New crate: `crates/astra-gui-fonts` (bundled fonts; Inter for now)
-- New crate: `crates/astra-gui-text` (backend-agnostic shaping+raster API, cosmic-text implementation)
-- Backend (`astra-gui-wgpu`) should keep only WGPU specifics: atlas texture/upload, pipelines, buffers, scissor/draws.
+- `crates/astra-gui-fonts`: bundled fonts (Inter variable fonts; JetBrains Mono present for later)
+- `crates/astra-gui-text`: backend-agnostic shaping+raster API (cosmic-text implementation)
+- `crates/astra-gui-wgpu`: WGPU-only parts (atlas texture/upload, pipelines, buffers, scissor/draws)
 
-Key goal: get `Content::Text` nodes to render via a real font (Inter) and a backend-agnostic text engine, while keeping `astra-gui` core backend-agnostic and minimal.
+Key goal: render `Content::Text` nodes via a real font (Inter) through `astra-gui-text`, keeping `astra-gui` core backend-agnostic and minimal.
 
 ---
 
@@ -44,8 +44,9 @@ Clipping behavior:
 - This fixes the earlier regression where only the footer text was visible and enables the “clipping demo” panel to clip long text.
 
 Text rasterization status:
-- The backend still contains a temporary `debug_font` fallback path.
-- Next step is to switch glyph shaping/raster to the new backend-agnostic `astra-gui-text` crate and remove the fallback.
+- The WGPU backend is now wired to use `astra-gui-text` for shaping and rasterization (Inter via `astra-gui-fonts`).
+- The old `debug_font` fallback has been removed from the backend.
+- Current state is WIP: text renders as real glyphs in some cases, but vertical placement is still incorrect for many sizes (often clipped upward so only bottoms of glyphs are visible).
 
 Examples:
 - `examples/text.rs` builds a UI showcasing:
@@ -66,8 +67,9 @@ Examples:
     - Includes Inter OFL text via `include_str!`
   - `crates/astra-gui-text`
     - Defines backend-agnostic API (`TextEngine`, `GlyphKey`, `GlyphBitmap`, `shape_line` outputs)
-    - Cosmic-text-backed engine stub that loads Inter into a `FontSystem` and shapes a single line
-    - Rasterization is still TODO (bitmap generation not yet implemented)
+    - Cosmic-text-backed engine that loads Inter into a `FontSystem`
+    - Rasterization implemented via cosmic-text `SwashCache` (produces `R8` mask bitmaps + bearing)
+    - Shaping updated to use cosmic-text “physical glyph” positioning to better match swash raster placement (WIP; still has vertical offset issues)
 - Added font assets to the repo:
   - `assets/fonts/inter/Inter-VariableFont_opsz,wght.ttf`
   - `assets/fonts/inter/Inter-Italic-VariableFont_opsz,wght.ttf`
@@ -83,23 +85,25 @@ Examples:
 
 ## What’s missing / next work items
 
-### 1) Switch text rendering to backend-agnostic `astra-gui-text` (highest priority)
+### 1) Fix text vertical placement (highest priority)
 
-- Wire `astra-gui-wgpu` to use `astra-gui-text` for shaping + rasterization:
-  - `shape_line` for glyph positioning + line metrics
-  - `rasterize_glyph` for `R8` glyph bitmaps
-- Remove the `debug_font` fallback path once `rasterize_glyph` is implemented.
+`astra-gui-wgpu` is now using `astra-gui-text` for shaping + rasterization (Inter). Remaining blocker is incorrect vertical placement causing many labels to be clipped upward.
 
-### 2) Implement cosmic-text glyph rasterization in `astra-gui-text`
+Next steps:
+- Confirm consistent coordinate convention between:
+  - cosmic-text physical glyph output (`LayoutGlyph::physical`)
+  - swash placement (`SwashImage::placement.{left,top}`) and the cache key’s integer offsets
+  - the renderer’s quad placement formula (`origin + glyph_pos + bearing`)
+- Adjust `astra-gui-text` to emit glyph positions in the exact space expected by the raster bearing, so no per-font-size hacks are needed.
 
-- Implement `TextEngine::rasterize_glyph` for the cosmic engine:
-  - stable mapping from `FontId` to a real font face in `FontSystem` / fontdb
-  - choose opsz/wght defaults for Inter variable font (e.g. opsz ~= font_px, wght=400)
-  - produce `GlyphBitmap` with coverage + bearing + advance
-- Ensure cache keys are stable:
-  - include `font_id`, `glyph_id`, `px_size`, and optional subpixel position
+### 2) Stabilize glyph identity + caching (next)
+
+- Make `FontId` map deterministically to a specific `fontdb::ID` (currently best-effort “find Inter” lookup).
+- Make cache keys stable and correct:
+  - include subpixel binning if needed (currently not surfaced in `GlyphKey`)
+  - ensure `px_size` matches what cosmic-text uses for rasterization/hinting
 - Make atlas uploads robust:
-  - handle `queue.write_texture` alignment requirements (256-byte row padding) if needed.
+  - handle `queue.write_texture` row padding requirements (256-byte alignment) if/when it fails on stricter backends.
 
 ### 3) Font selection (later)
 
@@ -123,13 +127,13 @@ Examples:
 
 ## Immediate next steps (recommended order)
 
-1. Commit the current “text scissor correctness fix” (text now visible everywhere).
-2. Implement proper text clipping by batching by `clip_rect` with multiple draw calls.
+1. Fix text vertical placement so all labels render without being clipped (no hardcoded per-size shifts).
+2. Verify clipping/scissoring still works per `ClippedShape::clip_rect` after placement fixes.
 3. Run:
    - `cargo fmt`
    - `cargo check`
    - `cargo run -p astra-gui-wgpu --example text`
-4. Re-check diagnostics and update this file with the final clipping behavior and any remaining known issues.
+4. Re-check diagnostics and update this file with outcomes + any remaining known issues.
 
 ---
 
