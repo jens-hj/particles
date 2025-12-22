@@ -1,0 +1,27 @@
+[package]
+name = "astra-gui-text"
+version = "0.1.0"
+edition = "2021"
+description = "Backend-agnostic text shaping and glyph rasterization for astra-gui"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["cosmic"]
+cosmic = ["dep:cosmic-text"]
+
+[dependencies]
+astra-gui = { workspace = true }
+astra-gui-fonts = { path = "../astra-gui-fonts", default-features = true, features = [
+    "inter",
+] }
+
+# Text shaping & rasterization
+cosmic-text = { version = "0.15", optional = true }
+
+# Utility
+bytemuck = { version = "1.24", features = ["derive"] }
+
+[package.metadata]
+# This crate is intended to be renderer/backend agnostic:
+# it performs shaping and produces CPU-side glyph bitmaps + placement info.
+# GPU upload / atlas textures / shaders belong in backend crates (e.g. astra-gui-wgpu).

@@ -188,6 +188,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "astra-gui-fonts"
+version = "0.1.0"
+
+[[package]]
+name = "astra-gui-text"
+version = "0.1.0"
+dependencies = [
+ "astra-gui",
+ "astra-gui-fonts",
+ "bytemuck",
+ "cosmic-text",
+]
+
+[[package]]
 name = "astra-gui-wgpu"
 version = "0.1.0"
 dependencies = [
@@ -1891,6 +1905,8 @@ name = "particles"
 version = "0.3.2"
 dependencies = [
  "astra-gui",
+ "astra-gui-fonts",
+ "astra-gui-text",
  "astra-gui-wgpu",
  "bytemuck",
  "egui",

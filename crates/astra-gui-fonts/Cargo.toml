@@ -1,0 +1,17 @@
+[package]
+name = "astra-gui-fonts"
+version = "0.1.0"
+edition = "2021"
+description = "Bundled default fonts for astra-gui (Inter, etc.)"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["inter"]
+inter = []
+jetbrains-mono = []
+
+[dependencies]
+
+[package.metadata]
+# This crate embeds font binaries from the repository's assets directory via `include_bytes!`.
+# See `particles/assets/fonts/*/OFL.txt` for font licensing details (SIL Open Font License).

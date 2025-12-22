@@ -4,11 +4,13 @@ This file tracks the current working state so you (or another AI) can pick up th
 
 ## Current focus
 
-Continue **text node implementation** in `crates/astra-gui` and the **WGPU backend text rendering** in `crates/astra-gui-wgpu`, with emphasis on:
-- rendering `Content::Text` nodes reliably
-- then making clipping (`ClippedShape::clip_rect`) correct (scissor per clip rect)
+Move text shaping / rasterization and bundled fonts into backend-agnostic crates, then wire `astra-gui-wgpu` to use them:
 
-Key goal: get `Content::Text` nodes to render text via the WGPU backend, while keeping `astra-gui` backend-agnostic and minimal.
+- New crate: `crates/astra-gui-fonts` (bundled fonts; Inter for now)
+- New crate: `crates/astra-gui-text` (backend-agnostic shaping+raster API, cosmic-text implementation)
+- Backend (`astra-gui-wgpu`) should keep only WGPU specifics: atlas texture/upload, pipelines, buffers, scissor/draws.
+
+Key goal: get `Content::Text` nodes to render via a real font (Inter) and a backend-agnostic text engine, while keeping `astra-gui` core backend-agnostic and minimal.
 
 ---
 
@@ -31,16 +33,19 @@ Key goal: get `Content::Text` nodes to render text via the WGPU backend, while k
 ### `astra-gui-wgpu` (backend)
 
 - Geometry pipeline exists (tessellated triangles via `src/shaders/ui.wgsl`) and continues to work.
-- A first-cut text pipeline now exists and is wired:
+- Text pipeline exists and is wired:
   - `src/shaders/text.wgsl` samples an `R8Unorm` atlas and tints by vertex color.
   - CPU side generates per-glyph quads and uploads an `R8` glyph bitmap into the atlas.
-  - Currently uses a tiny built-in `debug_font` as a temporary rasterizer (not cosmic-text raster yet).
 
-Important behavior / limitation:
-- The text renderer currently does **one batched draw call** for all text quads.
-- Because scissor/clipping is render-pass state, a single draw can only have one scissor rect.
-- We recently hit a bug where only the footer text was visible due to scissor state issues; as a quick correctness fix, the renderer now draws batched text with a **full-screen scissor** so all text appears.
-- Consequence: per-container clipping is currently **not implemented** for text. The red “clipping demo” panel won’t clip text yet.
+Clipping behavior:
+- Text now draws with **per-shape scissor** using `ClippedShape::clip_rect`:
+  - indices for each text shape are recorded as `(start..end)` ranges
+  - `draw_indexed` is issued per-range with the correct scissor rect
+- This fixes the earlier regression where only the footer text was visible and enables the “clipping demo” panel to clip long text.
+
+Text rasterization status:
+- The backend still contains a temporary `debug_font` fallback path.
+- Next step is to switch glyph shaping/raster to the new backend-agnostic `astra-gui-text` crate and remove the fallback.
 
 Examples:
 - `examples/text.rs` builds a UI showcasing:
@@ -55,37 +60,51 @@ Examples:
 
 ## Recent progress
 
-- Fixed "only footer text renders" issue in `examples/text.rs`:
-  - Root cause: render pass scissor state was not compatible with a single batched text draw.
-  - Quick fix: set full-screen scissor for the text draw so all text is visible.
+- Added backend-agnostic crates:
+  - `crates/astra-gui-fonts`
+    - Embeds Inter variable fonts (roman + italic) via `include_bytes!`
+    - Includes Inter OFL text via `include_str!`
+  - `crates/astra-gui-text`
+    - Defines backend-agnostic API (`TextEngine`, `GlyphKey`, `GlyphBitmap`, `shape_line` outputs)
+    - Cosmic-text-backed engine stub that loads Inter into a `FontSystem` and shapes a single line
+    - Rasterization is still TODO (bitmap generation not yet implemented)
+- Added font assets to the repo:
+  - `assets/fonts/inter/Inter-VariableFont_opsz,wght.ttf`
+  - `assets/fonts/inter/Inter-Italic-VariableFont_opsz,wght.ttf`
+  - `assets/fonts/inter/OFL.txt`
+  - (JetBrains Mono variable fonts were also added under `assets/fonts/jetbrainsmono/` for later)
+- Text clipping is now correct in `astra-gui-wgpu` using per-shape scissor draws.
 - Verified:
   - `cargo fmt`
   - `cargo check`
-  - `cargo run -p astra-gui-wgpu --example text` (visual inspection: text now renders across the UI)
+  - `cargo run -p astra-gui-wgpu --example text` (visual inspection)
 
 ---
 
 ## What’s missing / next work items
 
-### 1) Correct clipping for text (highest priority)
+### 1) Switch text rendering to backend-agnostic `astra-gui-text` (highest priority)
 
-Implement clipping using `ClippedShape::clip_rect` in the WGPU backend:
+- Wire `astra-gui-wgpu` to use `astra-gui-text` for shaping + rasterization:
+  - `shape_line` for glyph positioning + line metrics
+  - `rasterize_glyph` for `R8` glyph bitmaps
+- Remove the `debug_font` fallback path once `rasterize_glyph` is implemented.
 
-- Batch text quads by clip rect (scissor):
-  - Option A (simple, correct): one draw per `Shape::Text` (per clip rect)
-  - Option B (better): coalesce consecutive shapes with identical clip rects into fewer draw calls
-- Implementation approach:
-  - While building the text buffers, record draw ranges `(start_index..end_index)` per clip batch.
-  - After uploading the buffers once, issue `draw_indexed` per range with `set_scissor_rect` set appropriately.
-- Ensure scissor conversion:
-  - clamp to framebuffer bounds
-  - avoid zero-sized scissors
+### 2) Implement cosmic-text glyph rasterization in `astra-gui-text`
 
-### 2) Replace debug font with `cosmic-text` rasterization (next)
+- Implement `TextEngine::rasterize_glyph` for the cosmic engine:
+  - stable mapping from `FontId` to a real font face in `FontSystem` / fontdb
+  - choose opsz/wght defaults for Inter variable font (e.g. opsz ~= font_px, wght=400)
+  - produce `GlyphBitmap` with coverage + bearing + advance
+- Ensure cache keys are stable:
+  - include `font_id`, `glyph_id`, `px_size`, and optional subpixel position
+- Make atlas uploads robust:
+  - handle `queue.write_texture` alignment requirements (256-byte row padding) if needed.
 
-- Use `cosmic-text` for shaping + rasterization to glyph bitmaps
-- Add stable glyph cache keys that include font identity, glyph id, size, and subpixel positioning if needed
-- Address `queue.write_texture` row padding as needed (some platforms may require 256-byte aligned `bytes_per_row`)
+### 3) Font selection (later)
+
+- Keep Inter as default.
+- Later: add JetBrains Mono support via `astra-gui-fonts` and a `TextContent`/engine-level way to pick families/styles.
 
 ---
 
