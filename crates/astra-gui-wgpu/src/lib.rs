@@ -10,6 +10,14 @@ mod vertex;
 use astra_gui::{FullOutput, Shape, Tessellator};
 use vertex::WgpuVertex;
 
+#[cfg(feature = "text-cosmic")]
+#[derive(Clone, Copy, Debug)]
+struct TextDraw {
+    scissor: (u32, u32, u32, u32),
+    index_start: u32,
+    index_end: u32,
+}
+
 const INITIAL_VERTEX_CAPACITY: usize = 1024;
 const INITIAL_INDEX_CAPACITY: usize = 2048;
 
@@ -434,44 +442,16 @@ impl Renderer {
 
         // Draw text (minimal first cut): debug-font raster to atlas + quads.
         //
-        // IMPORTANT: We must batch by clip rect (scissor), because WGPU scissor is render-pass
-        // state. If we build one giant text mesh and draw once, we can only apply one scissor,
-        // which would incorrectly clip most text.
+        // IMPORTANT: scissor/clipping is render-pass state. To respect `ClippedShape::clip_rect`,
+        // we must issue separate draw calls for distinct clip rect ranges.
         #[cfg(feature = "text-cosmic")]
         {
             self.text_vertices.clear();
             self.text_indices.clear();
 
-            // Batch state for current clip rect.
-            let mut current_scissor: Option<(u32, u32, u32, u32)> = None;
-            let mut batch_start_index: u32 = 0;
+            let mut draws: Vec<TextDraw> = Vec::new();
 
-            // Helper: flush current batch (draw indices [batch_start_index..end)).
-            let mut flush_batch =
-                |render_pass: &mut wgpu::RenderPass<'_>,
-                 end_index: u32,
-                 current_scissor: &Option<(u32, u32, u32, u32)>| {
-                    if end_index <= batch_start_index {
-                        return;
-                    }
-
-                    if let Some((x, y, w, h)) = *current_scissor {
-                        render_pass.set_scissor_rect(x, y, w, h);
-                    } else {
-                        render_pass.set_scissor_rect(
-                            0,
-                            0,
-                            screen_width as u32,
-                            screen_height as u32,
-                        );
-                    }
-
-                    render_pass.draw_indexed(batch_start_index..end_index, 0, 0..1);
-                    batch_start_index = end_index;
-                };
-
-            // We'll bind pipeline + buffers once; then emit multiple draw calls with different scissors.
-            // Build quads for each text shape.
+            // Build quads per text shape and record draw ranges for clipping.
             // We place a monospaced baseline at rect.min (top-left), then apply alignment.
             for clipped in &output.shapes {
                 let Shape::Text(text_shape) = &clipped.shape else {
@@ -501,11 +481,8 @@ impl Renderer {
 
                 let scissor_for_shape = (sc_min_x as u32, sc_min_y as u32, sc_w, sc_h);
 
-                // If scissor changes, we need to finish the previous batch (after we upload buffers).
-                // Here we just record the boundary; actual draw happens after buffer upload below.
-                if current_scissor != Some(scissor_for_shape) {
-                    current_scissor = Some(scissor_for_shape);
-                }
+                // Start of this shape's indices in the final index buffer.
+                let index_start = self.text_indices.len() as u32;
 
                 // Compute scale from font size (debug font base is 8px tall).
                 let base_h = self.debug_font.metrics().height_px.max(1) as f32;
@@ -642,18 +619,18 @@ impl Renderer {
                     pen_x += glyph.advance_px[0];
                 }
 
-                // Mark a batch boundary at the end of this shape. We will draw up to this point
-                // with the current scissor after uploading the buffers.
-                //
-                // We encode boundaries by flushing later in the draw section below by re-applying scissor.
-                // (This keeps CPU-side logic simple while still fixing clipping.)
-                //
-                // NOTE: This means we draw per text shape (per clip rect), which is correct for now.
-                // A later optimization could coalesce consecutive shapes with identical clip rects.
-                let _shape_end_index = self.text_indices.len() as u32;
+                // End of this shape's indices. Record a draw if we emitted anything.
+                let index_end = self.text_indices.len() as u32;
+                if index_end > index_start {
+                    draws.push(TextDraw {
+                        scissor: scissor_for_shape,
+                        index_start,
+                        index_end,
+                    });
+                }
             }
 
-            if !self.text_indices.is_empty() {
+            if !draws.is_empty() {
                 // Resize buffers if needed
                 if self.text_vertices.len() > self.text_vertex_capacity {
                     self.text_vertex_capacity = (self.text_vertices.len() * 2).next_power_of_two();
@@ -677,7 +654,7 @@ impl Renderer {
                     });
                 }
 
-                // Upload
+                // Upload once
                 queue.write_buffer(
                     &self.text_vertex_buffer,
                     0,
@@ -689,7 +666,7 @@ impl Renderer {
                     bytemuck::cast_slice(&self.text_indices),
                 );
 
-                // Draw
+                // Draw: multiple indexed draws, one scissor per clip rect range.
                 render_pass.set_pipeline(&self.text_pipeline);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 render_pass.set_bind_group(1, &self.atlas_bind_group, &[]);
@@ -697,13 +674,14 @@ impl Renderer {
                 render_pass
                     .set_index_buffer(self.text_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
-                // Correctness-first: since we currently build one contiguous index buffer without
-                // retaining per-shape boundaries, draw it once with a full-screen scissor.
-                //
-                // This fixes the "only footer visible" bug caused by leaving a per-shape scissor
-                // active for a single batched draw. Proper per-clip batching will come next.
+                for draw in &draws {
+                    let (x, y, w, h) = draw.scissor;
+                    render_pass.set_scissor_rect(x, y, w, h);
+                    render_pass.draw_indexed(draw.index_start..draw.index_end, 0, 0..1);
+                }
+
+                // Reset scissor for any later passes (defensive; currently no later draws).
                 render_pass.set_scissor_rect(0, 0, screen_width as u32, screen_height as u32);
-                flush_batch(&mut render_pass, self.text_indices.len() as u32, &None);
             }
         }
     }
