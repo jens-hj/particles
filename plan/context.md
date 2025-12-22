@@ -4,7 +4,9 @@ This file tracks the current working state so you (or another AI) can pick up th
 
 ## Current focus
 
-Continue **text node implementation** in `crates/astra-gui` and add a **text example** in `crates/astra-gui-wgpu` demonstrating actual text nodes (and later, actual text rendering).
+Continue **text node implementation** in `crates/astra-gui` and the **WGPU backend text rendering** in `crates/astra-gui-wgpu`, with emphasis on:
+- rendering `Content::Text` nodes reliably
+- then making clipping (`ClippedShape::clip_rect`) correct (scissor per clip rect)
 
 Key goal: get `Content::Text` nodes to render text via the WGPU backend, while keeping `astra-gui` backend-agnostic and minimal.
 
@@ -21,96 +23,99 @@ Key goal: get `Content::Text` nodes to render text via the WGPU backend, while k
   - `Node::collect_shapes()` pushes `Shape::Text(TextShape::new(content_rect, text_content))` when `node.content` is `Content::Text(...)`.
   - `content_rect` is computed from the node rect minus padding.
 - `FullOutput::from_node_with_debug()` gathers shapes and wraps them into `ClippedShape`s.
-  - For `Shape::Text`, it currently preserves the `TextShape` as-is; clip rect is the node rect.
+  - For `Shape::Text`, it preserves the `TextShape` and provides a `clip_rect`.
 - `Tessellator` is geometry-only:
   - `Shape::Rect` gets tessellated into triangles.
   - `Shape::Text` is intentionally skipped with a comment indicating backend-rendered text.
-- Small recent edit: clarified in `crates/astra-gui/src/tessellate.rs` that text stays backend-only (no UV quad emitted).
 
 ### `astra-gui-wgpu` (backend)
 
-- Renderer currently only draws tessellated geometry:
-  - Pipeline: single-color vertex shader + fragment shader in `src/shaders/ui.wgsl`.
-  - Vertex data carries `pos` + `color` only.
-  - `Renderer::render()` tessellates using `astra_gui::Tessellator` and draws the resulting mesh.
-- `cosmic-text = "0.12"` is present as an optional dependency (feature work-in-progress), but **text rendering is not wired up** yet.
+- Geometry pipeline exists (tessellated triangles via `src/shaders/ui.wgsl`) and continues to work.
+- A first-cut text pipeline now exists and is wired:
+  - `src/shaders/text.wgsl` samples an `R8Unorm` atlas and tints by vertex color.
+  - CPU side generates per-glyph quads and uploads an `R8` glyph bitmap into the atlas.
+  - Currently uses a tiny built-in `debug_font` as a temporary rasterizer (not cosmic-text raster yet).
 
-Backend text scaffolding exists (not yet wired into rendering):
-- `crates/astra-gui-wgpu/src/text/` (atlas packer, text vertex, cosmic shaping stub)
-- `crates/astra-gui-wgpu/src/shaders/text.wgsl` (alpha mask atlas sampling + tint shader)
+Important behavior / limitation:
+- The text renderer currently does **one batched draw call** for all text quads.
+- Because scissor/clipping is render-pass state, a single draw can only have one scissor rect.
+- We recently hit a bug where only the footer text was visible due to scissor state issues; as a quick correctness fix, the renderer now draws batched text with a **full-screen scissor** so all text appears.
+- Consequence: per-container clipping is currently **not implemented** for text. The red “clipping demo” panel won’t clip text yet.
 
 Examples:
-- `examples/layout_nodes.rs` includes debug keybinds (D/M/P/B/C) and debug visualization support.
-- `examples/text.rs` exists and includes debug keybinds (D/M/P/B/C). It builds text nodes, but you’ll only see rectangles until `Shape::Text` rendering is implemented.
-- `examples/corner_shapes.rs` has been updated to use the **Node layout system** (not raw `Shape`s), so debug overlays now apply there too.
+- `examples/text.rs` builds a UI showcasing:
+  - header title/subtitle
+  - alignment grid
+  - varying font sizes
+  - a long-line “clipping candidate”
+  - footer keybind hint
+- `examples/layout_nodes.rs` / `examples/corner_shapes.rs` remain node-based layout demos with debug overlays.
 
 ---
 
 ## Recent progress
 
-- Converted `crates/astra-gui-wgpu/examples/corner_shapes.rs` from a raw shape-based demo to a Node-based layout demo:
-  - Uses `Node` rows/columns with `Size::Fill` and gaps/padding
-  - Builds the same corner shape showcase via node `Shape::Rect(...)`
-  - Debug overlays (margins/padding/borders/content) now work there via `FullOutput::from_node_with_debug(...)`
-- Kept debug keybind behavior consistent across examples (D/M/P/B/C, Esc to quit).
+- Fixed "only footer text renders" issue in `examples/text.rs`:
+  - Root cause: render pass scissor state was not compatible with a single batched text draw.
+  - Quick fix: set full-screen scissor for the text draw so all text is visible.
+- Verified:
+  - `cargo fmt`
+  - `cargo check`
+  - `cargo run -p astra-gui-wgpu --example text` (visual inspection: text now renders across the UI)
 
 ---
 
 ## What’s missing / next work items
 
-### 1) WGPU text rendering path (backend responsibility)
+### 1) Correct clipping for text (highest priority)
 
-Implement rendering of `Shape::Text(TextShape)` in `astra-gui-wgpu`:
+Implement clipping using `ClippedShape::clip_rect` in the WGPU backend:
 
-- Add a **glyph atlas texture** + **sampler** + **text render pipeline** that samples the atlas and tints by text color.
-- Use `cosmic-text` to shape and rasterize text into the atlas.
-- Produce per-glyph quads (pos + UV) into a vertex buffer (or instance buffer).
-- Respect alignment fields:
-  - `TextShape::{h_align, v_align}`
-  - Place the shaped line(s) within `TextShape::rect` accordingly.
-- Respect clipping (`ClippedShape::clip_rect`):
-  - Preferred: use `scissor_rect` per shape (convert to integer pixels and clamp to framebuffer bounds).
-- Handle DPI properly:
-  - `winit` scale factor -> choose a consistent convention (physical pixels recommended).
+- Batch text quads by clip rect (scissor):
+  - Option A (simple, correct): one draw per `Shape::Text` (per clip rect)
+  - Option B (better): coalesce consecutive shapes with identical clip rects into fewer draw calls
+- Implementation approach:
+  - While building the text buffers, record draw ranges `(start_index..end_index)` per clip batch.
+  - After uploading the buffers once, issue `draw_indexed` per range with `set_scissor_rect` set appropriately.
+- Ensure scissor conversion:
+  - clamp to framebuffer bounds
+  - avoid zero-sized scissors
 
-### 2) Keep `astra-gui` minimal / crate decomposition guidance
+### 2) Replace debug font with `cosmic-text` rasterization (next)
 
-- `astra-gui` should not gain rendering logic or backend-specific text shaping.
-- If text rendering code becomes non-trivial, consider a dedicated backend-side crate, but avoid bloating the main crates.
+- Use `cosmic-text` for shaping + rasterization to glyph bitmaps
+- Add stable glyph cache keys that include font identity, glyph id, size, and subpixel positioning if needed
+- Address `queue.write_texture` row padding as needed (some platforms may require 256-byte aligned `bytes_per_row`)
 
 ---
 
 ## Constraints / project rules to follow
 
-- Use conventional commits when you commit.
-- Keep the main crate minimal and push real logic into appropriate crates.
+- Use conventional commits when committing.
 - Run:
   - `cargo fmt`
   - `cargo check`
   - `cargo run` (so the result can be inspected)
-- Avoid warnings (use `_unused` patterns etc. when needed).
-- Prefer performant approaches (GPU where it makes sense; for text, atlas + quads is expected).
+- Avoid warnings.
+- Keep `astra-gui` minimal / backend-only text logic remains in `astra-gui-wgpu`.
 - Update this `plan/context.md` regularly while implementing.
 
 ---
 
 ## Immediate next steps (recommended order)
 
-1. Implement the text pipeline in `astra-gui-wgpu`:
-   - ensure `text.wgsl` is compiled/used
-   - create atlas texture + sampler bind group
-   - introduce a text vertex buffer format with UVs
-2. Extend `Renderer::render()` to:
-   - draw geometry as today
-   - draw `Shape::Text` via the new pipeline (with scissor per `ClippedShape`)
-3. Run `cargo fmt`, `cargo check`, and `cargo run -p astra-gui-wgpu --example text`.
-4. Re-check diagnostics and update this file with outcomes and any known issues.
+1. Commit the current “text scissor correctness fix” (text now visible everywhere).
+2. Implement proper text clipping by batching by `clip_rect` with multiple draw calls.
+3. Run:
+   - `cargo fmt`
+   - `cargo check`
+   - `cargo run -p astra-gui-wgpu --example text`
+4. Re-check diagnostics and update this file with the final clipping behavior and any remaining known issues.
 
 ---
 
 ## Known unknowns / items to confirm while implementing
 
-- Exact approach to glyph rasterization with `cosmic-text 0.12.x` (API details; likely needs a dedicated integration pass).
-- How to manage atlas growth + eviction strategy (start simple: grow-only atlas).
-- Whether to batch text across shapes into one draw call vs per-shape (start simple; optimize later).
-- Proper scissor rectangle calculation when nodes extend outside window.
+- `cosmic-text 0.12.x` raster API details for producing glyph bitmaps.
+- Atlas growth + eviction strategy (current atlas is simple/grow-only).
+- `queue.write_texture` alignment requirements across backends for small glyph uploads.
