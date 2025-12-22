@@ -5,6 +5,8 @@
 //! remains geometry-only.
 
 #![cfg(feature = "text-cosmic")]
+#![allow(dead_code)]
+#![allow(unused_imports)]
 
 use crate::text::atlas::GlyphKey;
 
@@ -108,7 +110,13 @@ impl CosmicText {
             attrs = attrs.family(cosmic_text::Family::Name(family));
         }
 
-        buffer.set_text(&mut self.font_system, req.text, attrs, Shaping::Advanced);
+        buffer.set_text(
+            &mut self.font_system,
+            req.text,
+            &attrs,
+            Shaping::Advanced,
+            None,
+        );
         buffer.shape_until_scroll(&mut self.font_system, false);
 
         // Metrics doesn't expose ascent in 0.12.x; we keep baseline at 0 for now.

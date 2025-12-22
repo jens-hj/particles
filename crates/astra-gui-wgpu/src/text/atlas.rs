@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Glyph atlas placement + light-weight CPU-side cache.
 //!
 //! This module is intentionally backend-agnostic w.r.t. the shaping/rasterization library.

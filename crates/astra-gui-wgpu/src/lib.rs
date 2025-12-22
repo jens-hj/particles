@@ -489,7 +489,7 @@ impl Renderer {
                 let scale = (text_shape.font_size / base_h).round().max(1.0) as u32;
 
                 // Compute rough line size in pixels for alignment.
-                let glyph_advance = self.debug_font.metrics().advance_px * scale as f32;
+                let glyph_advance = self.debug_font.metrics().advance_px as f32 * scale as f32;
                 let line_w = glyph_advance * (text.chars().count() as f32);
                 let line_h = (self.debug_font.metrics().height_px * scale) as f32;
 

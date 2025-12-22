@@ -12,3 +12,4 @@
 - This project uses bun not npm or pnpm
 - Remember to make use of the grep-mcp tool to look for known design patterns and good practices when implementing new features or refactoring existing ones.
 - Always use ./plan/context.md to keep track of the current working state of the project, it should be updated very regularly, to be able to hand off the project to someone else or another AI.
+- Keep all as much functionality in the main astra-gui crate, ONLY WGPU dependent things should be delegated to the astra-wgpu crate.
