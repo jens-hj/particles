@@ -1,6 +1,12 @@
 //! Demonstrates all available corner shapes for rectangles
+//!
+//! Updated version: uses the `Node` layout system, so debug overlays (margins/padding/borders/content)
+//! can be visualized using the existing `DebugOptions` functionality.
 
-use astra_gui::{ClippedShape, Color, CornerShape, FullOutput, Rect, Shape, Stroke, StyledRect};
+use astra_gui::{
+    Color, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node, Shape, Size, Spacing,
+    Stroke, StyledRect,
+};
 use astra_gui_wgpu::Renderer;
 use std::sync::Arc;
 use winit::{
@@ -10,9 +16,67 @@ use winit::{
     window::{Window, WindowId},
 };
 
+const DEBUG_HELP_TEXT: &str = "Debug controls:
+  D - Toggle all debug visualizations
+  M - Toggle margins (red)
+  P - Toggle padding (blue)
+  B - Toggle borders (green)
+  C - Toggle content area (yellow)
+  ESC - Exit";
+
+fn handle_debug_keybinds(event: &WindowEvent, debug_options: &mut DebugOptions) -> bool {
+    let WindowEvent::KeyboardInput {
+        event:
+            KeyEvent {
+                physical_key: winit::keyboard::PhysicalKey::Code(key_code),
+                state: ElementState::Pressed,
+                ..
+            },
+        ..
+    } = event
+    else {
+        return false;
+    };
+
+    match *key_code {
+        winit::keyboard::KeyCode::KeyM => {
+            debug_options.show_margins = !debug_options.show_margins;
+            println!("Margins: {}", debug_options.show_margins);
+            true
+        }
+        winit::keyboard::KeyCode::KeyP => {
+            debug_options.show_padding = !debug_options.show_padding;
+            println!("Padding: {}", debug_options.show_padding);
+            true
+        }
+        winit::keyboard::KeyCode::KeyB => {
+            debug_options.show_borders = !debug_options.show_borders;
+            println!("Borders: {}", debug_options.show_borders);
+            true
+        }
+        winit::keyboard::KeyCode::KeyC => {
+            debug_options.show_content_area = !debug_options.show_content_area;
+            println!("Content area: {}", debug_options.show_content_area);
+            true
+        }
+        winit::keyboard::KeyCode::KeyD => {
+            if debug_options.is_enabled() {
+                *debug_options = DebugOptions::none();
+                println!("Debug: OFF");
+            } else {
+                *debug_options = DebugOptions::all();
+                println!("Debug: ALL ON");
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
 struct App {
     window: Option<Arc<Window>>,
     gpu_state: Option<GpuState>,
+    debug_options: DebugOptions,
 }
 
 struct GpuState {
@@ -94,9 +158,9 @@ impl GpuState {
         }
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
-        let view = output
+    fn render(&mut self, debug_options: &DebugOptions) -> Result<(), wgpu::SurfaceError> {
+        let surface_texture = self.surface.get_current_texture()?;
+        let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -132,8 +196,12 @@ impl GpuState {
 
         self.queue.submit(std::iter::once(encoder.finish()));
 
-        // Render shapes
-        let shapes = create_demo_shapes(self.config.width as f32, self.config.height as f32);
+        // Render using nodes so debug overlays can be shown.
+        let ui_output = create_demo_ui(
+            self.config.width as f32,
+            self.config.height as f32,
+            debug_options,
+        );
 
         let mut encoder = self
             .device
@@ -148,145 +216,127 @@ impl GpuState {
             &view,
             self.config.width as f32,
             self.config.height as f32,
-            &shapes,
+            &ui_output,
         );
 
         self.queue.submit(std::iter::once(encoder.finish()));
 
-        output.present();
+        surface_texture.present();
         Ok(())
     }
 }
 
-fn create_demo_shapes(width: f32, height: f32) -> FullOutput {
-    let clip_rect = Rect::new([0.0, 0.0], [width, height]);
-    let mut shapes = Vec::new();
-
-    let rect_width = 500.0;
-    let rect_height = 300.0;
-    let margin = 100.0;
-    let spacing = 600.0;
-    let corner_size = 50.0;
-    let stroke_width = 20.0;
-
-    let start_x = margin;
-    let start_y = margin;
-
-    // Row 1: None, Round, Cut
-    // None (sharp corners)
-    shapes.push(ClippedShape::new(
-        clip_rect,
-        Shape::Rect(
-            StyledRect::new(
-                Rect::new(
-                    [start_x, start_y],
-                    [start_x + rect_width, start_y + rect_height],
-                ),
-                Color::new(0.8, 0.3, 0.3, 1.0),
-            )
-            .with_corner_shape(CornerShape::None)
+fn card(fill: Color, corner_shape: CornerShape, stroke_width: f32) -> Shape {
+    Shape::Rect(
+        StyledRect::new(Default::default(), fill)
+            .with_corner_shape(corner_shape)
             .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
-        ),
-    ));
+    )
+}
 
-    // Round
-    shapes.push(ClippedShape::new(
-        clip_rect,
-        Shape::Rect(
-            StyledRect::new(
-                Rect::new(
-                    [start_x + spacing, start_y],
-                    [start_x + spacing + rect_width, start_y + rect_height],
-                ),
-                Color::new(0.3, 0.8, 0.3, 1.0),
-            )
-            .with_corner_shape(CornerShape::Round(corner_size))
-            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
-        ),
-    ));
+fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> FullOutput {
+    // Layout:
+    // Root (padding)
+    //  - Row 1: 3 equal-width cards
+    //  - Row 2: 3 equal-width cards
+    //
+    // Sizes are chosen to roughly match the old shape-based showcase.
+    let root = Node::new()
+        .with_padding(Spacing::all(40.0))
+        .with_gap(40.0)
+        .with_layout_direction(LayoutDirection::Vertical)
+        .with_children(vec![
+            Node::new()
+                .with_height(Size::Fill)
+                .with_gap(40.0)
+                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_children(vec![
+                    // None
+                    Node::new()
+                        .with_width(Size::Fill)
+                        .with_padding(Spacing::all(20.0))
+                        .with_shape(card(
+                            Color::new(0.8, 0.3, 0.3, 1.0),
+                            CornerShape::None,
+                            20.0,
+                        )),
+                    // Round
+                    Node::new()
+                        .with_width(Size::Fill)
+                        .with_padding(Spacing::all(20.0))
+                        .with_shape(card(
+                            Color::new(0.3, 0.8, 0.3, 1.0),
+                            CornerShape::Round(50.0),
+                            20.0,
+                        )),
+                    // Cut
+                    Node::new()
+                        .with_width(Size::Fill)
+                        .with_padding(Spacing::all(20.0))
+                        .with_shape(card(
+                            Color::new(0.3, 0.3, 0.8, 1.0),
+                            CornerShape::Cut(50.0),
+                            20.0,
+                        )),
+                ]),
+            Node::new()
+                .with_height(Size::Fill)
+                .with_gap(40.0)
+                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_children(vec![
+                    // InverseRound
+                    Node::new()
+                        .with_width(Size::Fill)
+                        .with_padding(Spacing::all(20.0))
+                        .with_shape(card(
+                            Color::new(0.8, 0.8, 0.3, 1.0),
+                            CornerShape::InverseRound(50.0),
+                            20.0,
+                        )),
+                    // Squircle low smoothness
+                    Node::new()
+                        .with_width(Size::Fill)
+                        .with_padding(Spacing::all(20.0))
+                        .with_shape(card(
+                            Color::new(0.8, 0.3, 0.8, 1.0),
+                            CornerShape::Squircle {
+                                radius: 50.0,
+                                smoothness: 0.5,
+                            },
+                            20.0,
+                        )),
+                    // Squircle high smoothness
+                    Node::new()
+                        .with_width(Size::Fill)
+                        .with_padding(Spacing::all(20.0))
+                        .with_shape(card(
+                            Color::new(0.3, 0.8, 0.8, 1.0),
+                            CornerShape::Squircle {
+                                radius: 50.0,
+                                smoothness: 3.0,
+                            },
+                            20.0,
+                        )),
+                ]),
+        ]);
 
-    // Cut
-    shapes.push(ClippedShape::new(
-        clip_rect,
-        Shape::Rect(
-            StyledRect::new(
-                Rect::new(
-                    [start_x + spacing * 2.0, start_y],
-                    [start_x + spacing * 2.0 + rect_width, start_y + rect_height],
-                ),
-                Color::new(0.3, 0.3, 0.8, 1.0),
-            )
-            .with_corner_shape(CornerShape::Cut(corner_size))
-            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
-        ),
-    ));
-
-    // Row 2: InverseRound, Squircle
-    let row2_y = start_y + rect_height + margin;
-
-    // InverseRound
-    shapes.push(ClippedShape::new(
-        clip_rect,
-        Shape::Rect(
-            StyledRect::new(
-                Rect::new(
-                    [start_x, row2_y],
-                    [start_x + rect_width, row2_y + rect_height],
-                ),
-                Color::new(0.8, 0.8, 0.3, 1.0),
-            )
-            .with_corner_shape(CornerShape::InverseRound(corner_size))
-            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
-        ),
-    ));
-
-    // Squircle (low smoothness - more circular)
-    shapes.push(ClippedShape::new(
-        clip_rect,
-        Shape::Rect(
-            StyledRect::new(
-                Rect::new(
-                    [start_x + spacing, row2_y],
-                    [start_x + spacing + rect_width, row2_y + rect_height],
-                ),
-                Color::new(0.8, 0.3, 0.8, 1.0),
-            )
-            .with_corner_shape(CornerShape::Squircle {
-                radius: corner_size,
-                smoothness: 0.5,
-            })
-            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
-        ),
-    ));
-
-    // Squircle (high smoothness - more square-like)
-    shapes.push(ClippedShape::new(
-        clip_rect,
-        Shape::Rect(
-            StyledRect::new(
-                Rect::new(
-                    [start_x + spacing * 2.0, row2_y],
-                    [start_x + spacing * 2.0 + rect_width, row2_y + rect_height],
-                ),
-                Color::new(0.3, 0.8, 0.8, 1.0),
-            )
-            .with_corner_shape(CornerShape::Squircle {
-                radius: corner_size,
-                smoothness: 3.0,
-            })
-            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
-        ),
-    ));
-
-    FullOutput::with_shapes(shapes)
+    FullOutput::from_node_with_debug(
+        root,
+        (width, height),
+        if debug_options.is_enabled() {
+            Some(*debug_options)
+        } else {
+            None
+        },
+    )
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
             let window_attributes = Window::default_attributes()
-                .with_title("Astra GUI - Corner Shapes Demo")
-                .with_inner_size(winit::dpi::LogicalSize::new(800, 400));
+                .with_title("Astra GUI - Corner Shapes Demo (Nodes)")
+                .with_inner_size(winit::dpi::LogicalSize::new(1400, 900));
 
             let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
             self.window = Some(window.clone());
@@ -312,6 +362,11 @@ impl ApplicationHandler for App {
                 ..
             } => event_loop.exit(),
 
+            WindowEvent::KeyboardInput { .. } => {
+                // Debug controls (D/M/P/B/C).
+                let _handled = handle_debug_keybinds(&event, &mut self.debug_options);
+            }
+
             WindowEvent::Resized(physical_size) => {
                 if let Some(gpu_state) = &mut self.gpu_state {
                     gpu_state.resize(physical_size);
@@ -320,7 +375,7 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 if let Some(gpu_state) = &mut self.gpu_state {
-                    match gpu_state.render() {
+                    match gpu_state.render(&self.debug_options) {
                         Ok(_) => {}
                         Err(wgpu::SurfaceError::Lost) => {
                             if let Some(window) = &self.window {
@@ -351,7 +406,10 @@ fn main() {
     let mut app = App {
         window: None,
         gpu_state: None,
+        debug_options: DebugOptions::none(),
     };
+
+    println!("{}", DEBUG_HELP_TEXT);
 
     event_loop.run_app(&mut app).unwrap();
 }

@@ -4,10 +4,15 @@ version = "0.1.0"
 edition = "2021"
 description = "WGPU rendering backend for astra-gui"
 
+[features]
+default = []
+text-cosmic = ["dep:cosmic-text"]
+
 [dependencies]
 astra-gui = { workspace = true }
 wgpu = { workspace = true }
 bytemuck = { version = "1.24", features = ["derive"] }
+cosmic-text = { version = "0.12", optional = true }
 
 [dev-dependencies]
 winit = { workspace = true }

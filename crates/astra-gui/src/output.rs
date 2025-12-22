@@ -54,12 +54,14 @@ impl FullOutput {
                 // For now, use the node's rect as the clip rect
                 let clip_rect = rect;
 
-                // Apply the rect to the shape if it's a StyledRect
+                // Apply the rect to the shape if it's a StyledRect.
+                // Text already carries its own bounding rect internally (TextShape::rect).
                 let shape_with_rect = match shape {
                     Shape::Rect(mut styled_rect) => {
                         styled_rect.rect = rect;
                         Shape::Rect(styled_rect)
                     }
+                    Shape::Text(text_shape) => Shape::Text(text_shape),
                 };
 
                 ClippedShape::new(clip_rect, shape_with_rect)

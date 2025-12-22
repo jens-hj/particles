@@ -3,6 +3,8 @@ use crate::mesh::{Mesh, Vertex};
 use crate::primitives::{ClippedShape, CornerShape, Shape, StyledRect};
 use std::f32::consts::PI;
 
+// NOTE: This file intentionally remains geometry-only. Text is rendered by backend crates.
+
 /// Tessellator converts shapes into triangle meshes
 pub struct Tessellator {
     mesh: Mesh,
@@ -20,6 +22,15 @@ impl Tessellator {
         for clipped in shapes {
             match &clipped.shape {
                 Shape::Rect(r) => self.tessellate_rect(r),
+                Shape::Text(_text) => {
+                    // Text rendering is handled by the backend.
+                    //
+                    // IMPORTANT:
+                    // - The backend needs the text glyph atlas + rasterization; emitting “a quad”
+                    //   here would be misleading without UVs/texture sampling support.
+                    // - Keeping the core tessellator geometry-only avoids coupling astra-gui
+                    //   to any specific text rendering strategy.
+                }
             }
         }
 

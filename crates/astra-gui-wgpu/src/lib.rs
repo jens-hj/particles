@@ -2,6 +2,9 @@
 //!
 //! WGPU rendering backend for astra-gui.
 
+#[cfg(feature = "text-cosmic")]
+mod text;
+
 mod vertex;
 
 use astra_gui::{FullOutput, Tessellator};
@@ -21,6 +24,16 @@ pub struct Renderer {
     vertex_capacity: usize,
     index_capacity: usize,
     wgpu_vertices: Vec<WgpuVertex>,
+
+    // TODO(text): Wire up cosmic-text glyph atlas + textured pipeline and render Shape::Text.
+    // This requires:
+    // - a texture atlas (wgpu::Texture + wgpu::Sampler)
+    // - a dedicated text vertex format (pos + uv + color)
+    // - a text WGSL shader (sample atlas, alpha blend)
+    // - clipping/scissoring using each ClippedShape::clip_rect.
+    //
+    // Keeping this as TODO avoids pretending text is supported while keeping API surface stable.
+    _text_not_yet_implemented: (),
 }
 
 impl Renderer {
@@ -131,6 +144,7 @@ impl Renderer {
             vertex_capacity: INITIAL_VERTEX_CAPACITY,
             index_capacity: INITIAL_INDEX_CAPACITY,
             wgpu_vertices: Vec::new(),
+            _text_not_yet_implemented: (),
         }
     }
 

@@ -1,4 +1,5 @@
 use crate::color::Color;
+use crate::content::{HorizontalAlign, TextContent, VerticalAlign};
 
 /// Stroke definition with width and color
 #[derive(Clone, Copy, Debug)]
@@ -100,10 +101,42 @@ impl StyledRect {
     }
 }
 
+/// Text shape for rendering text content
+#[derive(Clone, Debug)]
+pub struct TextShape {
+    /// Bounding box where the text should be rendered
+    pub rect: Rect,
+    /// The text content to render
+    pub text: String,
+    /// Font size in pixels
+    pub font_size: f32,
+    /// Text color
+    pub color: Color,
+    /// Horizontal alignment
+    pub h_align: HorizontalAlign,
+    /// Vertical alignment
+    pub v_align: VerticalAlign,
+}
+
+impl TextShape {
+    /// Create a new text shape from text content and bounding rect
+    pub fn new(rect: Rect, content: &TextContent) -> Self {
+        Self {
+            rect,
+            text: content.text.clone(),
+            font_size: content.font_size,
+            color: content.color,
+            h_align: content.h_align,
+            v_align: content.v_align,
+        }
+    }
+}
+
 /// Shapes that can be rendered
 #[derive(Clone, Debug)]
 pub enum Shape {
     Rect(StyledRect),
+    Text(TextShape),
     // Future: Circle, Line, Mesh, etc.
 }
 

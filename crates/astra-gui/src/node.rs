@@ -1,7 +1,13 @@
+use crate::content::Content;
 use crate::layout::{ComputedLayout, LayoutDirection, Offset, Size, Spacing};
 use crate::primitives::{Rect, Shape};
 
-/// A UI node that can contain a shape and children
+/// A UI node that can contain a shape, content, and/or children
+///
+/// Nodes can be either:
+/// - Container nodes: Have children and can have an optional background shape
+/// - Content nodes: Have content (text, inputs, etc.) and cannot have children
+/// - Mixed: Have both a shape and children (container with background)
 pub struct Node {
     /// Width of the node
     pub width: Size,
@@ -17,9 +23,11 @@ pub struct Node {
     pub gap: f32,
     /// Layout direction for children
     pub layout_direction: LayoutDirection,
-    /// Optional shape to render for this node
+    /// Optional shape to render for this node (background)
     pub shape: Option<Shape>,
-    /// Child nodes
+    /// Optional content (text, inputs, etc.) - content nodes cannot have children
+    pub content: Option<Content>,
+    /// Child nodes (not allowed if content is Some)
     pub children: Vec<Node>,
     /// Computed layout (filled during layout pass)
     computed: Option<ComputedLayout>,
@@ -37,9 +45,15 @@ impl Node {
             gap: 0.0,
             layout_direction: LayoutDirection::Vertical,
             shape: None,
+            content: None,
             children: Vec::new(),
             computed: None,
         }
+    }
+
+    /// Check if this is a content node (has content, cannot have children)
+    pub fn is_content_node(&self) -> bool {
+        self.content.is_some()
     }
 
     /// Set the width
@@ -96,14 +110,32 @@ impl Node {
         self
     }
 
+    /// Set the content (makes this a content node that cannot have children)
+    pub fn with_content(mut self, content: Content) -> Self {
+        assert!(
+            self.children.is_empty(),
+            "Cannot set content on a node that already has children"
+        );
+        self.content = Some(content);
+        self
+    }
+
     /// Add a child node
     pub fn with_child(mut self, child: Node) -> Self {
+        assert!(
+            self.content.is_none(),
+            "Cannot add children to a content node"
+        );
         self.children.push(child);
         self
     }
 
     /// Add multiple children
     pub fn with_children(mut self, children: Vec<Node>) -> Self {
+        assert!(
+            self.content.is_none(),
+            "Cannot add children to a content node"
+        );
         self.children.extend(children);
         self
     }
@@ -347,8 +379,37 @@ impl Node {
 
     /// Collect all shapes from this node tree for rendering
     pub fn collect_shapes(&self, shapes: &mut Vec<(Rect, Shape)>) {
-        if let (Some(layout), Some(shape)) = (&self.computed, &self.shape) {
-            shapes.push((layout.rect, shape.clone()));
+        if let Some(layout) = &self.computed {
+            // Add background shape if present
+            if let Some(shape) = &self.shape {
+                shapes.push((layout.rect, shape.clone()));
+            }
+
+            // Add content shape if this is a content node
+            if let Some(content) = &self.content {
+                match content {
+                    crate::content::Content::Text(text_content) => {
+                        // Calculate content area (after padding)
+                        let content_rect = Rect::new(
+                            [
+                                layout.rect.min[0] + self.padding.left,
+                                layout.rect.min[1] + self.padding.top,
+                            ],
+                            [
+                                layout.rect.max[0] - self.padding.right,
+                                layout.rect.max[1] - self.padding.bottom,
+                            ],
+                        );
+                        shapes.push((
+                            layout.rect,
+                            Shape::Text(crate::primitives::TextShape::new(
+                                content_rect,
+                                text_content,
+                            )),
+                        ));
+                    }
+                }
+            }
         }
 
         for child in &self.children {

@@ -7,6 +7,7 @@
 //! like `astra-gui-wgpu`.
 
 mod color;
+mod content;
 mod debug;
 mod layout;
 mod mesh;
@@ -16,6 +17,7 @@ mod primitives;
 mod tessellate;
 
 pub use color::*;
+pub use content::*;
 pub use debug::*;
 pub use layout::*;
 pub use mesh::*;

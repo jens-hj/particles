@@ -12,6 +12,63 @@ use winit::{
     window::{Window, WindowId},
 };
 
+const DEBUG_HELP_TEXT: &str = "Debug controls:
+  D - Toggle all debug visualizations
+  M - Toggle margins (red)
+  P - Toggle padding (blue)
+  B - Toggle borders (green)
+  C - Toggle content area (yellow)
+  ESC - Exit";
+
+fn handle_debug_keybinds(event: &WindowEvent, debug_options: &mut DebugOptions) -> bool {
+    let WindowEvent::KeyboardInput {
+        event:
+            KeyEvent {
+                physical_key: winit::keyboard::PhysicalKey::Code(key_code),
+                state: ElementState::Pressed,
+                ..
+            },
+        ..
+    } = event
+    else {
+        return false;
+    };
+
+    match *key_code {
+        winit::keyboard::KeyCode::KeyM => {
+            debug_options.show_margins = !debug_options.show_margins;
+            println!("Margins: {}", debug_options.show_margins);
+            true
+        }
+        winit::keyboard::KeyCode::KeyP => {
+            debug_options.show_padding = !debug_options.show_padding;
+            println!("Padding: {}", debug_options.show_padding);
+            true
+        }
+        winit::keyboard::KeyCode::KeyB => {
+            debug_options.show_borders = !debug_options.show_borders;
+            println!("Borders: {}", debug_options.show_borders);
+            true
+        }
+        winit::keyboard::KeyCode::KeyC => {
+            debug_options.show_content_area = !debug_options.show_content_area;
+            println!("Content area: {}", debug_options.show_content_area);
+            true
+        }
+        winit::keyboard::KeyCode::KeyD => {
+            if debug_options.is_enabled() {
+                *debug_options = DebugOptions::none();
+                println!("Debug: OFF");
+            } else {
+                *debug_options = DebugOptions::all();
+                println!("Debug: ALL ON");
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
 struct App {
     window: Option<Arc<Window>>,
     gpu_state: Option<GpuState>,
@@ -334,15 +391,15 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                 .with_children(vec![
                     Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
                         StyledRect::new(Default::default(), Color::new(0.4, 0.3, 0.5, 1.0))
-                            .with_corner_shape(CornerShape::Round(25.0)),
+                            .with_corner_shape(CornerShape::Round(40.0)),
                     )),
                     Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
                         StyledRect::new(Default::default(), Color::new(0.3, 0.4, 0.5, 1.0))
-                            .with_corner_shape(CornerShape::Round(25.0)),
+                            .with_corner_shape(CornerShape::Round(40.0)),
                     )),
                     Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
                         StyledRect::new(Default::default(), Color::new(0.5, 0.4, 0.3, 1.0))
-                            .with_corner_shape(CornerShape::Round(25.0)),
+                            .with_corner_shape(CornerShape::Round(40.0)),
                     )),
                 ]),
         ]);
@@ -389,42 +446,10 @@ impl ApplicationHandler for App {
                 ..
             } => event_loop.exit(),
 
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key: winit::keyboard::PhysicalKey::Code(key_code),
-                        state: ElementState::Pressed,
-                        ..
-                    },
-                ..
-            } => match key_code {
-                winit::keyboard::KeyCode::KeyM => {
-                    self.debug_options.show_margins = !self.debug_options.show_margins;
-                    println!("Margins: {}", self.debug_options.show_margins);
-                }
-                winit::keyboard::KeyCode::KeyP => {
-                    self.debug_options.show_padding = !self.debug_options.show_padding;
-                    println!("Padding: {}", self.debug_options.show_padding);
-                }
-                winit::keyboard::KeyCode::KeyB => {
-                    self.debug_options.show_borders = !self.debug_options.show_borders;
-                    println!("Borders: {}", self.debug_options.show_borders);
-                }
-                winit::keyboard::KeyCode::KeyC => {
-                    self.debug_options.show_content_area = !self.debug_options.show_content_area;
-                    println!("Content area: {}", self.debug_options.show_content_area);
-                }
-                winit::keyboard::KeyCode::KeyD => {
-                    if self.debug_options.is_enabled() {
-                        self.debug_options = DebugOptions::none();
-                        println!("Debug: OFF");
-                    } else {
-                        self.debug_options = DebugOptions::all();
-                        println!("Debug: ALL ON");
-                    }
-                }
-                _ => {}
-            },
+            WindowEvent::KeyboardInput { .. } => {
+                // Debug controls (D/M/P/B/C).
+                let _handled = handle_debug_keybinds(&event, &mut self.debug_options);
+            }
 
             WindowEvent::Resized(physical_size) => {
                 if let Some(gpu_state) = &mut self.gpu_state {
@@ -468,13 +493,7 @@ fn main() {
         debug_options: DebugOptions::none(), // Start with debug off
     };
 
-    println!("Debug controls:");
-    println!("  D - Toggle all debug visualizations");
-    println!("  M - Toggle margins (red)");
-    println!("  P - Toggle padding (blue)");
-    println!("  B - Toggle borders (green)");
-    println!("  C - Toggle content area (yellow)");
-    println!("  ESC - Exit");
+    println!("{}", DEBUG_HELP_TEXT);
 
     event_loop.run_app(&mut app).unwrap();
 }
