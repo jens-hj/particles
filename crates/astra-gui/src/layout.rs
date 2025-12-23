@@ -1,6 +1,6 @@
 use crate::primitives::Rect;
 
-/// Size specification that can be fixed or relative to parent
+/// Size specification that can be fixed, relative to parent, or derived from content.
 #[derive(Clone, Copy, Debug)]
 pub enum Size {
     /// Fixed size in pixels
@@ -9,6 +9,21 @@ pub enum Size {
     Relative(f32),
     /// Fill all remaining available space
     Fill,
+    /// Size to the minimum that fits content (text metrics or children), plus padding.
+    ///
+    /// NOTE: The layout algorithm must measure intrinsic content size to resolve this.
+    FitContent,
+}
+
+/// Overflow policy for content/children that exceed the node's bounds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Overflow {
+    /// Content can render outside the node's bounds.
+    Visible,
+    /// Content is clipped to the node's bounds.
+    Hidden,
+    /// Content is clipped but can be scrolled (not implemented yet).
+    Scroll,
 }
 
 impl Size {
@@ -22,20 +37,41 @@ impl Size {
         Self::Relative(fraction)
     }
 
+    /// Size to the minimum that fits content.
+    pub const fn fit_content() -> Self {
+        Self::FitContent
+    }
+
     /// Resolve the size given the parent's dimension
-    /// Note: For Fill variant, this returns the full parent_size as a fallback.
-    /// The actual size should be calculated by the layout algorithm based on remaining space.
+    ///
+    /// Notes:
+    /// - For `Fill`, this returns the full `parent_size` as a fallback; actual fill is computed
+    ///   by the layout algorithm based on remaining space.
+    /// - For `FitContent`, this currently returns `parent_size` as a conservative fallback until
+    ///   intrinsic measurement is implemented by the layout algorithm.
     pub fn resolve(&self, parent_size: f32) -> f32 {
         match self {
             Size::Fixed(px) => *px,
             Size::Relative(fraction) => parent_size * fraction,
             Size::Fill => parent_size,
+            Size::FitContent => parent_size,
         }
     }
 
     /// Check if this size is Fill
     pub const fn is_fill(&self) -> bool {
         matches!(self, Size::Fill)
+    }
+
+    /// Check if this size is FitContent
+    pub const fn is_fit_content(&self) -> bool {
+        matches!(self, Size::FitContent)
+    }
+}
+
+impl Default for Overflow {
+    fn default() -> Self {
+        Self::Hidden
     }
 }
 

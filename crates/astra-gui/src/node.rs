@@ -1,5 +1,5 @@
 use crate::content::Content;
-use crate::layout::{ComputedLayout, LayoutDirection, Offset, Size, Spacing};
+use crate::layout::{ComputedLayout, LayoutDirection, Offset, Overflow, Size, Spacing};
 use crate::primitives::{Rect, Shape};
 
 /// A UI node that can contain a shape, content, and/or children
@@ -23,6 +23,10 @@ pub struct Node {
     pub gap: f32,
     /// Layout direction for children
     pub layout_direction: LayoutDirection,
+    /// How overflow of content/children is handled.
+    ///
+    /// Default: `Overflow::Hidden`.
+    pub overflow: Overflow,
     /// Optional shape to render for this node (background)
     pub shape: Option<Shape>,
     /// Optional content (text, inputs, etc.) - content nodes cannot have children
@@ -37,13 +41,14 @@ impl Node {
     /// Create a new node with default settings
     pub fn new() -> Self {
         Self {
-            width: Size::Relative(1.0),
-            height: Size::Relative(1.0),
+            width: Size::Fill,
+            height: Size::Fill,
             offset: Offset::zero(),
             padding: Spacing::zero(),
             margin: Spacing::zero(),
             gap: 0.0,
             layout_direction: LayoutDirection::Vertical,
+            overflow: Overflow::default(),
             shape: None,
             content: None,
             children: Vec::new(),
@@ -101,6 +106,12 @@ impl Node {
     /// Set the layout direction
     pub fn with_layout_direction(mut self, direction: LayoutDirection) -> Self {
         self.layout_direction = direction;
+        self
+    }
+
+    /// Set how overflow of content/children is handled (default: `Overflow::Hidden`).
+    pub fn with_overflow(mut self, overflow: Overflow) -> Self {
+        self.overflow = overflow;
         self
     }
 
