@@ -498,18 +498,40 @@ impl Renderer {
             occlusion_query_set: None,
         });
 
-        // Draw geometry with per-shape scissor clipping
+        // Draw geometry with batched scissor clipping
+        // OPTIMIZATION: Batch consecutive draws with the same scissor rect to reduce draw calls
         if !geometry_draws.is_empty() {
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
-            for draw in &geometry_draws {
-                let (x, y, w, h) = draw.scissor;
-                render_pass.set_scissor_rect(x, y, w, h);
-                render_pass.draw_indexed(draw.index_start..draw.index_end, 0, 0..1);
+            // Batch consecutive draws with the same scissor rect
+            let mut current_scissor = geometry_draws[0].scissor;
+            let mut batch_start = geometry_draws[0].index_start;
+            let mut batch_end = geometry_draws[0].index_end;
+
+            for draw in &geometry_draws[1..] {
+                if draw.scissor == current_scissor && draw.index_start == batch_end {
+                    // Extend current batch (consecutive indices, same scissor)
+                    batch_end = draw.index_end;
+                } else {
+                    // Flush current batch
+                    let (x, y, w, h) = current_scissor;
+                    render_pass.set_scissor_rect(x, y, w, h);
+                    render_pass.draw_indexed(batch_start..batch_end, 0, 0..1);
+
+                    // Start new batch
+                    current_scissor = draw.scissor;
+                    batch_start = draw.index_start;
+                    batch_end = draw.index_end;
+                }
             }
+
+            // Flush final batch
+            let (x, y, w, h) = current_scissor;
+            render_pass.set_scissor_rect(x, y, w, h);
+            render_pass.draw_indexed(batch_start..batch_end, 0, 0..1);
 
             // Reset scissor to full screen
             render_pass.set_scissor_rect(0, 0, screen_width as u32, screen_height as u32);
@@ -718,11 +740,32 @@ impl Renderer {
                 render_pass
                     .set_index_buffer(self.text_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
-                for draw in &draws {
-                    let (x, y, w, h) = draw.scissor;
-                    render_pass.set_scissor_rect(x, y, w, h);
-                    render_pass.draw_indexed(draw.index_start..draw.index_end, 0, 0..1);
+                // OPTIMIZATION: Batch consecutive draws with the same scissor rect
+                let mut current_scissor = draws[0].scissor;
+                let mut batch_start = draws[0].index_start;
+                let mut batch_end = draws[0].index_end;
+
+                for draw in &draws[1..] {
+                    if draw.scissor == current_scissor && draw.index_start == batch_end {
+                        // Extend current batch
+                        batch_end = draw.index_end;
+                    } else {
+                        // Flush current batch
+                        let (x, y, w, h) = current_scissor;
+                        render_pass.set_scissor_rect(x, y, w, h);
+                        render_pass.draw_indexed(batch_start..batch_end, 0, 0..1);
+
+                        // Start new batch
+                        current_scissor = draw.scissor;
+                        batch_start = draw.index_start;
+                        batch_end = draw.index_end;
+                    }
                 }
+
+                // Flush final batch
+                let (x, y, w, h) = current_scissor;
+                render_pass.set_scissor_rect(x, y, w, h);
+                render_pass.draw_indexed(batch_start..batch_end, 0, 0..1);
 
                 render_pass.set_scissor_rect(0, 0, screen_width as u32, screen_height as u32);
             }
