@@ -1,5 +1,6 @@
 use crate::content::Content;
 use crate::layout::{ComputedLayout, LayoutDirection, Offset, Overflow, Size, Spacing};
+use crate::measure::{ContentMeasurer, IntrinsicSize, MeasureTextRequest};
 use crate::primitives::{Rect, Shape};
 
 /// A UI node that can contain a shape, content, and/or children
@@ -41,8 +42,8 @@ impl Node {
     /// Create a new node with default settings
     pub fn new() -> Self {
         Self {
-            width: Size::Fill,
-            height: Size::Fill,
+            width: Size::FitContent,
+            height: Size::FitContent,
             offset: Offset::zero(),
             padding: Spacing::zero(),
             margin: Spacing::zero(),
@@ -156,6 +157,129 @@ impl Node {
         self.computed.as_ref()
     }
 
+    /// Measure the intrinsic size of this node (content + padding, excluding margins).
+    ///
+    /// This recursively measures children and applies the same margin/gap collapsing
+    /// rules as layout to ensure measured sizes match final layout.
+    ///
+    /// Returns the node's "border-box" size (content + padding), NOT including margins.
+    /// Parent is responsible for adding margins when positioning.
+    fn measure_node(&self, measurer: &mut dyn ContentMeasurer) -> IntrinsicSize {
+        // Short-circuit: if both dimensions are Fixed, we can return immediately
+        if let (Size::Fixed(w), Size::Fixed(h)) = (self.width, self.height) {
+            return IntrinsicSize::new(w, h);
+        }
+
+        // Measure content size (excluding padding) only for FitContent dimensions
+        let content_size = if let Some(content) = &self.content {
+            // Leaf node with content (text, etc.)
+            match content {
+                Content::Text(text_content) => {
+                    measurer.measure_text(MeasureTextRequest::from_text_content(text_content))
+                }
+            }
+        } else if !self.children.is_empty() {
+            // Container node: measure children and compute container size
+            self.measure_children(measurer)
+        } else {
+            // Empty container
+            IntrinsicSize::zero()
+        };
+
+        // For each dimension: use Fixed if specified, otherwise use measured + padding
+        let width = match self.width {
+            Size::Fixed(w) => w,
+            _ => content_size.width + self.padding.left + self.padding.right,
+        };
+
+        let height = match self.height {
+            Size::Fixed(h) => h,
+            _ => content_size.height + self.padding.top + self.padding.bottom,
+        };
+
+        IntrinsicSize::new(width, height)
+    }
+
+    /// Measure the intrinsic content size of a container based on its children.
+    ///
+    /// This uses the same margin/gap collapsing logic as layout to ensure consistency.
+    fn measure_children(&self, measurer: &mut dyn ContentMeasurer) -> IntrinsicSize {
+        if self.children.is_empty() {
+            return IntrinsicSize::zero();
+        }
+
+        // Measure each child (border-box: content + padding, excluding margins)
+        let child_sizes: Vec<IntrinsicSize> = self
+            .children
+            .iter()
+            .map(|child| child.measure_node(measurer))
+            .collect();
+
+        // Calculate spacing using the same collapsing rules as layout
+        let (total_horizontal_spacing, total_vertical_spacing) = match self.layout_direction {
+            LayoutDirection::Horizontal => {
+                let mut total = 0.0f32;
+                for (i, child) in self.children.iter().enumerate() {
+                    if i == 0 {
+                        // First child: left margin doesn't collapse with parent padding
+                        total += child.margin.left;
+                    }
+
+                    // Between this child and the next, collapse gap with margins
+                    if i + 1 < self.children.len() {
+                        let next_child = &self.children[i + 1];
+                        let collapsed_margin = child.margin.right.max(next_child.margin.left);
+                        total += self.gap.max(collapsed_margin);
+                    } else {
+                        // Last child: just add its right margin
+                        total += child.margin.right;
+                    }
+                }
+                (total, 0.0)
+            }
+            LayoutDirection::Vertical => {
+                let mut total = 0.0f32;
+                for (i, child) in self.children.iter().enumerate() {
+                    if i == 0 {
+                        // First child: top margin doesn't collapse with parent padding
+                        total += child.margin.top;
+                    }
+
+                    // Between this child and the next, collapse gap with margins
+                    if i + 1 < self.children.len() {
+                        let next_child = &self.children[i + 1];
+                        let collapsed_margin = child.margin.bottom.max(next_child.margin.top);
+                        total += self.gap.max(collapsed_margin);
+                    } else {
+                        // Last child: just add its bottom margin
+                        total += child.margin.bottom;
+                    }
+                }
+                (0.0, total)
+            }
+        };
+
+        // Compute intrinsic size based on layout direction
+        match self.layout_direction {
+            LayoutDirection::Horizontal => {
+                // Width: sum of child border-box widths + spacing
+                // Height: max of child border-box heights (cross-axis, margins don't contribute)
+                let width =
+                    child_sizes.iter().map(|s| s.width).sum::<f32>() + total_horizontal_spacing;
+                let height = child_sizes.iter().map(|s| s.height).fold(0.0f32, f32::max);
+                IntrinsicSize::new(width, height)
+            }
+            LayoutDirection::Vertical => {
+                // Height: sum of child border-box heights + spacing
+                // Width: max of child border-box widths (cross-axis, margins don't contribute)
+                let height =
+                    child_sizes.iter().map(|s| s.height).sum::<f32>() + total_vertical_spacing;
+                let width = child_sizes.iter().map(|s| s.width).fold(0.0f32, f32::max);
+                IntrinsicSize::new(width, height)
+            }
+        }
+    }
+
     /// Compute layout for this node and all children
     ///
     /// `available_rect` is the space available for this node (typically parent's content area)
@@ -165,6 +289,232 @@ impl Node {
             available_rect.width(),
             available_rect.height(),
         );
+    }
+
+    /// Compute layout with a measurer for resolving `Size::FitContent`.
+    ///
+    /// This is the recommended entry point when using FitContent sizing.
+    pub fn compute_layout_with_measurer(
+        &mut self,
+        available_rect: Rect,
+        measurer: &mut dyn ContentMeasurer,
+    ) {
+        self.compute_layout_with_parent_size_and_measurer(
+            available_rect,
+            available_rect.width(),
+            available_rect.height(),
+            measurer,
+        );
+    }
+
+    fn compute_layout_with_parent_size_and_measurer(
+        &mut self,
+        available_rect: Rect,
+        parent_width: f32,
+        parent_height: f32,
+        measurer: &mut dyn ContentMeasurer,
+    ) {
+        // Account for this node's margins when calculating available space
+        let available_width = (parent_width - self.margin.left - self.margin.right).max(0.0);
+        let available_height = (parent_height - self.margin.top - self.margin.bottom).max(0.0);
+
+        // Resolve width and height, using measurement for FitContent
+        let width = if self.width.is_fit_content() {
+            let measured = self.measure_node(measurer);
+            measured.width.min(available_width) // Clamp to available space
+        } else {
+            self.width.resolve(available_width)
+        };
+
+        let height = if self.height.is_fit_content() {
+            let measured = self.measure_node(measurer);
+            measured.height.min(available_height) // Clamp to available space
+        } else {
+            self.height.resolve(available_height)
+        };
+
+        // Position is already adjusted for margins by parent, don't add them again
+        let outer_x = available_rect.min[0];
+        let outer_y = available_rect.min[1];
+
+        // Content area (after subtracting padding)
+        let content_x = outer_x + self.padding.left;
+        let content_y = outer_y + self.padding.top;
+        let content_width = width - self.padding.left - self.padding.right;
+        let content_height = height - self.padding.top - self.padding.bottom;
+
+        // Store computed layout for this node, with offset applied
+        self.computed = Some(ComputedLayout::new(Rect::new(
+            [outer_x + self.offset.x, outer_y + self.offset.y],
+            [
+                outer_x + width + self.offset.x,
+                outer_y + height + self.offset.y,
+            ],
+        )));
+
+        // Layout children (same as original, but passing measurer through)
+        let mut current_x = content_x;
+        let mut current_y = content_y;
+
+        // Calculate total spacing in the layout direction (margins + gaps)
+        let (total_horizontal_spacing, total_vertical_spacing) = match self.layout_direction {
+            LayoutDirection::Horizontal => {
+                let mut total = 0.0f32;
+                for (i, child) in self.children.iter().enumerate() {
+                    if i == 0 {
+                        total += child.margin.left;
+                    }
+
+                    if i + 1 < self.children.len() {
+                        let next_child = &self.children[i + 1];
+                        let collapsed_margin = child.margin.right.max(next_child.margin.left);
+                        total += self.gap.max(collapsed_margin);
+                    } else {
+                        total += child.margin.right;
+                    }
+                }
+                (total, 0.0)
+            }
+            LayoutDirection::Vertical => {
+                let mut total = 0.0f32;
+                for (i, child) in self.children.iter().enumerate() {
+                    if i == 0 {
+                        total += child.margin.top;
+                    }
+
+                    if i + 1 < self.children.len() {
+                        let next_child = &self.children[i + 1];
+                        let collapsed_margin = child.margin.bottom.max(next_child.margin.top);
+                        total += self.gap.max(collapsed_margin);
+                    } else {
+                        total += child.margin.bottom;
+                    }
+                }
+                (0.0, total)
+            }
+        };
+
+        // Space available for children after subtracting spacing (margins + gaps)
+        let available_width = (content_width - total_horizontal_spacing).max(0.0);
+        let available_height = (content_height - total_vertical_spacing).max(0.0);
+
+        // Calculate remaining space for Fill children
+        let (fill_size_width, fill_size_height) = match self.layout_direction {
+            LayoutDirection::Horizontal => {
+                let mut fill_count = 0;
+                let mut used_width = 0.0;
+
+                for child in &self.children {
+                    if child.width.is_fill() {
+                        fill_count += 1;
+                    } else if child.width.is_fit_content() {
+                        used_width += child.measure_node(measurer).width;
+                    } else {
+                        used_width += child.width.resolve(available_width);
+                    }
+                }
+
+                let remaining_width = (available_width - used_width).max(0.0);
+                let fill_width = if fill_count > 0 {
+                    remaining_width / fill_count as f32
+                } else {
+                    0.0
+                };
+
+                (fill_width, available_height)
+            }
+            LayoutDirection::Vertical => {
+                let mut fill_count = 0;
+                let mut used_height = 0.0;
+
+                for child in &self.children {
+                    if child.height.is_fill() {
+                        fill_count += 1;
+                    } else if child.height.is_fit_content() {
+                        used_height += child.measure_node(measurer).height;
+                    } else {
+                        used_height += child.height.resolve(available_height);
+                    }
+                }
+
+                let remaining_height = (available_height - used_height).max(0.0);
+                let fill_height = if fill_count > 0 {
+                    remaining_height / fill_count as f32
+                } else {
+                    0.0
+                };
+
+                (available_width, fill_height)
+            }
+        };
+
+        let num_children = self.children.len();
+        for i in 0..num_children {
+            if i == 0 {
+                match self.layout_direction {
+                    LayoutDirection::Horizontal => {
+                        current_x += self.children[i].margin.left;
+                    }
+                    LayoutDirection::Vertical => {
+                        current_y += self.children[i].margin.top;
+                    }
+                }
+            }
+
+            let child_available_rect = match self.layout_direction {
+                LayoutDirection::Horizontal => Rect::new(
+                    [current_x, current_y],
+                    [content_x + content_width, content_y + content_height],
+                ),
+                LayoutDirection::Vertical => Rect::new(
+                    [current_x, current_y],
+                    [content_x + content_width, content_y + content_height],
+                ),
+            };
+
+            let child_parent_width = if self.children[i].width.is_fill() {
+                fill_size_width + self.children[i].margin.left + self.children[i].margin.right
+            } else {
+                available_width + self.children[i].margin.left + self.children[i].margin.right
+            };
+            let child_parent_height = if self.children[i].height.is_fill() {
+                fill_size_height + self.children[i].margin.top + self.children[i].margin.bottom
+            } else {
+                available_height + self.children[i].margin.top + self.children[i].margin.bottom
+            };
+
+            self.children[i].compute_layout_with_parent_size_and_measurer(
+                child_available_rect,
+                child_parent_width,
+                child_parent_height,
+                measurer,
+            );
+
+            if let Some(child_layout) = self.children[i].computed_layout() {
+                let child_rect = child_layout.rect;
+
+                if i + 1 < num_children {
+                    match self.layout_direction {
+                        LayoutDirection::Horizontal => {
+                            let collapsed_margin = self.children[i]
+                                .margin
+                                .right
+                                .max(self.children[i + 1].margin.left);
+                            let spacing = self.gap.max(collapsed_margin);
+                            current_x = child_rect.max[0] + spacing;
+                        }
+                        LayoutDirection::Vertical => {
+                            let collapsed_margin = self.children[i]
+                                .margin
+                                .bottom
+                                .max(self.children[i + 1].margin.top);
+                            let spacing = self.gap.max(collapsed_margin);
+                            current_y = child_rect.max[1] + spacing;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn compute_layout_with_parent_size(

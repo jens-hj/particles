@@ -18,7 +18,9 @@
 
 #![deny(warnings)]
 
-use astra_gui::{HorizontalAlign, Rect, VerticalAlign};
+use astra_gui::{
+    ContentMeasurer, HorizontalAlign, IntrinsicSize, MeasureTextRequest, Rect, VerticalAlign,
+};
 
 /// A stable identifier for a font face known to the text engine.
 ///
@@ -173,6 +175,15 @@ impl TextEngine for Engine {
     }
 }
 
+impl ContentMeasurer for Engine {
+    fn measure_text(&mut self, request: MeasureTextRequest<'_>) -> IntrinsicSize {
+        match self {
+            #[cfg(feature = "cosmic")]
+            Self::Cosmic(engine) => engine.measure_text(request),
+        }
+    }
+}
+
 /// Helper: compute alignment origin for a line box within a rect.
 fn align_origin(
     rect: Rect,
@@ -211,6 +222,7 @@ pub mod cosmic {
         ShapeLineRequest, ShapedLine, TextEngine,
     };
 
+    use astra_gui::{ContentMeasurer, IntrinsicSize, MeasureTextRequest, Rect};
     use cosmic_text::{fontdb, Attrs, Buffer, FontSystem, Metrics, Shaping};
 
     /// Concrete engine backed by `cosmic-text`.
@@ -456,6 +468,26 @@ pub mod cosmic {
                 advance_px,
                 pixels,
             })
+        }
+    }
+
+    impl ContentMeasurer for CosmicEngine {
+        fn measure_text(&mut self, request: MeasureTextRequest<'_>) -> IntrinsicSize {
+            // Use a dummy rect for measurement - we only care about the metrics
+            let dummy_rect = Rect::new([0.0, 0.0], [f32::MAX, f32::MAX]);
+
+            let shape_request = ShapeLineRequest {
+                text: request.text,
+                rect: dummy_rect,
+                font_px: request.font_size,
+                h_align: request.h_align,
+                v_align: request.v_align,
+                family: request.family,
+            };
+
+            let (shaped_line, _placement) = self.shape_line(shape_request);
+
+            IntrinsicSize::new(shaped_line.metrics.width_px, shaped_line.metrics.height_px)
         }
     }
 }

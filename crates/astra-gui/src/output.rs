@@ -1,4 +1,5 @@
 use crate::layout::Overflow;
+use crate::measure::ContentMeasurer;
 use crate::node::Node;
 use crate::primitives::{ClippedShape, Rect, Shape};
 
@@ -29,13 +30,32 @@ impl FullOutput {
     /// `window_size` is the (width, height) of the window
     /// `debug_options` configures which debug visualizations to show
     pub fn from_node_with_debug(
-        mut root: Node,
+        root: Node,
         window_size: (f32, f32),
         debug_options: Option<crate::debug::DebugOptions>,
     ) -> Self {
+        Self::from_node_with_debug_and_measurer(root, window_size, debug_options, None)
+    }
+
+    /// Create output from a node tree with optional debug visualization and measurer
+    ///
+    /// `window_size` is the (width, height) of the window
+    /// `debug_options` configures which debug visualizations to show
+    /// `measurer` enables `Size::FitContent` to resolve to intrinsic content size
+    pub fn from_node_with_debug_and_measurer(
+        mut root: Node,
+        window_size: (f32, f32),
+        debug_options: Option<crate::debug::DebugOptions>,
+        measurer: Option<&mut dyn ContentMeasurer>,
+    ) -> Self {
         // Compute layout starting from the full window
         let window_rect = Rect::new([0.0, 0.0], [window_size.0, window_size.1]);
-        root.compute_layout(window_rect);
+
+        if let Some(m) = measurer {
+            root.compute_layout_with_measurer(window_rect, m);
+        } else {
+            root.compute_layout(window_rect);
+        }
 
         // Convert to ClippedShapes (including optional debug shapes), with overflow-aware clip rects.
         //

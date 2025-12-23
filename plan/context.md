@@ -4,10 +4,9 @@ This file tracks the current working state so you (or another AI) can pick up th
 
 ## Current focus
 
-1) Finish backend-agnostic text rendering (already wired; still needs vertical-placement refinement in `astra-gui-text` / renderer math).
-2) Improve core layout ergonomics by introducing:
-   - `Size::FitContent` (intrinsic sizing)
-   - `Overflow` policy on nodes to control clipping vs visible overflow (scroll on roadmap)
+1) ✅ Backend-agnostic text rendering with intrinsic measurement
+2) ✅ Core layout ergonomics with `Size::FitContent` and `Overflow` policy
+3) Next: refine text vertical placement if needed
 
 ---
 
@@ -15,7 +14,7 @@ This file tracks the current working state so you (or another AI) can pick up th
 
 ### `astra-gui` (core)
 
-Text-related core types already exist:
+Text-related core types:
 - `Content::Text(TextContent)` in `crates/astra-gui/src/content.rs`
 - `TextShape` and `Shape::Text(TextShape)` in `crates/astra-gui/src/primitives.rs`
 
@@ -23,11 +22,11 @@ Node tree emits text shapes:
 - `Node::collect_shapes()` pushes `Shape::Text(TextShape::new(content_rect, text_content))` when `node.content` is `Content::Text(...)`.
 - `content_rect` is computed from the node rect minus padding.
 
-#### New: intrinsic sizing + overflow policy (core)
+#### ✅ NEW: Intrinsic sizing + overflow policy (core)
 
 - Added `Size::FitContent` in `crates/astra-gui/src/layout.rs`.
-  - This is intended to represent “minimum size that fits content (text metrics or children), plus padding”.
-  - Current resolver fallback: `FitContent` resolves to `parent_size` until the layout pass is extended with intrinsic measurement.
+  - Represents "minimum size that fits content (text metrics or children), plus padding".
+  - **Now fully functional**: resolves to measured intrinsic size via `ContentMeasurer` trait.
 
 - Added `Overflow` in `crates/astra-gui/src/layout.rs`:
   - `Overflow::Visible`
@@ -36,25 +35,55 @@ Node tree emits text shapes:
 
 - Added `Node.overflow` and `Node::with_overflow(...)` in `crates/astra-gui/src/node.rs` (default: `Overflow::Hidden`).
 
-#### New: clip rects derive from overflow policy
+#### ✅ NEW: ContentMeasurer trait (backend-agnostic measurement)
 
-`FullOutput::from_node_with_debug()` now builds `ClippedShape`s by walking the node tree and computing `clip_rect` from the ancestor overflow chain:
-- If any ancestor is `Hidden` (or `Scroll` for now), `clip_rect` is the intersection of those ancestor rects.
-- `Visible` does not restrict the inherited clip rect.
-- Nodes fully clipped out are skipped early.
+Added `crates/astra-gui/src/measure.rs`:
+- `ContentMeasurer` trait: backend-agnostic content measurement interface
+- `MeasureTextRequest`: request structure for measuring text intrinsic size
+- `IntrinsicSize`: measured width/height result
 
-Note: shapes still use `node_rect` for their “shape rect” (e.g. background), and text still uses `content_rect` for the text’s own bounding box; `clip_rect` is controlled separately by the overflow policy.
+Layout implementation:
+- `Node::measure_node()`: recursively measures intrinsic size (content + padding)
+- `Node::measure_children()`: aggregates child measurements with margin/gap collapsing
+- `Node::compute_layout_with_measurer()`: layout entry point that uses measurer for `FitContent`
+- `compute_layout_with_parent_size_and_measurer()`: internal layout that resolves `FitContent` to measured sizes
+
+The measurement algorithm mirrors the layout spacing rules exactly:
+- Same margin/gap collapsing behavior
+- Respects layout direction (horizontal/vertical)
+- Returns border-box size (content + padding, excluding margins)
+
+#### Clip rects derive from overflow policy
+
+`FullOutput::from_node_with_debug_and_measurer()` builds `ClippedShape`s by walking the node tree:
+- Computes `clip_rect` from ancestor overflow chain
+- If any ancestor is `Hidden` (or `Scroll`), `clip_rect` is intersection of those ancestor rects
+- `Visible` does not restrict the inherited clip rect
+- Nodes fully clipped out are skipped early
 
 Tessellation remains geometry-only:
-- `Shape::Rect` gets tessellated into triangles.
-- `Shape::Text` is still intentionally skipped (backend-rendered).
+- `Shape::Rect` gets tessellated into triangles
+- `Shape::Text` is intentionally skipped (backend-rendered)
+
+### `astra-gui-text` (text backend)
+
+✅ **NEW: Implements `ContentMeasurer` trait**
+
+- `Engine` and `CosmicEngine` both implement `ContentMeasurer`
+- `measure_text()`: uses existing `shape_line()` with dummy rect to get metrics
+- Returns `IntrinsicSize { width, height }` from `LineMetrics`
+
+This keeps measurement backend-agnostic:
+- Core layout depends only on `ContentMeasurer` trait
+- Specific text engine (cosmic-text) lives in `astra-gui-text`
+- Measurement reuses existing shaping infrastructure
 
 ### `astra-gui-wgpu` (backend)
 
-- Geometry pipeline exists (`src/shaders/ui.wgsl`) and continues to work.
+- Geometry pipeline exists (`src/shaders/ui.wgsl`) and continues to work
 - Text pipeline exists and is wired:
-  - `src/shaders/text.wgsl` samples an `R8Unorm` atlas and tints by vertex color.
-  - CPU side generates per-glyph quads and uploads an `R8` glyph bitmap into the atlas.
+  - `src/shaders/text.wgsl` samples an `R8Unorm` atlas and tints by vertex color
+  - CPU side generates per-glyph quads and uploads `R8` glyph bitmap into atlas
 
 Clipping behavior:
 - Text draws with **per-shape scissor** using `ClippedShape::clip_rect`:
@@ -65,73 +94,80 @@ Important limitation:
 - Geometry rendering is still a single batched draw and does **not** currently honor per-shape `clip_rect`. If we want overflow clipping for rects as well, the geometry path will need per-clip batching similar to the text path.
 
 Examples:
-- `crates/astra-gui-wgpu/examples/overflow.rs` showcases `Overflow::{Hidden, Visible, Scroll}` behaviors.
-  - Note: the demo focuses on TEXT overflow because text respects scissor clipping today.
-  - `Overflow::Scroll` is a placeholder (clips only; no scroll offsets implemented yet).
-
-Text rasterization status:
-- WGPU backend uses `astra-gui-text` for shaping and rasterization (Inter via `astra-gui-fonts`).
-- Vertical placement is still inconsistent for some sizes (often clipped upward so only bottoms of glyphs are visible).
+- `crates/astra-gui-wgpu/examples/overflow.rs` showcases `Overflow::{Hidden, Visible, Scroll}` behaviors
+  - ✅ **Updated to use `TextEngine` as `ContentMeasurer`** for proper `FitContent` sizing
+  - Demo focuses on TEXT overflow because text respects scissor clipping
+  - `Overflow::Scroll` is a placeholder (clips only; no scroll offsets implemented yet)
 
 ---
 
 ## Recent progress
 
-- Added core layout primitives:
-  - `Size::FitContent`
-  - `Overflow { Visible, Hidden (default), Scroll (roadmap) }`
-  - `Node::with_overflow(...)`
-  - `FullOutput` now derives `clip_rect` from overflow policy (intersection of ancestor clips)
+### ✅ Completed: Intrinsic measurement for `Size::FitContent`
 
-- Added a WGPU example to exercise overflow policies:
-  - `crates/astra-gui-wgpu/examples/overflow.rs`
+Implemented a complete measurement system:
 
-- Existing text stack remains:
-  - `crates/astra-gui-fonts`: embeds Inter; contains licenses
-  - `crates/astra-gui-text`: cosmic-text shaping + swash rasterization outputting `R8` masks + bearing
-  - `crates/astra-gui-wgpu`: atlas, uploads, text pipeline, scissor-based clipping for text
+1. **Core trait in `astra-gui`** (`src/measure.rs`):
+   - `ContentMeasurer` trait for backend-agnostic content measurement
+   - Measurement functions in `Node` that mirror layout spacing rules exactly
+   - Layout functions that use measurer to resolve `FitContent`
+
+2. **Implementation in `astra-gui-text`**:
+   - `ContentMeasurer` implemented for `Engine` and `CosmicEngine`
+   - Measurement reuses existing shaping/metrics infrastructure
+
+3. **Integration in examples**:
+   - Updated `overflow.rs` to create `TextEngine` and pass as measurer
+   - `FitContent` now resolves to actual text metrics instead of falling back to parent size
+
+The system is:
+- **Backend-agnostic**: core doesn't depend on cosmic-text
+- **Consistent**: measurement uses same spacing rules as layout
+- **Recursive**: handles nested `FitContent` containers correctly
+- **Short-circuits**: only measures when needed (Fixed/Relative/Fill skip measurement)
 
 ---
 
-## What’s missing / next work items
+## What's missing / next work items
 
-### 1) Implement intrinsic measurement for `Size::FitContent` (layout)
+### 1) Overflow policy completeness across renderers
 
-Right now `FitContent` is a semantic placeholder. To make it real we need:
-- Text measurement (at least line height; ideally width too) for `Content::Text`
-- Children measurement aggregation for container nodes (layout-direction dependent; includes margins + gap collapsing + padding)
+- Text: already respects `ClippedShape::clip_rect` via scissor ✅
+- Geometry: needs per-clip batching/scissor (or separate clipped render pass per clip group) to fully respect `Overflow::Hidden`
 
-This likely means adding a measurement pass or extending `compute_layout` to compute intrinsic sizes before resolving.
-
-### 2) Overflow policy completeness across renderers
-
-- Text: already respects `ClippedShape::clip_rect` via scissor.
-- Geometry: needs per-clip batching/scissor (or a separate clipped render pass per clip group) to fully respect `Overflow::Hidden`.
-
-### 3) Scroll (roadmap)
+### 2) Scroll (roadmap)
 
 `Overflow::Scroll` is defined but not implemented:
-- For now it behaves like `Hidden` (clip only).
-- Future: add scroll offset state and adapt clip rect + transform.
+- For now it behaves like `Hidden` (clip only)
+- Future: add scroll offset state and adapt clip rect + transform
 
-### 4) Fix text vertical placement (still highest priority for visuals)
+### 3) Text vertical placement refinement (if needed)
 
-Next steps:
+Next steps if issues arise:
 - Confirm consistent coordinate convention between:
   - cosmic-text physical glyph output
   - swash placement + cache key integer offsets
   - renderer quad placement formula
 
+### 4) Multi-line text / wrapping (future)
+
+Current implementation:
+- Single-line text only
+- `FitContent` measures single line width/height
+
+Future extensions:
+- Multi-line shaping with word wrapping
+- Measurement with max-width constraints
+
 ---
 
 ## Constraints / project rules to follow
 
-- Use conventional commits when committing.
+- Use conventional commits when committing
 - Run:
-  - `cargo fmt`
-  - `cargo check`
-  - `cargo run` (so the result can be inspected)
-- Avoid warnings.
-- Keep `astra-gui` minimal / backend-only rendering logic remains in backend crates.
-- Update this `plan/context.md` regularly while implementing.
-
+  - `cargo fmt` ✅
+  - `cargo check` ✅
+  - `cargo run` (so the result can be inspected) ✅
+- Avoid warnings ✅
+- Keep `astra-gui` minimal / backend-only rendering logic remains in backend crates ✅
+- Update this `plan/context.md` regularly while implementing ✅

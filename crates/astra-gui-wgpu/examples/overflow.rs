@@ -17,9 +17,11 @@
 //! - Toggle borders (B) and content area (C) to understand which rect is clipping.
 
 use astra_gui::{
-    Color, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign, LayoutDirection, Node,
-    Offset, Overflow, Rect, Shape, Size, Spacing, Stroke, StyledRect, TextContent, VerticalAlign,
+    Color, Content, ContentMeasurer, CornerShape, DebugOptions, FullOutput, HorizontalAlign,
+    LayoutDirection, Node, Overflow, Rect, Shape, Size, Spacing, Stroke, StyledRect, TextContent,
+    VerticalAlign,
 };
+use astra_gui_text::Engine as TextEngine;
 use astra_gui_wgpu::Renderer;
 use std::sync::Arc;
 use winit::{
@@ -90,6 +92,7 @@ struct App {
     window: Option<Arc<Window>>,
     gpu_state: Option<GpuState>,
     debug_options: DebugOptions,
+    text_engine: TextEngine,
 }
 
 struct GpuState {
@@ -171,7 +174,11 @@ impl GpuState {
         }
     }
 
-    fn render(&mut self, debug_options: &DebugOptions) -> Result<(), wgpu::SurfaceError> {
+    fn render(
+        &mut self,
+        debug_options: &DebugOptions,
+        measurer: &mut dyn ContentMeasurer,
+    ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -216,6 +223,7 @@ impl GpuState {
             self.config.width as f32,
             self.config.height as f32,
             debug_options,
+            measurer,
         );
 
         let mut encoder = self
@@ -275,12 +283,9 @@ fn demo_box(title: &str, overflow_mode: Overflow, color: Color) -> Node {
     let long_text =
         "OVERFLOW DEMO →→→ this text extends beyond the viewport bounds →→→ →→→ →→→ →→→";
 
-    // We make the text node start outside the viewport to create an obvious overflow signal.
-    // Positive Y also makes it overflow vertically a bit.
-    let overflow_offset = (-180.0, 18.0);
-
     Node::new()
-        .with_height(Size::px(220.0))
+        .with_width(Size::Fill)
+        .with_height(Size::px(400.0))
         .with_padding(Spacing::all(16.0))
         .with_gap(14.0)
         .with_layout_direction(LayoutDirection::Vertical)
@@ -301,27 +306,26 @@ fn demo_box(title: &str, overflow_mode: Overflow, color: Color) -> Node {
             // Viewport content: one oversized child.
             Node::new()
                 .with_height(Size::Fill)
-                .with_width(Size::Fill)
                 .with_padding(Spacing::all(14.0))
                 .with_shape(panel(Color::new(0.12, 0.12, 0.16, 0.70)))
                 .with_layout_direction(LayoutDirection::Horizontal)
-                .with_children(vec![Node::new()
-                    .with_width(Size::Fill)
-                    .with_height(Size::Fill)
-                    // Move the text node so it starts outside the viewport.
-                    .with_offset(Offset::new(overflow_offset.0, overflow_offset.1))
-                    .with_children(vec![label(
-                        long_text,
-                        26.0,
-                        Color::new(0.90, 0.92, 0.95, 1.0),
-                        HorizontalAlign::Left,
-                        VerticalAlign::Top,
-                    )
-                    .with_height(Size::Fill)])]),
+                .with_overflow(overflow_mode)
+                .with_children(vec![Node::new().with_children(vec![label(
+                    long_text,
+                    26.0,
+                    Color::new(0.90, 0.92, 0.95, 1.0),
+                    HorizontalAlign::Left,
+                    VerticalAlign::Top,
+                )])]),
         ])
 }
 
-fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> FullOutput {
+fn create_demo_ui(
+    width: f32,
+    height: f32,
+    debug_options: &DebugOptions,
+    measurer: &mut dyn ContentMeasurer,
+) -> FullOutput {
     let _window_rect = Rect::new([0.0, 0.0], [width, height]);
 
     let root = Node::new()
@@ -362,7 +366,6 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                 ]),
             // Columns
             Node::new()
-                .with_height(Size::Fill)
                 .with_gap(18.0)
                 .with_layout_direction(LayoutDirection::Horizontal)
                 .with_children(vec![
@@ -403,7 +406,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                 .with_height(Size::Fill)]),
         ]);
 
-    FullOutput::from_node_with_debug(
+    FullOutput::from_node_with_debug_and_measurer(
         root,
         (width, height),
         if debug_options.is_enabled() {
@@ -411,6 +414,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
         } else {
             None
         },
+        Some(measurer),
     )
 }
 
@@ -458,7 +462,7 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 if let Some(gpu_state) = &mut self.gpu_state {
-                    match gpu_state.render(&self.debug_options) {
+                    match gpu_state.render(&self.debug_options, &mut self.text_engine) {
                         Ok(()) => {}
                         Err(wgpu::SurfaceError::Lost) => {
                             gpu_state.resize(winit::dpi::PhysicalSize::new(
@@ -493,6 +497,7 @@ fn main() {
         window: None,
         gpu_state: None,
         debug_options: DebugOptions::none(),
+        text_engine: TextEngine::new_default(),
     };
 
     event_loop.run_app(&mut app).unwrap();
