@@ -37,27 +37,20 @@ impl FullOutput {
         let window_rect = Rect::new([0.0, 0.0], [window_size.0, window_size.1]);
         root.compute_layout(window_rect);
 
-        // Collect all shapes
-        let mut collected_shapes = Vec::new();
-        root.collect_shapes(&mut collected_shapes);
-
-        // Add debug shapes if enabled
-        if let Some(options) = debug_options {
-            if options.is_enabled() {
-                root.collect_debug_shapes(&mut collected_shapes, &options);
-            }
-        }
-
-        // Convert to ClippedShapes
+        // Convert to ClippedShapes (including optional debug shapes), with overflow-aware clip rects.
         //
         // We derive `clip_rect` from the node tree's overflow policy:
         // - If any ancestor has `Overflow::Hidden` (or `Scroll`, for now), shapes are clipped to the
         //   intersection of those ancestor rects.
         // - If all ancestors are `Overflow::Visible`, the clip rect remains the full window rect.
-        let window_rect = Rect::new([0.0, 0.0], [window_size.0, window_size.1]);
-
         let mut raw_shapes = Vec::new();
-        collect_clipped_shapes(&root, window_rect, window_rect, &mut raw_shapes);
+        collect_clipped_shapes(
+            &root,
+            window_rect,
+            window_rect,
+            debug_options,
+            &mut raw_shapes,
+        );
 
         let shapes = raw_shapes
             .into_iter()
@@ -85,6 +78,7 @@ fn collect_clipped_shapes(
     node: &Node,
     window_rect: Rect,
     inherited_clip_rect: Rect,
+    debug_options: Option<crate::debug::DebugOptions>,
     out: &mut Vec<(Rect, Rect, Shape)>,
 ) {
     let Some(layout) = node.computed_layout() else {
@@ -104,10 +98,12 @@ fn collect_clipped_shapes(
         return;
     }
 
+    // Background shape (if any)
     if let Some(shape) = &node.shape {
         out.push((node_rect, effective_clip_rect, shape.clone()));
     }
 
+    // Content (if any)
     if let Some(content) = &node.content {
         match content {
             crate::content::Content::Text(text_content) => {
@@ -135,8 +131,15 @@ fn collect_clipped_shapes(
         }
     }
 
+    // Debug overlays (if enabled) must also be overflow-clipped consistently.
+    if let Some(options) = debug_options {
+        if options.is_enabled() {
+            collect_debug_shapes_clipped(node, node_rect, effective_clip_rect, &options, out);
+        }
+    }
+
     for child in &node.children {
-        collect_clipped_shapes(child, window_rect, effective_clip_rect, out);
+        collect_clipped_shapes(child, window_rect, effective_clip_rect, debug_options, out);
     }
 }
 
@@ -149,4 +152,196 @@ fn intersect_rect(a: Rect, b: Rect) -> Rect {
 
 fn is_empty_rect(r: Rect) -> bool {
     r.max[0] <= r.min[0] || r.max[1] <= r.min[1]
+}
+
+fn collect_debug_shapes_clipped(
+    node: &Node,
+    node_rect: Rect,
+    clip_rect: Rect,
+    options: &crate::debug::DebugOptions,
+    out: &mut Vec<(Rect, Rect, Shape)>,
+) {
+    use crate::color::Color;
+    use crate::primitives::{Stroke, StyledRect};
+
+    // Draw margin area (outermost, semi-transparent red showing margin space)
+    if options.show_margins
+        && (node.margin.top > 0.0
+            || node.margin.right > 0.0
+            || node.margin.bottom > 0.0
+            || node.margin.left > 0.0)
+    {
+        // Draw top margin
+        if node.margin.top > 0.0 {
+            out.push((
+                Rect::new(
+                    [
+                        node_rect.min[0] - node.margin.left,
+                        node_rect.min[1] - node.margin.top,
+                    ],
+                    [node_rect.max[0] + node.margin.right, node_rect.min[1]],
+                ),
+                clip_rect,
+                Shape::Rect(StyledRect::new(
+                    Default::default(),
+                    Color::new(1.0, 0.0, 0.0, 0.2),
+                )),
+            ));
+        }
+        // Draw right margin (excluding top and bottom corners)
+        if node.margin.right > 0.0 {
+            out.push((
+                Rect::new(
+                    [node_rect.max[0], node_rect.min[1]],
+                    [node_rect.max[0] + node.margin.right, node_rect.max[1]],
+                ),
+                clip_rect,
+                Shape::Rect(StyledRect::new(
+                    Default::default(),
+                    Color::new(1.0, 0.0, 0.0, 0.2),
+                )),
+            ));
+        }
+        // Draw bottom margin (full width including corners)
+        if node.margin.bottom > 0.0 {
+            out.push((
+                Rect::new(
+                    [node_rect.min[0] - node.margin.left, node_rect.max[1]],
+                    [
+                        node_rect.max[0] + node.margin.right,
+                        node_rect.max[1] + node.margin.bottom,
+                    ],
+                ),
+                clip_rect,
+                Shape::Rect(StyledRect::new(
+                    Default::default(),
+                    Color::new(1.0, 0.0, 0.0, 0.2),
+                )),
+            ));
+        }
+        // Draw left margin (excluding top and bottom corners)
+        if node.margin.left > 0.0 {
+            out.push((
+                Rect::new(
+                    [node_rect.min[0] - node.margin.left, node_rect.min[1]],
+                    [node_rect.min[0], node_rect.max[1]],
+                ),
+                clip_rect,
+                Shape::Rect(StyledRect::new(
+                    Default::default(),
+                    Color::new(1.0, 0.0, 0.0, 0.2),
+                )),
+            ));
+        }
+    }
+
+    // Draw content area (yellow outline - area inside padding)
+    if options.show_content_area
+        && (node.padding.top > 0.0
+            || node.padding.right > 0.0
+            || node.padding.bottom > 0.0
+            || node.padding.left > 0.0)
+    {
+        let content_rect = Rect::new(
+            [
+                node_rect.min[0] + node.padding.left,
+                node_rect.min[1] + node.padding.top,
+            ],
+            [
+                node_rect.max[0] - node.padding.right,
+                node_rect.max[1] - node.padding.bottom,
+            ],
+        );
+        out.push((
+            content_rect,
+            clip_rect,
+            Shape::Rect(
+                StyledRect::new(Default::default(), Color::transparent())
+                    .with_stroke(Stroke::new(1.0, Color::new(1.0, 1.0, 0.0, 0.5))),
+            ),
+        ));
+    }
+
+    // Draw padding area (semi-transparent blue showing the padding inset)
+    if options.show_padding
+        && (node.padding.top > 0.0
+            || node.padding.right > 0.0
+            || node.padding.bottom > 0.0
+            || node.padding.left > 0.0)
+    {
+        // Draw top padding (full width)
+        if node.padding.top > 0.0 {
+            out.push((
+                Rect::new(
+                    [node_rect.min[0], node_rect.min[1]],
+                    [node_rect.max[0], node_rect.min[1] + node.padding.top],
+                ),
+                clip_rect,
+                Shape::Rect(StyledRect::new(
+                    Default::default(),
+                    Color::new(0.0, 0.0, 1.0, 0.2),
+                )),
+            ));
+        }
+        // Draw right padding (excluding top and bottom corners)
+        if node.padding.right > 0.0 {
+            out.push((
+                Rect::new(
+                    [
+                        node_rect.max[0] - node.padding.right,
+                        node_rect.min[1] + node.padding.top,
+                    ],
+                    [node_rect.max[0], node_rect.max[1] - node.padding.bottom],
+                ),
+                clip_rect,
+                Shape::Rect(StyledRect::new(
+                    Default::default(),
+                    Color::new(0.0, 0.0, 1.0, 0.2),
+                )),
+            ));
+        }
+        // Draw bottom padding (full width)
+        if node.padding.bottom > 0.0 {
+            out.push((
+                Rect::new(
+                    [node_rect.min[0], node_rect.max[1] - node.padding.bottom],
+                    [node_rect.max[0], node_rect.max[1]],
+                ),
+                clip_rect,
+                Shape::Rect(StyledRect::new(
+                    Default::default(),
+                    Color::new(0.0, 0.0, 1.0, 0.2),
+                )),
+            ));
+        }
+        // Draw left padding (excluding top and bottom corners)
+        if node.padding.left > 0.0 {
+            out.push((
+                Rect::new(
+                    [node_rect.min[0], node_rect.min[1] + node.padding.top],
+                    [
+                        node_rect.min[0] + node.padding.left,
+                        node_rect.max[1] - node.padding.bottom,
+                    ],
+                ),
+                clip_rect,
+                Shape::Rect(StyledRect::new(
+                    Default::default(),
+                    Color::new(0.0, 0.0, 1.0, 0.2),
+                )),
+            ));
+        }
+    }
+
+    // Draw node border (green outline for the actual node rect)
+    if options.show_borders {
+        out.push((
+            node_rect,
+            clip_rect,
+            Shape::Rect(
+                StyledRect::new(Default::default(), Color::transparent())
+                    .with_stroke(Stroke::new(1.0, Color::new(0.0, 1.0, 0.0, 0.5))),
+            ),
+        ));
+    }
 }

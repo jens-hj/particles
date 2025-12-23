@@ -64,6 +64,11 @@ Clipping behavior:
 Important limitation:
 - Geometry rendering is still a single batched draw and does **not** currently honor per-shape `clip_rect`. If we want overflow clipping for rects as well, the geometry path will need per-clip batching similar to the text path.
 
+Examples:
+- `crates/astra-gui-wgpu/examples/overflow.rs` showcases `Overflow::{Hidden, Visible, Scroll}` behaviors.
+  - Note: the demo focuses on TEXT overflow because text respects scissor clipping today.
+  - `Overflow::Scroll` is a placeholder (clips only; no scroll offsets implemented yet).
+
 Text rasterization status:
 - WGPU backend uses `astra-gui-text` for shaping and rasterization (Inter via `astra-gui-fonts`).
 - Vertical placement is still inconsistent for some sizes (often clipped upward so only bottoms of glyphs are visible).
@@ -77,6 +82,9 @@ Text rasterization status:
   - `Overflow { Visible, Hidden (default), Scroll (roadmap) }`
   - `Node::with_overflow(...)`
   - `FullOutput` now derives `clip_rect` from overflow policy (intersection of ancestor clips)
+
+- Added a WGPU example to exercise overflow policies:
+  - `crates/astra-gui-wgpu/examples/overflow.rs`
 
 - Existing text stack remains:
   - `crates/astra-gui-fonts`: embeds Inter; contains licenses
