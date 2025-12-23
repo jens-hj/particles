@@ -101,6 +101,32 @@ fn collect_clipped_shapes(
     debug_options: Option<crate::debug::DebugOptions>,
     out: &mut Vec<(Rect, Rect, Shape)>,
 ) {
+    collect_clipped_shapes_with_opacity(
+        node,
+        window_rect,
+        inherited_clip_rect,
+        debug_options,
+        out,
+        1.0,
+    );
+}
+
+// Recursively walk the node tree with cumulative opacity.
+fn collect_clipped_shapes_with_opacity(
+    node: &Node,
+    window_rect: Rect,
+    inherited_clip_rect: Rect,
+    debug_options: Option<crate::debug::DebugOptions>,
+    out: &mut Vec<(Rect, Rect, Shape)>,
+    parent_opacity: f32,
+) {
+    let combined_opacity = parent_opacity * node.opacity;
+
+    // Skip rendering if fully transparent
+    if combined_opacity <= 0.0 {
+        return;
+    }
+
     let Some(layout) = node.computed_layout() else {
         return;
     };
@@ -120,7 +146,9 @@ fn collect_clipped_shapes(
 
     // Background shape (if any)
     if let Some(shape) = &node.shape {
-        out.push((node_rect, effective_clip_rect, shape.clone()));
+        let mut shape_with_opacity = shape.clone();
+        shape_with_opacity.apply_opacity(combined_opacity);
+        out.push((node_rect, effective_clip_rect, shape_with_opacity));
     }
 
     // Content (if any)
@@ -139,14 +167,9 @@ fn collect_clipped_shapes(
                         node_rect.max[1] - node.padding.bottom,
                     ],
                 );
-                out.push((
-                    node_rect,
-                    effective_clip_rect,
-                    Shape::Text(crate::primitives::TextShape::new(
-                        content_rect,
-                        text_content,
-                    )),
-                ));
+                let mut text_shape = crate::primitives::TextShape::new(content_rect, text_content);
+                text_shape.apply_opacity(combined_opacity);
+                out.push((node_rect, effective_clip_rect, Shape::Text(text_shape)));
             }
         }
     }
@@ -159,7 +182,14 @@ fn collect_clipped_shapes(
     }
 
     for child in &node.children {
-        collect_clipped_shapes(child, window_rect, effective_clip_rect, debug_options, out);
+        collect_clipped_shapes_with_opacity(
+            child,
+            window_rect,
+            effective_clip_rect,
+            debug_options,
+            out,
+            combined_opacity,
+        );
     }
 }
 

@@ -387,6 +387,7 @@ fn create_demo_ui(
                         )]),
                     Node::new()
                         .with_width(Size::fraction(0.333))
+                        .with_opacity(0.0)
                         .with_children(vec![demo_box(
                             "Overflow: Scroll (placeholder)",
                             Overflow::Scroll,
