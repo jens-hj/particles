@@ -149,7 +149,10 @@ fn collect_clipped_shapes_with_opacity(
     // This ensures the container's border/background is not clipped by its own overflow policy.
     if let Some(shape) = node.shape() {
         let mut shape_with_opacity = shape.clone();
-        shape_with_opacity.apply_opacity(combined_opacity);
+        // OPTIMIZATION: Only apply opacity if it's less than 1.0 (most nodes have opacity = 1.0)
+        if combined_opacity < 1.0 {
+            shape_with_opacity.apply_opacity(combined_opacity);
+        }
         out.push((node_rect, inherited_clip_rect, shape_with_opacity));
     }
 
@@ -171,7 +174,10 @@ fn collect_clipped_shapes_with_opacity(
                     ],
                 );
                 let mut text_shape = crate::primitives::TextShape::new(content_rect, text_content);
-                text_shape.apply_opacity(combined_opacity);
+                // OPTIMIZATION: Only apply opacity if it's less than 1.0
+                if combined_opacity < 1.0 {
+                    text_shape.apply_opacity(combined_opacity);
+                }
                 out.push((node_rect, effective_clip_rect, Shape::Text(text_shape)));
             }
         }
