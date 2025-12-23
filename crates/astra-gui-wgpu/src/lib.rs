@@ -36,11 +36,6 @@ const ATLAS_SIZE_PX: u32 = 1024;
 #[cfg(feature = "text-cosmic")]
 const ATLAS_PADDING_PX: u32 = 1;
 
-#[cfg(feature = "text-cosmic")]
-const TEXT_DEBUG_BASELINE_SHIFT_PX: f32 = 0.0;
-#[cfg(feature = "text-cosmic")]
-const TEXT_DEBUG_BEARING_Y_SHIFT_PX: f32 = -20.0;
-
 /// WGPU renderer for astra-gui
 pub struct Renderer {
     pipeline: wgpu::RenderPipeline,
@@ -554,15 +549,8 @@ impl Renderer {
                     };
 
                     // Quad in screen px (origin from placement + shaped glyph offset).
-                    //
-                    // Temporary debug knobs:
-                    // - TEXT_DEBUG_BASELINE_SHIFT_PX: shifts the glyph run down/up uniformly
-                    // - TEXT_DEBUG_BEARING_Y_SHIFT_PX: shifts the glyph bitmap bearing y (i.e. baseline relationship)
                     let x0 = placement.origin_px[0] + g.x_px + bitmap.bearing_px[0] as f32;
-                    let y0 = placement.origin_px[1]
-                        + g.y_px
-                        + (bitmap.bearing_px[1] as f32 + TEXT_DEBUG_BEARING_Y_SHIFT_PX)
-                        + TEXT_DEBUG_BASELINE_SHIFT_PX;
+                    let y0 = placement.origin_px[1] + g.y_px + bitmap.bearing_px[1] as f32;
                     let x1 = x0 + bitmap.size_px[0] as f32;
                     let y1 = y0 + bitmap.size_px[1] as f32;
 

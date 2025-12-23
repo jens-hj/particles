@@ -1,8 +1,7 @@
 //! Demonstrates rendering text nodes.
 //!
-//! NOTE: This example assumes the `astra-gui-wgpu` backend implements `Shape::Text` rendering.
-//! At the moment, the renderer is still geometry-only, so you may only see rectangles until
-//! text rendering is wired up.
+//! This example exercises the `astra-gui-wgpu` backend's `Shape::Text` rendering path,
+//! including alignment, padding/content rect behavior, and scissor-based clipping.
 
 use astra_gui::{
     Color, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign, LayoutDirection, Node,
@@ -388,7 +387,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                                 // Optional offset to demonstrate bounds interactions.
                                 .with_offset(Offset::new(0.0, 0.0))
                                 .with_children(vec![label(
-                                    "This string is intentionally very long to demonstrate clipping/scissoring.",
+                                    "This string is intentionally very long to demonstrate clipping/scissoring. So let's make this even longer to make sure it clips.",
                                     18.0,
                                     Color::new(1.0, 0.9, 0.9, 1.0),
                                     HorizontalAlign::Left,
