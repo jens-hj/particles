@@ -145,10 +145,12 @@ fn collect_clipped_shapes_with_opacity(
     }
 
     // Background shape (if any)
+    // The node's own shape uses the inherited clip rect (from parent), not effective_clip_rect.
+    // This ensures the container's border/background is not clipped by its own overflow policy.
     if let Some(shape) = &node.shape {
         let mut shape_with_opacity = shape.clone();
         shape_with_opacity.apply_opacity(combined_opacity);
-        out.push((node_rect, effective_clip_rect, shape_with_opacity));
+        out.push((node_rect, inherited_clip_rect, shape_with_opacity));
     }
 
     // Content (if any)

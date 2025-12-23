@@ -4,8 +4,8 @@
 //! can be visualized using the existing `DebugOptions` functionality.
 
 use astra_gui::{
-    Color, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node, Shape, Size, Spacing,
-    Stroke, StyledRect,
+    Color, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node, Overflow, Shape, Size,
+    Spacing, Stroke, StyledRect,
 };
 use astra_gui_wgpu::Renderer;
 use std::sync::Arc;
@@ -250,6 +250,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                 .with_height(Size::Fill)
                 .with_gap(40.0)
                 .with_layout_direction(LayoutDirection::Horizontal)
+                .with_overflow(Overflow::Visible)
                 .with_children(vec![
                     // None
                     Node::new()
@@ -283,6 +284,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                 .with_height(Size::Fill)
                 .with_gap(40.0)
                 .with_layout_direction(LayoutDirection::Horizontal)
+                .with_overflow(Overflow::Visible)
                 .with_children(vec![
                     // InverseRound
                     Node::new()

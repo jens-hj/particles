@@ -304,19 +304,24 @@ fn demo_box(title: &str, overflow_mode: Overflow, color: Color) -> Node {
                     VerticalAlign::Center,
                 )]),
             // Viewport content: one oversized child.
+            // NOTE: We must propagate Overflow::Visible down through wrapper nodes,
+            // otherwise the default Overflow::Hidden on intermediate nodes will clip.
             Node::new()
                 .with_height(Size::Fill)
+                .with_width(Size::Fill)
                 .with_padding(Spacing::all(14.0))
                 .with_shape(panel(Color::new(0.12, 0.12, 0.16, 0.70)))
                 .with_layout_direction(LayoutDirection::Horizontal)
-                .with_overflow(overflow_mode)
-                .with_children(vec![Node::new().with_children(vec![label(
-                    long_text,
-                    26.0,
-                    Color::new(0.90, 0.92, 0.95, 1.0),
-                    HorizontalAlign::Left,
-                    VerticalAlign::Top,
-                )])]),
+                .with_overflow(overflow_mode) // Propagate overflow mode
+                .with_children(vec![Node::new()
+                    .with_overflow(overflow_mode)
+                    .with_children(vec![label(
+                        long_text,
+                        26.0,
+                        Color::new(0.90, 0.92, 0.95, 1.0),
+                        HorizontalAlign::Left,
+                        VerticalAlign::Top,
+                    )])]),
         ])
 }
 
@@ -369,7 +374,8 @@ fn create_demo_ui(
             Node::new()
                 .with_width(Size::Fill)
                 .with_gap(18.0)
-                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_layout_direction(LayoutDirection::Vertical)
+                .with_overflow(Overflow::Visible) // Allow children to overflow
                 .with_children(vec![
                     Node::new()
                         .with_width(Size::fraction(0.333))
@@ -380,6 +386,7 @@ fn create_demo_ui(
                         )]),
                     Node::new()
                         .with_width(Size::fraction(0.333))
+                        .with_overflow(Overflow::Visible) // Allow child to overflow
                         .with_children(vec![demo_box(
                             "Overflow: Visible",
                             Overflow::Visible,
@@ -387,7 +394,7 @@ fn create_demo_ui(
                         )]),
                     Node::new()
                         .with_width(Size::fraction(0.333))
-                        .with_opacity(0.0)
+                        // .with_opacity(0.0)
                         .with_children(vec![demo_box(
                             "Overflow: Scroll (placeholder)",
                             Overflow::Scroll,

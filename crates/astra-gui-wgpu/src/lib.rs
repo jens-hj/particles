@@ -15,9 +15,9 @@ use astra_gui_text as gui_text;
 #[cfg(feature = "text-cosmic")]
 use gui_text::TextEngine;
 
-#[cfg(feature = "text-cosmic")]
+/// A draw call with scissor rect for clipped rendering.
 #[derive(Clone, Copy, Debug)]
-struct TextDraw {
+struct ClippedDraw {
     scissor: (u32, u32, u32, u32),
     index_start: u32,
     index_end: u32,
@@ -375,14 +375,55 @@ impl Renderer {
         screen_height: f32,
         output: &FullOutput,
     ) {
-        // Tessellate shapes (geometry only)
-        let mesh = self.tessellator.tessellate(&output.shapes);
-
-        // Convert to wgpu vertices
+        // Tessellate shapes per clip rect for proper scissor clipping.
+        // We build up vertices/indices and track draw calls with their scissor rects.
         self.wgpu_vertices.clear();
-        self.wgpu_vertices.reserve(mesh.vertices.len());
-        for v in &mesh.vertices {
-            self.wgpu_vertices.push(WgpuVertex::from(*v));
+        let mut indices: Vec<u32> = Vec::new();
+        let mut geometry_draws: Vec<ClippedDraw> = Vec::new();
+
+        for clipped in &output.shapes {
+            let Shape::Rect(_) = &clipped.shape else {
+                continue;
+            };
+
+            // Compute scissor rect clamped to framebuffer bounds.
+            let sc_min_x = clipped.clip_rect.min[0].max(0.0).floor() as i32;
+            let sc_min_y = clipped.clip_rect.min[1].max(0.0).floor() as i32;
+            let sc_max_x = clipped.clip_rect.max[0].min(screen_width).ceil() as i32;
+            let sc_max_y = clipped.clip_rect.max[1].min(screen_height).ceil() as i32;
+
+            let sc_w = (sc_max_x - sc_min_x).max(0) as u32;
+            let sc_h = (sc_max_y - sc_min_y).max(0) as u32;
+
+            if sc_w == 0 || sc_h == 0 {
+                continue;
+            }
+
+            let scissor = (sc_min_x as u32, sc_min_y as u32, sc_w, sc_h);
+            let index_start = indices.len() as u32;
+
+            // Tessellate this single rect shape.
+            let single_shape =
+                astra_gui::ClippedShape::new(clipped.clip_rect, clipped.shape.clone());
+            let mesh = self.tessellator.tessellate(&[single_shape]);
+
+            // Append vertices with offset indices.
+            let base_vertex = self.wgpu_vertices.len() as u32;
+            for v in &mesh.vertices {
+                self.wgpu_vertices.push(WgpuVertex::from(*v));
+            }
+            for idx in &mesh.indices {
+                indices.push(base_vertex + idx);
+            }
+
+            let index_end = indices.len() as u32;
+            if index_end > index_start {
+                geometry_draws.push(ClippedDraw {
+                    scissor,
+                    index_start,
+                    index_end,
+                });
+            }
         }
 
         // Resize vertex buffer if needed
@@ -397,8 +438,8 @@ impl Renderer {
         }
 
         // Resize index buffer if needed
-        if mesh.indices.len() > self.index_capacity {
-            self.index_capacity = (mesh.indices.len() * 2).next_power_of_two();
+        if indices.len() > self.index_capacity {
+            self.index_capacity = (indices.len() * 2).next_power_of_two();
             self.index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Astra UI Index Buffer"),
                 size: (self.index_capacity * std::mem::size_of::<u32>()) as u64,
@@ -408,13 +449,13 @@ impl Renderer {
         }
 
         // Upload geometry
-        if !mesh.indices.is_empty() {
+        if !indices.is_empty() {
             queue.write_buffer(
                 &self.vertex_buffer,
                 0,
                 bytemuck::cast_slice(&self.wgpu_vertices),
             );
-            queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&mesh.indices));
+            queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&indices));
         }
 
         // Update uniforms (used by both passes)
@@ -438,13 +479,21 @@ impl Renderer {
             occlusion_query_set: None,
         });
 
-        // Draw geometry
-        if !mesh.indices.is_empty() {
+        // Draw geometry with per-shape scissor clipping
+        if !geometry_draws.is_empty() {
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw_indexed(0..mesh.indices.len() as u32, 0, 0..1);
+
+            for draw in &geometry_draws {
+                let (x, y, w, h) = draw.scissor;
+                render_pass.set_scissor_rect(x, y, w, h);
+                render_pass.draw_indexed(draw.index_start..draw.index_end, 0, 0..1);
+            }
+
+            // Reset scissor to full screen
+            render_pass.set_scissor_rect(0, 0, screen_width as u32, screen_height as u32);
         }
 
         // Draw text: shape (backend-agnostic) + rasterize (backend-agnostic) + atlas upload + quads.
@@ -456,7 +505,7 @@ impl Renderer {
             self.text_vertices.clear();
             self.text_indices.clear();
 
-            let mut draws: Vec<TextDraw> = Vec::new();
+            let mut draws: Vec<ClippedDraw> = Vec::new();
 
             for clipped in &output.shapes {
                 let Shape::Text(text_shape) = &clipped.shape else {
@@ -596,7 +645,7 @@ impl Renderer {
 
                 let index_end = self.text_indices.len() as u32;
                 if index_end > index_start {
-                    draws.push(TextDraw {
+                    draws.push(ClippedDraw {
                         scissor: scissor_for_shape,
                         index_start,
                         index_end,
