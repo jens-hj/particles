@@ -5,7 +5,7 @@
 
 use astra_gui::{
     Color, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign, LayoutDirection, Node,
-    Offset, Rect, Shape, Size, Spacing, Stroke, StyledRect, TextContent, VerticalAlign,
+    Offset, Overflow, Rect, Shape, Size, Spacing, Stroke, StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_wgpu::Renderer;
 use std::sync::Arc;
@@ -379,6 +379,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                             Node::new()
                                 .with_height(Size::px(80.0))
                                 .with_padding(Spacing::all(10.0))
+                                .with_overflow(Overflow::Hidden)
                                 .with_shape(Shape::Rect(
                                     StyledRect::new(Default::default(), Color::new(0.16, 0.10, 0.12, 1.0))
                                         .with_corner_shape(CornerShape::Round(14.0))

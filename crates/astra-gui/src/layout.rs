@@ -69,9 +69,15 @@ impl Size {
     }
 }
 
+impl Default for Size {
+    fn default() -> Self {
+        Self::FitContent
+    }
+}
+
 impl Default for Overflow {
     fn default() -> Self {
-        Self::Hidden
+        Self::Visible
     }
 }
 
@@ -82,6 +88,12 @@ pub enum LayoutDirection {
     Horizontal,
     /// Children are arranged vertically (top to bottom)
     Vertical,
+}
+
+impl Default for LayoutDirection {
+    fn default() -> Self {
+        Self::Vertical
+    }
 }
 
 /// Position offset from the parent's origin

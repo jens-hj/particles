@@ -46,13 +46,13 @@ impl Node {
     /// Create a new node with default settings
     pub fn new() -> Self {
         Self {
-            width: Size::FitContent,
-            height: Size::FitContent,
+            width: Size::default(),
+            height: Size::default(),
             offset: Offset::zero(),
-            padding: Spacing::zero(),
-            margin: Spacing::zero(),
+            padding: Spacing::default(),
+            margin: Spacing::default(),
             gap: 0.0,
-            layout_direction: LayoutDirection::Vertical,
+            layout_direction: LayoutDirection::default(),
             overflow: Overflow::default(),
             opacity: 1.0,
             shape: None,
