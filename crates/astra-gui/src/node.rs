@@ -164,13 +164,16 @@ impl Node {
     ///
     /// Returns the node's "border-box" size (content + padding), NOT including margins.
     /// Parent is responsible for adding margins when positioning.
+    ///
+    /// NOTE: This always measures content size, regardless of the node's Size type.
+    /// The Size type only matters when the parent is aggregating children for FitContent sizing.
     fn measure_node(&self, measurer: &mut dyn ContentMeasurer) -> IntrinsicSize {
         // Short-circuit: if both dimensions are Fixed, we can return immediately
         if let (Size::Fixed(w), Size::Fixed(h)) = (self.width, self.height) {
             return IntrinsicSize::new(w, h);
         }
 
-        // Measure content size (excluding padding) only for FitContent dimensions
+        // Measure content size (excluding padding)
         let content_size = if let Some(content) = &self.content {
             // Leaf node with content (text, etc.)
             match content {
@@ -179,7 +182,7 @@ impl Node {
                 }
             }
         } else if !self.children.is_empty() {
-            // Container node: measure children and compute container size
+            // Container node: measure ALL children
             self.measure_children(measurer)
         } else {
             // Empty container
@@ -203,78 +206,98 @@ impl Node {
     /// Measure the intrinsic content size of a container based on its children.
     ///
     /// This uses the same margin/gap collapsing logic as layout to ensure consistency.
+    /// IMPORTANT: Only aggregates FitContent children. Fill/Relative children are still
+    /// measured (for layout purposes) but don't contribute to parent's intrinsic size.
     fn measure_children(&self, measurer: &mut dyn ContentMeasurer) -> IntrinsicSize {
         if self.children.is_empty() {
             return IntrinsicSize::zero();
         }
 
-        // Measure each child (border-box: content + padding, excluding margins)
-        let child_sizes: Vec<IntrinsicSize> = self
+        // Measure ALL children (needed for layout calculations)
+        let child_measurements: Vec<(IntrinsicSize, &Node)> = self
             .children
             .iter()
-            .map(|child| child.measure_node(measurer))
+            .map(|child| (child.measure_node(measurer), child))
             .collect();
 
-        // Calculate spacing using the same collapsing rules as layout
-        let (total_horizontal_spacing, total_vertical_spacing) = match self.layout_direction {
-            LayoutDirection::Horizontal => {
-                let mut total = 0.0f32;
-                for (i, child) in self.children.iter().enumerate() {
-                    if i == 0 {
-                        // First child: left margin doesn't collapse with parent padding
-                        total += child.margin.left;
-                    }
-
-                    // Between this child and the next, collapse gap with margins
-                    if i + 1 < self.children.len() {
-                        let next_child = &self.children[i + 1];
-                        let collapsed_margin = child.margin.right.max(next_child.margin.left);
-                        total += self.gap.max(collapsed_margin);
-                    } else {
-                        // Last child: just add its right margin
-                        total += child.margin.right;
-                    }
-                }
-                (total, 0.0)
-            }
-            LayoutDirection::Vertical => {
-                let mut total = 0.0f32;
-                for (i, child) in self.children.iter().enumerate() {
-                    if i == 0 {
-                        // First child: top margin doesn't collapse with parent padding
-                        total += child.margin.top;
-                    }
-
-                    // Between this child and the next, collapse gap with margins
-                    if i + 1 < self.children.len() {
-                        let next_child = &self.children[i + 1];
-                        let collapsed_margin = child.margin.bottom.max(next_child.margin.top);
-                        total += self.gap.max(collapsed_margin);
-                    } else {
-                        // Last child: just add its bottom margin
-                        total += child.margin.bottom;
-                    }
-                }
-                (0.0, total)
-            }
-        };
-
-        // Compute intrinsic size based on layout direction
+        // Filter to only FitContent children for parent size calculation
+        // based on the layout direction's main axis
         match self.layout_direction {
             LayoutDirection::Horizontal => {
-                // Width: sum of child border-box widths + spacing
-                // Height: max of child border-box heights (cross-axis, margins don't contribute)
-                let width =
-                    child_sizes.iter().map(|s| s.width).sum::<f32>() + total_horizontal_spacing;
-                let height = child_sizes.iter().map(|s| s.height).fold(0.0f32, f32::max);
+                // Main axis is width - only count FitContent width children
+                let fit_children: Vec<(IntrinsicSize, &Node)> = child_measurements
+                    .into_iter()
+                    .filter(|(_, child)| child.width.is_fit_content())
+                    .collect();
+
+                if fit_children.is_empty() {
+                    // No FitContent children, parent has no intrinsic size
+                    return IntrinsicSize::zero();
+                }
+
+                // Calculate spacing only between FitContent children
+                let mut total_spacing = 0.0f32;
+                for (i, (_, child)) in fit_children.iter().enumerate() {
+                    if i == 0 {
+                        total_spacing += child.margin.left;
+                    }
+                    if i + 1 < fit_children.len() {
+                        let (_, next_child) = fit_children[i + 1];
+                        let collapsed_margin = child.margin.right.max(next_child.margin.left);
+                        total_spacing += self.gap.max(collapsed_margin);
+                    } else {
+                        total_spacing += child.margin.right;
+                    }
+                }
+
+                // Width: sum of FitContent child widths + spacing
+                let width = fit_children.iter().map(|(s, _)| s.width).sum::<f32>() + total_spacing;
+                // Height: max of ALL children (cross axis)
+                let height = self
+                    .children
+                    .iter()
+                    .map(|child| child.measure_node(measurer).height)
+                    .fold(0.0f32, f32::max);
+
                 IntrinsicSize::new(width, height)
             }
             LayoutDirection::Vertical => {
-                // Height: sum of child border-box heights + spacing
-                // Width: max of child border-box widths (cross-axis, margins don't contribute)
+                // Main axis is height - only count FitContent height children
+                let fit_children: Vec<(IntrinsicSize, &Node)> = child_measurements
+                    .into_iter()
+                    .filter(|(_, child)| child.height.is_fit_content())
+                    .collect();
+
+                if fit_children.is_empty() {
+                    // No FitContent children, parent has no intrinsic size
+                    return IntrinsicSize::zero();
+                }
+
+                // Calculate spacing only between FitContent children
+                let mut total_spacing = 0.0f32;
+                for (i, (_, child)) in fit_children.iter().enumerate() {
+                    if i == 0 {
+                        total_spacing += child.margin.top;
+                    }
+                    if i + 1 < fit_children.len() {
+                        let (_, next_child) = fit_children[i + 1];
+                        let collapsed_margin = child.margin.bottom.max(next_child.margin.top);
+                        total_spacing += self.gap.max(collapsed_margin);
+                    } else {
+                        total_spacing += child.margin.bottom;
+                    }
+                }
+
+                // Height: sum of FitContent child heights + spacing
                 let height =
-                    child_sizes.iter().map(|s| s.height).sum::<f32>() + total_vertical_spacing;
-                let width = child_sizes.iter().map(|s| s.width).fold(0.0f32, f32::max);
+                    fit_children.iter().map(|(s, _)| s.height).sum::<f32>() + total_spacing;
+                // Width: max of ALL children (cross axis)
+                let width = self
+                    .children
+                    .iter()
+                    .map(|child| child.measure_node(measurer).width)
+                    .fold(0.0f32, f32::max);
+
                 IntrinsicSize::new(width, height)
             }
         }
@@ -304,6 +327,7 @@ impl Node {
             available_rect.width(),
             available_rect.height(),
             measurer,
+            Overflow::Visible, // Root has no parent, assume Visible
         );
     }
 
@@ -313,22 +337,41 @@ impl Node {
         parent_width: f32,
         parent_height: f32,
         measurer: &mut dyn ContentMeasurer,
+        parent_overflow: Overflow,
     ) {
         // Account for this node's margins when calculating available space
         let available_width = (parent_width - self.margin.left - self.margin.right).max(0.0);
         let available_height = (parent_height - self.margin.top - self.margin.bottom).max(0.0);
 
-        // Resolve width and height, using measurement for FitContent
+        // Resolve width and height
+        // IMPORTANT: Only measure FitContent dimensions. For Fixed/Relative/Fill, use constraints directly.
+        // This prevents children from incorrectly affecting parent sizes when parent has constrained dimensions.
         let width = if self.width.is_fit_content() {
             let measured = self.measure_node(measurer);
-            measured.width.min(available_width) // Clamp to available space
+            let measured_width = measured.width;
+
+            if parent_overflow == Overflow::Visible {
+                // Parent allows overflow, so use full measured width
+                measured_width
+            } else {
+                // Parent clips overflow, so clamp to available width
+                measured_width.min(available_width)
+            }
         } else {
             self.width.resolve(available_width)
         };
 
         let height = if self.height.is_fit_content() {
             let measured = self.measure_node(measurer);
-            measured.height.min(available_height) // Clamp to available space
+            let measured_height = measured.height;
+
+            if parent_overflow == Overflow::Visible {
+                // Parent allows overflow, so use full measured height
+                measured_height
+            } else {
+                // Parent clips overflow, so clamp to available height
+                measured_height.min(available_height)
+            }
         } else {
             self.height.resolve(available_height)
         };
@@ -488,6 +531,7 @@ impl Node {
                 child_parent_width,
                 child_parent_height,
                 measurer,
+                self.overflow, // Pass this node's overflow to children
             );
 
             if let Some(child_layout) = self.children[i].computed_layout() {
