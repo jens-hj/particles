@@ -9,35 +9,37 @@ use crate::primitives::{Rect, Shape};
 /// - Container nodes: Have children and can have an optional background shape
 /// - Content nodes: Have content (text, inputs, etc.) and cannot have children
 /// - Mixed: Have both a shape and children (container with background)
+///
+/// All fields are private - use the builder pattern methods (`with_*`) to configure nodes.
 pub struct Node {
     /// Width of the node
-    pub width: Size,
+    width: Size,
     /// Height of the node
-    pub height: Size,
+    height: Size,
     /// Offset from the default position
-    pub offset: Offset,
+    offset: Offset,
     /// Padding inside the node
-    pub padding: Spacing,
+    padding: Spacing,
     /// Margin outside the node
-    pub margin: Spacing,
+    margin: Spacing,
     /// Gap between children in the layout direction
-    pub gap: f32,
+    gap: f32,
     /// Layout direction for children
-    pub layout_direction: LayoutDirection,
+    layout_direction: LayoutDirection,
     /// How overflow of content/children is handled.
     ///
     /// Default: `Overflow::Hidden`.
-    pub overflow: Overflow,
+    overflow: Overflow,
     /// Opacity of this node and all its children (0.0 = transparent, 1.0 = opaque).
     ///
     /// Default: 1.0 (fully opaque).
-    pub opacity: f32,
+    opacity: f32,
     /// Optional shape to render for this node (background)
-    pub shape: Option<Shape>,
+    shape: Option<Shape>,
     /// Optional content (text, inputs, etc.) - content nodes cannot have children
-    pub content: Option<Content>,
+    content: Option<Content>,
     /// Child nodes (not allowed if content is Some)
-    pub children: Vec<Node>,
+    children: Vec<Node>,
     /// Computed layout (filled during layout pass)
     computed: Option<ComputedLayout>,
 }
@@ -166,6 +168,43 @@ impl Node {
     /// Get the computed layout (if available)
     pub fn computed_layout(&self) -> Option<&ComputedLayout> {
         self.computed.as_ref()
+    }
+
+    // Internal getters for fields (used by output.rs and other internal modules)
+
+    /// Get the opacity value
+    pub(crate) fn opacity(&self) -> f32 {
+        self.opacity
+    }
+
+    /// Get the overflow policy
+    pub(crate) fn overflow(&self) -> Overflow {
+        self.overflow
+    }
+
+    /// Get the shape, if any
+    pub(crate) fn shape(&self) -> Option<&Shape> {
+        self.shape.as_ref()
+    }
+
+    /// Get the content, if any
+    pub(crate) fn content(&self) -> Option<&Content> {
+        self.content.as_ref()
+    }
+
+    /// Get the padding
+    pub(crate) fn padding(&self) -> Spacing {
+        self.padding
+    }
+
+    /// Get the margin
+    pub(crate) fn margin(&self) -> Spacing {
+        self.margin
+    }
+
+    /// Get the children
+    pub(crate) fn children(&self) -> &[Node] {
+        &self.children
     }
 
     /// Measure the intrinsic size of this node (content + padding, excluding margins).
