@@ -48,6 +48,10 @@ pub struct Renderer {
     index_capacity: usize,
     wgpu_vertices: Vec<WgpuVertex>,
 
+    // Performance optimization: track previous frame sizes to pre-allocate buffers
+    last_frame_vertex_count: usize,
+    last_frame_index_count: usize,
+
     #[cfg(feature = "text-cosmic")]
     text_pipeline: wgpu::RenderPipeline,
     #[cfg(feature = "text-cosmic")]
@@ -62,6 +66,10 @@ pub struct Renderer {
     text_vertices: Vec<text::vertex::TextVertex>,
     #[cfg(feature = "text-cosmic")]
     text_indices: Vec<u32>,
+    #[cfg(feature = "text-cosmic")]
+    last_frame_text_vertex_count: usize,
+    #[cfg(feature = "text-cosmic")]
+    last_frame_text_index_count: usize,
 
     // Glyph atlas (R8 alpha mask)
     #[cfg(feature = "text-cosmic")]
@@ -339,6 +347,8 @@ impl Renderer {
             vertex_capacity: INITIAL_VERTEX_CAPACITY,
             index_capacity: INITIAL_INDEX_CAPACITY,
             wgpu_vertices: Vec::new(),
+            last_frame_vertex_count: 0,
+            last_frame_index_count: 0,
 
             #[cfg(feature = "text-cosmic")]
             text_pipeline,
@@ -354,6 +364,10 @@ impl Renderer {
             text_vertices: Vec::new(),
             #[cfg(feature = "text-cosmic")]
             text_indices: Vec::new(),
+            #[cfg(feature = "text-cosmic")]
+            last_frame_text_vertex_count: 0,
+            #[cfg(feature = "text-cosmic")]
+            last_frame_text_index_count: 0,
             #[cfg(feature = "text-cosmic")]
             atlas_texture,
             #[cfg(feature = "text-cosmic")]
@@ -377,8 +391,13 @@ impl Renderer {
     ) {
         // Tessellate shapes per clip rect for proper scissor clipping.
         // We build up vertices/indices and track draw calls with their scissor rects.
+        // OPTIMIZATION: Pre-allocate based on previous frame to reduce allocations
         self.wgpu_vertices.clear();
+        self.wgpu_vertices.reserve(self.last_frame_vertex_count);
+
         let mut indices: Vec<u32> = Vec::new();
+        indices.reserve(self.last_frame_index_count);
+
         let mut geometry_draws: Vec<ClippedDraw> = Vec::new();
 
         for clipped in &output.shapes {
@@ -502,8 +521,13 @@ impl Renderer {
         // we must issue separate draw calls for distinct clip rect ranges.
         #[cfg(feature = "text-cosmic")]
         {
+            // OPTIMIZATION: Pre-allocate based on previous frame to reduce allocations
             self.text_vertices.clear();
+            self.text_vertices
+                .reserve(self.last_frame_text_vertex_count);
+
             self.text_indices.clear();
+            self.text_indices.reserve(self.last_frame_text_index_count);
 
             let mut draws: Vec<ClippedDraw> = Vec::new();
 
@@ -702,6 +726,14 @@ impl Renderer {
 
                 render_pass.set_scissor_rect(0, 0, screen_width as u32, screen_height as u32);
             }
+
+            // Update frame tracking for next frame's pre-allocation
+            self.last_frame_text_vertex_count = self.text_vertices.len();
+            self.last_frame_text_index_count = self.text_indices.len();
         }
+
+        // Update frame tracking for geometry buffers
+        self.last_frame_vertex_count = self.wgpu_vertices.len();
+        self.last_frame_index_count = indices.len();
     }
 }

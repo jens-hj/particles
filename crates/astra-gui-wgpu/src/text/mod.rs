@@ -6,16 +6,15 @@
 //!
 //! Current structure:
 //! - `atlas`: CPU-side glyph atlas placement + cache
-//! - `cosmic`: shaping/rasterization via `cosmic-text`
 //! - `vertex`: GPU vertex format for glyph quads
+//!
+//! Note: Text shaping/rasterization is handled by the `astra-gui-text` crate,
+//! which provides the backend-agnostic text engine using cosmic-text.
 //!
 //! This module is conditionally compiled behind the `text-cosmic` feature.
 
 #[cfg(feature = "text-cosmic")]
 pub mod atlas;
-
-#[cfg(feature = "text-cosmic")]
-pub mod cosmic;
 
 #[cfg(feature = "text-cosmic")]
 pub mod vertex;

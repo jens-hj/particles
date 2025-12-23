@@ -136,15 +136,7 @@ pub struct Spacing {
 }
 
 impl Spacing {
-    pub const fn new(top: f32, right: f32, bottom: f32, left: f32) -> Self {
-        Self {
-            top,
-            right,
-            bottom,
-            left,
-        }
-    }
-
+    /// Create spacing with all sides equal
     pub const fn all(value: f32) -> Self {
         Self {
             top: value,
@@ -154,16 +146,46 @@ impl Spacing {
         }
     }
 
+    /// Create zero spacing
     pub const fn zero() -> Self {
         Self::all(0.0)
     }
 
-    pub const fn horizontal_vertical(horizontal: f32, vertical: f32) -> Self {
+    /// Create spacing with symmetric horizontal and vertical values (CSS-style)
+    ///
+    /// ```
+    /// # use astra_gui::Spacing;
+    /// let spacing = Spacing::symmetric(10.0, 20.0);
+    /// assert_eq!(spacing.left, 10.0);
+    /// assert_eq!(spacing.right, 10.0);
+    /// assert_eq!(spacing.top, 20.0);
+    /// assert_eq!(spacing.bottom, 20.0);
+    /// ```
+    pub const fn symmetric(horizontal: f32, vertical: f32) -> Self {
         Self {
             top: vertical,
             right: horizontal,
             bottom: vertical,
             left: horizontal,
+        }
+    }
+
+    /// Create spacing from individual top, right, bottom, left values (CSS-style)
+    ///
+    /// ```
+    /// # use astra_gui::Spacing;
+    /// let spacing = Spacing::trbl(10.0, 20.0, 30.0, 40.0);
+    /// assert_eq!(spacing.top, 10.0);
+    /// assert_eq!(spacing.right, 20.0);
+    /// assert_eq!(spacing.bottom, 30.0);
+    /// assert_eq!(spacing.left, 40.0);
+    /// ```
+    pub const fn trbl(top: f32, right: f32, bottom: f32, left: f32) -> Self {
+        Self {
+            top,
+            right,
+            bottom,
+            left,
         }
     }
 

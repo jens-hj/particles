@@ -242,17 +242,12 @@ impl Node {
     /// This uses the same margin/gap collapsing logic as layout to ensure consistency.
     /// IMPORTANT: Only aggregates FitContent children. Fill/Relative children are still
     /// measured (for layout purposes) but don't contribute to parent's intrinsic size.
+    ///
+    /// OPTIMIZATION: Avoids Vec allocation by computing width/height in a single pass
     fn measure_children(&self, measurer: &mut dyn ContentMeasurer) -> IntrinsicSize {
         if self.children.is_empty() {
             return IntrinsicSize::zero();
         }
-
-        // Measure each child (border-box: content + padding, excluding margins)
-        let child_sizes: Vec<IntrinsicSize> = self
-            .children
-            .iter()
-            .map(|child| child.measure_node(measurer))
-            .collect();
 
         // Calculate spacing using the same collapsing rules as layout
         let (total_horizontal_spacing, total_vertical_spacing) = match self.layout_direction {
@@ -293,22 +288,35 @@ impl Node {
         };
 
         // Compute intrinsic size based on layout direction
+        // OPTIMIZATION: Measure and aggregate in a single pass to avoid Vec allocation
         match self.layout_direction {
             LayoutDirection::Horizontal => {
                 // Width: sum of child widths + spacing (main axis)
                 // Height: max of child heights (cross axis)
-                let width =
-                    child_sizes.iter().map(|s| s.width).sum::<f32>() + total_horizontal_spacing;
-                let height = child_sizes.iter().map(|s| s.height).fold(0.0f32, f32::max);
-                IntrinsicSize::new(width, height)
+                let mut total_width = 0.0f32;
+                let mut max_height = 0.0f32;
+
+                for child in &self.children {
+                    let size = child.measure_node(measurer);
+                    total_width += size.width;
+                    max_height = max_height.max(size.height);
+                }
+
+                IntrinsicSize::new(total_width + total_horizontal_spacing, max_height)
             }
             LayoutDirection::Vertical => {
                 // Height: sum of child heights + spacing (main axis)
                 // Width: max of child widths (cross axis)
-                let height =
-                    child_sizes.iter().map(|s| s.height).sum::<f32>() + total_vertical_spacing;
-                let width = child_sizes.iter().map(|s| s.width).fold(0.0f32, f32::max);
-                IntrinsicSize::new(width, height)
+                let mut total_height = 0.0f32;
+                let mut max_width = 0.0f32;
+
+                for child in &self.children {
+                    let size = child.measure_node(measurer);
+                    total_height += size.height;
+                    max_width = max_width.max(size.width);
+                }
+
+                IntrinsicSize::new(max_width, total_height + total_vertical_spacing)
             }
         }
     }
@@ -356,9 +364,17 @@ impl Node {
         // Resolve width and height
         // IMPORTANT: Only measure FitContent dimensions. For Fixed/Relative/Fill, use constraints directly.
         // This prevents children from incorrectly affecting parent sizes when parent has constrained dimensions.
+        //
+        // OPTIMIZATION: Cache measurement result to avoid calling measure_node() twice when both
+        // width and height are FitContent
+        let measured_size = if self.width.is_fit_content() || self.height.is_fit_content() {
+            Some(self.measure_node(measurer))
+        } else {
+            None
+        };
+
         let width = if self.width.is_fit_content() {
-            let measured = self.measure_node(measurer);
-            let measured_width = measured.width;
+            let measured_width = measured_size.as_ref().unwrap().width;
 
             if parent_overflow == Overflow::Visible {
                 // Parent allows overflow, so use full measured width
@@ -372,8 +388,7 @@ impl Node {
         };
 
         let height = if self.height.is_fit_content() {
-            let measured = self.measure_node(measurer);
-            let measured_height = measured.height;
+            let measured_height = measured_size.as_ref().unwrap().height;
 
             if parent_overflow == Overflow::Visible {
                 // Parent allows overflow, so use full measured height

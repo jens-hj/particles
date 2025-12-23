@@ -6,7 +6,8 @@ This file tracks the current working state so you (or another AI) can pick up th
 
 1) ✅ Backend-agnostic text rendering with intrinsic measurement
 2) ✅ Core layout ergonomics with `Size::FitContent` and `Overflow` policy
-3) Next: refine text vertical placement if needed
+3) ✅ Performance optimizations and API consistency improvements (Dec 2025)
+4) Next: Advanced optimizations (GPU compute tessellation, layout caching) as needed
 
 ---
 
@@ -125,6 +126,36 @@ The system is:
 - **Consistent**: measurement uses same spacing rules as layout
 - **Recursive**: handles nested `FitContent` containers correctly
 - **Short-circuits**: only measures when needed (Fixed/Relative/Fill skip measurement)
+
+### ✅ Completed: Performance optimizations and API improvements (Dec 2025)
+
+Implemented immediate and short-term optimizations from the improvement plan:
+
+#### Core (`astra-gui`) optimizations:
+1. **Measurement caching** (`node.rs`): Cache `measure_node()` result when both width and height are `FitContent` to avoid duplicate measurements
+2. **Vec allocation elimination** (`node.rs`): Refactored `measure_children()` to compute size in single pass without allocating intermediate Vec
+3. **API improvements** (`layout.rs`): 
+   - Replaced `new()` with `trbl()` for clarity
+   - Replaced `horizontal_vertical()` with `symmetric()` for CSS-style familiarity
+   - Removed duplicate methods
+
+#### Backend (`astra-gui-wgpu`) optimizations:
+1. **Buffer pre-allocation** (`lib.rs`): Track previous frame vertex/index counts and pre-allocate buffers to reduce allocations
+   - Geometry buffers: `last_frame_vertex_count`, `last_frame_index_count`
+   - Text buffers: `last_frame_text_vertex_count`, `last_frame_text_index_count`
+2. **Code cleanup** (`text/`): Removed vestigial `cosmic/mod.rs` module (actual integration is via `astra-gui-text` crate)
+
+Performance impact:
+- Reduced allocations per frame (especially for UIs with consistent size)
+- Eliminated redundant measurement passes
+- Cleaner, more maintainable API
+
+Remaining optimizations from plan (deferred to future):
+- Convert vertex colors to u8 (medium effort, medium impact)
+- Batch draw calls by scissor rect (medium effort, high impact)
+- Use Cow<Shape> to avoid cloning (low effort, medium impact)
+- GPU compute tessellation (high effort, very high impact)
+- Layout caching with dirty tracking (high effort, very high impact)
 
 ---
 
