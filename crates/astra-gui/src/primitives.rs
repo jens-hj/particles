@@ -99,6 +99,14 @@ impl StyledRect {
         self.stroke = Some(stroke);
         self
     }
+
+    /// Apply opacity by multiplying fill and stroke alpha values
+    pub fn apply_opacity(&mut self, opacity: f32) {
+        self.fill.a *= opacity;
+        if let Some(stroke) = &mut self.stroke {
+            stroke.color.a *= opacity;
+        }
+    }
 }
 
 /// Text shape for rendering text content
@@ -130,6 +138,11 @@ impl TextShape {
             v_align: content.v_align,
         }
     }
+
+    /// Apply opacity by multiplying text color alpha
+    pub fn apply_opacity(&mut self, opacity: f32) {
+        self.color.a *= opacity;
+    }
 }
 
 /// Shapes that can be rendered
@@ -138,6 +151,16 @@ pub enum Shape {
     Rect(StyledRect),
     Text(TextShape),
     // Future: Circle, Line, Mesh, etc.
+}
+
+impl Shape {
+    /// Apply opacity to this shape by multiplying all color alpha values
+    pub fn apply_opacity(&mut self, opacity: f32) {
+        match self {
+            Shape::Rect(rect) => rect.apply_opacity(opacity),
+            Shape::Text(text) => text.apply_opacity(opacity),
+        }
+    }
 }
 
 /// A shape with a clip rectangle

@@ -28,6 +28,10 @@ pub struct Node {
     ///
     /// Default: `Overflow::Hidden`.
     pub overflow: Overflow,
+    /// Opacity of this node and all its children (0.0 = transparent, 1.0 = opaque).
+    ///
+    /// Default: 1.0 (fully opaque).
+    pub opacity: f32,
     /// Optional shape to render for this node (background)
     pub shape: Option<Shape>,
     /// Optional content (text, inputs, etc.) - content nodes cannot have children
@@ -50,6 +54,7 @@ impl Node {
             gap: 0.0,
             layout_direction: LayoutDirection::Vertical,
             overflow: Overflow::default(),
+            opacity: 1.0,
             shape: None,
             content: None,
             children: Vec::new(),
@@ -113,6 +118,12 @@ impl Node {
     /// Set how overflow of content/children is handled (default: `Overflow::Hidden`).
     pub fn with_overflow(mut self, overflow: Overflow) -> Self {
         self.overflow = overflow;
+        self
+    }
+
+    /// Set the opacity of this node and all its children (0.0 = transparent, 1.0 = opaque).
+    pub fn with_opacity(mut self, opacity: f32) -> Self {
+        self.opacity = opacity.clamp(0.0, 1.0);
         self
     }
 
@@ -783,10 +794,24 @@ impl Node {
 
     /// Collect all shapes from this node tree for rendering
     pub fn collect_shapes(&self, shapes: &mut Vec<(Rect, Shape)>) {
+        self.collect_shapes_with_opacity(shapes, 1.0);
+    }
+
+    /// Collect shapes with cumulative opacity
+    fn collect_shapes_with_opacity(&self, shapes: &mut Vec<(Rect, Shape)>, parent_opacity: f32) {
+        let combined_opacity = parent_opacity * self.opacity;
+
+        // Skip rendering if fully transparent
+        if combined_opacity <= 0.0 {
+            return;
+        }
+
         if let Some(layout) = &self.computed {
             // Add background shape if present
             if let Some(shape) = &self.shape {
-                shapes.push((layout.rect, shape.clone()));
+                let mut shape_with_opacity = shape.clone();
+                shape_with_opacity.apply_opacity(combined_opacity);
+                shapes.push((layout.rect, shape_with_opacity));
             }
 
             // Add content shape if this is a content node
@@ -804,20 +829,17 @@ impl Node {
                                 layout.rect.max[1] - self.padding.bottom,
                             ],
                         );
-                        shapes.push((
-                            layout.rect,
-                            Shape::Text(crate::primitives::TextShape::new(
-                                content_rect,
-                                text_content,
-                            )),
-                        ));
+                        let mut text_shape =
+                            crate::primitives::TextShape::new(content_rect, text_content);
+                        text_shape.apply_opacity(combined_opacity);
+                        shapes.push((layout.rect, Shape::Text(text_shape)));
                     }
                 }
             }
         }
 
         for child in &self.children {
-            child.collect_shapes(shapes);
+            child.collect_shapes_with_opacity(shapes, combined_opacity);
         }
     }
 
