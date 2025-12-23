@@ -218,11 +218,11 @@ Benefit: Better text quality at all scales, especially for zoom/transforms
 4. ✅ Avoid Vec allocation in measure_children (2.2)
 5. ✅ Add Spacing convenience methods (1.2) - improved with `symmetric()` and `trbl()`
 
-### Short-term (High value, medium effort) - TODO
-1. Make Node fields private (1.1)
-2. Convert vertex colors to u8 (3.2)
-3. Batch draw calls by scissor rect (3.3)
-4. Use Cow<Shape> to avoid cloning (2.3)
+### ✅ Short-term (High value, medium effort) - COMPLETED
+1. ✅ Make Node fields private (1.1)
+2. ✅ Convert vertex colors to u8 (3.2)
+3. ✅ Batch draw calls by scissor rect (3.3)
+4. ✅ Optimize opacity application (2.3) - skip color mutations when opacity is 1.0
 
 ### Medium-term (High value, high effort) - TODO
 1. Fix Size::resolve() semantics (1.3)

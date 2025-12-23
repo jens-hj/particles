@@ -150,10 +150,17 @@ Performance impact:
 - Eliminated redundant measurement passes
 - Cleaner, more maintainable API
 
+#### Short-term optimizations (Dec 2025):
+1. **Node fields privacy** (`node.rs`): Made all fields private, enforcing consistent builder pattern API
+2. **Vertex color compression** (`vertex.rs`): Changed from `[f32; 4]` (16 bytes) to `[u8; 4]` (4 bytes) using Unorm8x4
+   - 50% reduction in vertex buffer bandwidth
+3. **Draw call batching** (`lib.rs`): Batch consecutive draws with same scissor rect
+   - Reduces GPU overhead for clipped UIs
+4. **Opacity optimization** (`output.rs`): Skip color mutations when opacity is 1.0
+   - Avoids unnecessary work in common case
+
 Remaining optimizations from plan (deferred to future):
-- Convert vertex colors to u8 (medium effort, medium impact)
-- Batch draw calls by scissor rect (medium effort, high impact)
-- Use Cow<Shape> to avoid cloning (low effort, medium impact)
+- Fix Size::resolve() semantics (medium effort, medium impact)
 - GPU compute tessellation (high effort, very high impact)
 - Layout caching with dirty tracking (high effort, very high impact)
 
