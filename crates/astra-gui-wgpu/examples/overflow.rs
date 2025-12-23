@@ -340,6 +340,7 @@ fn create_demo_ui(
                 .with_corner_shape(CornerShape::Round(24.0))
                 .with_stroke(Stroke::new(2.0, Color::new(0.15, 0.15, 0.2, 1.0))),
         ))
+        .with_width(Size::Fill)
         .with_children(vec![
             // Header
             Node::new()
@@ -366,6 +367,7 @@ fn create_demo_ui(
                 ]),
             // Columns
             Node::new()
+                .with_width(Size::Fill)
                 .with_gap(18.0)
                 .with_layout_direction(LayoutDirection::Horizontal)
                 .with_children(vec![
