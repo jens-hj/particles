@@ -4,6 +4,7 @@
 
 mod events;
 mod input;
+mod interactive_state;
 
 #[cfg(feature = "text-cosmic")]
 mod text;
@@ -12,6 +13,7 @@ mod vertex;
 
 pub use events::*;
 pub use input::*;
+pub use interactive_state::*;
 
 use astra_gui::{FullOutput, Shape, Tessellator};
 use vertex::WgpuVertex;

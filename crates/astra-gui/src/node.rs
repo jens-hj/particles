@@ -2,6 +2,8 @@ use crate::content::Content;
 use crate::layout::{ComputedLayout, LayoutDirection, Offset, Overflow, Size, Spacing};
 use crate::measure::{ContentMeasurer, IntrinsicSize, MeasureTextRequest};
 use crate::primitives::{Rect, Shape};
+use crate::style::Style;
+use crate::transition::Transition;
 
 /// Unique identifier for a node, used for hit-testing and event routing
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -72,6 +74,18 @@ pub struct Node {
     children: Vec<Node>,
     /// Computed layout (filled during layout pass)
     computed: Option<ComputedLayout>,
+    /// Base style (always applied)
+    base_style: Option<Style>,
+    /// Style to apply when hovered (merged with base)
+    hover_style: Option<Style>,
+    /// Style to apply when active/pressed (merged with base + hover)
+    active_style: Option<Style>,
+    /// Style to apply when disabled (overrides all other styles)
+    disabled_style: Option<Style>,
+    /// Whether this node is disabled (cannot be interacted with)
+    disabled: bool,
+    /// Transition configuration for style changes
+    transition: Option<Transition>,
 }
 
 impl Node {
@@ -92,6 +106,12 @@ impl Node {
             content: None,
             children: Vec::new(),
             computed: None,
+            base_style: None,
+            hover_style: None,
+            active_style: None,
+            disabled_style: None,
+            disabled: false,
+            transition: None,
         }
     }
 
@@ -187,6 +207,42 @@ impl Node {
         self
     }
 
+    /// Set the base style (always applied)
+    pub fn with_style(mut self, style: Style) -> Self {
+        self.base_style = Some(style);
+        self
+    }
+
+    /// Set the hover style (merged with base when hovered)
+    pub fn with_hover_style(mut self, style: Style) -> Self {
+        self.hover_style = Some(style);
+        self
+    }
+
+    /// Set the active style (merged with base + hover when pressed/active)
+    pub fn with_active_style(mut self, style: Style) -> Self {
+        self.active_style = Some(style);
+        self
+    }
+
+    /// Set the disabled style (used when node is disabled, overrides other styles)
+    pub fn with_disabled_style(mut self, style: Style) -> Self {
+        self.disabled_style = Some(style);
+        self
+    }
+
+    /// Set whether this node is disabled (cannot be interacted with)
+    pub fn with_disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Set the transition configuration for style changes
+    pub fn with_transition(mut self, transition: Transition) -> Self {
+        self.transition = Some(transition);
+        self
+    }
+
     /// Add a child node
     pub fn with_child(mut self, child: Node) -> Self {
         assert!(
@@ -219,6 +275,11 @@ impl Node {
         self.opacity
     }
 
+    /// Set the opacity value (used by style system)
+    pub(crate) fn set_opacity(&mut self, opacity: f32) {
+        self.opacity = opacity;
+    }
+
     /// Get the overflow policy
     pub(crate) fn overflow(&self) -> Overflow {
         self.overflow
@@ -229,9 +290,19 @@ impl Node {
         self.shape.as_ref()
     }
 
+    /// Get mutable reference to the shape (used by style system)
+    pub(crate) fn shape_mut(&mut self) -> Option<&mut Shape> {
+        self.shape.as_mut()
+    }
+
     /// Get the content, if any
     pub(crate) fn content(&self) -> Option<&Content> {
         self.content.as_ref()
+    }
+
+    /// Get mutable reference to the content (used by style system)
+    pub(crate) fn content_mut(&mut self) -> Option<&mut Content> {
+        self.content.as_mut()
     }
 
     /// Get the padding
@@ -247,6 +318,41 @@ impl Node {
     /// Get the children
     pub(crate) fn children(&self) -> &[Node] {
         &self.children
+    }
+
+    /// Get mutable reference to children (used by style system)
+    pub fn children_mut(&mut self) -> &mut [Node] {
+        &mut self.children
+    }
+
+    /// Get the base style
+    pub fn base_style(&self) -> Option<&Style> {
+        self.base_style.as_ref()
+    }
+
+    /// Get the hover style
+    pub fn hover_style(&self) -> Option<&Style> {
+        self.hover_style.as_ref()
+    }
+
+    /// Get the active style
+    pub fn active_style(&self) -> Option<&Style> {
+        self.active_style.as_ref()
+    }
+
+    /// Get the disabled style
+    pub fn disabled_style(&self) -> Option<&Style> {
+        self.disabled_style.as_ref()
+    }
+
+    /// Check if this node is disabled
+    pub fn is_disabled(&self) -> bool {
+        self.disabled
+    }
+
+    /// Get the transition configuration
+    pub fn transition(&self) -> Option<&Transition> {
+        self.transition.as_ref()
     }
 
     /// Measure the intrinsic size of this node (content + padding, excluding margins).

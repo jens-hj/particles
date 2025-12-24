@@ -12,9 +12,9 @@ use astra_gui::{
     Color, Content, FullOutput, HorizontalAlign, LayoutDirection, Node, Rect, Size, Spacing,
     TextContent, VerticalAlign,
 };
-use astra_gui_interactive::{button, button_clicked, button_hovered, ButtonState, ButtonStyle};
+use astra_gui_interactive::{button, button_clicked, ButtonStyle};
 use astra_gui_text::Engine as TextEngine;
-use astra_gui_wgpu::{EventDispatcher, InputState, Renderer};
+use astra_gui_wgpu::{EventDispatcher, InputState, InteractiveStateManager, Renderer};
 use std::sync::Arc;
 use wgpu::Trace;
 use winit::{
@@ -32,11 +32,11 @@ struct App {
     // Input & interaction
     input_state: InputState,
     event_dispatcher: EventDispatcher,
+    interactive_state_manager: InteractiveStateManager,
 
     // Application state
     counter: i32,
-    increment_button_state: ButtonState,
-    decrement_button_state: ButtonState,
+    buttons_disabled: bool,
 }
 
 struct GpuState {
@@ -55,9 +55,9 @@ impl App {
             text_engine: TextEngine::new_default(),
             input_state: InputState::new(),
             event_dispatcher: EventDispatcher::new(),
+            interactive_state_manager: InteractiveStateManager::new(),
             counter: 0,
-            increment_button_state: ButtonState::Idle,
-            decrement_button_state: ButtonState::Idle,
+            buttons_disabled: false,
         }
     }
 
@@ -65,6 +65,9 @@ impl App {
         let Some(ref window) = self.window else {
             return;
         };
+
+        // Update frame time for transitions
+        self.interactive_state_manager.begin_frame();
 
         // Build UI
         let mut ui = self.build_ui();
@@ -74,20 +77,12 @@ impl App {
         let window_rect = Rect::from_min_size([0.0, 0.0], [size.width as f32, size.height as f32]);
         ui.compute_layout_with_measurer(window_rect, &mut self.text_engine);
 
-        // Generate events from input
-        let events = self.event_dispatcher.dispatch(&self.input_state, &ui);
+        // Generate events and interaction states from input
+        let (events, interaction_states) = self.event_dispatcher.dispatch(&self.input_state, &ui);
 
-        // Update increment button state
-        let inc_hovered = button_hovered("increment_btn", &events);
-        let inc_pressed = self.input_state.is_button_down(MouseButton::Left) && inc_hovered;
-        self.increment_button_state
-            .update(inc_hovered, inc_pressed, true);
-
-        // Update decrement button state
-        let dec_hovered = button_hovered("decrement_btn", &events);
-        let dec_pressed = self.input_state.is_button_down(MouseButton::Left) && dec_hovered;
-        self.decrement_button_state
-            .update(dec_hovered, dec_pressed, true);
+        // Apply interactive styles with transitions
+        self.interactive_state_manager
+            .apply_styles(&mut ui, &interaction_states);
 
         // Handle button clicks
         if button_clicked("increment_btn", &events) {
@@ -98,6 +93,18 @@ impl App {
         if button_clicked("decrement_btn", &events) {
             self.counter -= 1;
             println!("Decrement clicked! Counter: {}", self.counter);
+        }
+
+        if button_clicked("toggle_btn", &events) {
+            self.buttons_disabled = !self.buttons_disabled;
+            println!(
+                "Toggle clicked! Buttons are now {}",
+                if self.buttons_disabled {
+                    "disabled"
+                } else {
+                    "enabled"
+                }
+            );
         }
 
         // Render
@@ -163,6 +170,11 @@ impl App {
         gpu_state.queue.submit(Some(encoder.finish()));
         frame.present();
 
+        // Request redraw if there are active transitions
+        if self.interactive_state_manager.has_active_transitions() {
+            window.request_redraw();
+        }
+
         // Clear frame-specific input state for next frame
         self.input_state.begin_frame();
     }
@@ -213,7 +225,7 @@ impl App {
                         button(
                             "decrement_btn",
                             "-",
-                            self.decrement_button_state,
+                            self.buttons_disabled,
                             &ButtonStyle::default(),
                         ),
                     )
@@ -222,8 +234,40 @@ impl App {
                         button(
                             "increment_btn",
                             "+",
-                            self.increment_button_state,
+                            self.buttons_disabled,
                             &ButtonStyle::default(),
+                        ),
+                    )
+                    .with_child(
+                        // Spacer
+                        Node::new().with_width(Size::Fill),
+                    ),
+            )
+            .with_child(
+                // Toggle button container
+                Node::new()
+                    .with_width(Size::Fill)
+                    .with_layout_direction(LayoutDirection::Horizontal)
+                    .with_child(
+                        // Spacer
+                        Node::new().with_width(Size::Fill),
+                    )
+                    .with_child(
+                        // Toggle Button
+                        button(
+                            "toggle_btn",
+                            if self.buttons_disabled {
+                                "Enable Buttons"
+                            } else {
+                                "Disable Buttons"
+                            },
+                            false, // Toggle button is never disabled
+                            &ButtonStyle {
+                                idle_color: Color::rgb(0.5, 0.5, 0.5),
+                                hover_color: Color::rgb(0.6, 0.6, 0.6),
+                                pressed_color: Color::rgb(0.4, 0.4, 0.4),
+                                ..Default::default()
+                            },
                         ),
                     )
                     .with_child(
@@ -236,7 +280,8 @@ impl App {
                 Node::new()
                     .with_width(Size::Fill)
                     .with_content(Content::Text(TextContent {
-                        text: "Click + to increment or - to decrement the counter!".to_string(),
+                        text: "Click the toggle button to enable/disable the counter buttons!"
+                            .to_string(),
                         font_size: 16.0,
                         color: Color::rgb(0.7, 0.7, 0.7),
                         h_align: HorizontalAlign::Center,

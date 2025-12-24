@@ -83,17 +83,21 @@ fn hit_test_recursive(
         return; // Point is outside this node, skip it and children
     }
 
-    // Point is within this node! Add it to results
-    let local_pos = Point {
-        x: point.x - node_rect.min[0],
-        y: point.y - node_rect.min[1],
-    };
+    // Skip disabled nodes - they should not receive interaction events
+    // However, we still need to test their children (they might not be disabled)
+    if !node.is_disabled() {
+        // Point is within this node! Add it to results
+        let local_pos = Point {
+            x: point.x - node_rect.min[0],
+            y: point.y - node_rect.min[1],
+        };
 
-    results.push(HitTestResult {
-        node_id: node.id().cloned(),
-        local_pos,
-        node_rect,
-    });
+        results.push(HitTestResult {
+            node_id: node.id().cloned(),
+            local_pos,
+            node_rect,
+        });
+    }
 
     // Determine clip rect for children
     let child_clip_rect = match node.overflow() {

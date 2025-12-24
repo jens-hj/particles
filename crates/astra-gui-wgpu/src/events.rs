@@ -4,9 +4,11 @@
 //! from input state and hit-testing results.
 
 use astra_gui::{hit_test_point, Node, NodeId, Point};
+use std::collections::HashMap;
 use winit::event::MouseButton;
 
 use crate::input::InputState;
+use crate::interactive_state::InteractionState;
 
 /// Type of interaction event
 #[derive(Debug, Clone)]
@@ -82,9 +84,16 @@ impl EventDispatcher {
     /// * `root` - Root node of the UI tree (with computed layout)
     ///
     /// # Returns
-    /// Vector of targeted events for this frame
-    pub fn dispatch(&mut self, input: &InputState, root: &Node) -> Vec<TargetedEvent> {
+    /// Tuple of (events, interaction_states) where:
+    /// - events: Vector of targeted events for this frame
+    /// - interaction_states: Map of node IDs to their current interaction state (Idle/Hovered/Active)
+    pub fn dispatch(
+        &mut self,
+        input: &InputState,
+        root: &Node,
+    ) -> (Vec<TargetedEvent>, HashMap<NodeId, InteractionState>) {
         let mut events = Vec::new();
+        let mut interaction_states = HashMap::new();
 
         // Get cursor position, if available
         let Some(cursor_pos) = input.cursor_position else {
@@ -104,7 +113,7 @@ impl EventDispatcher {
                     },
                 });
             }
-            return events;
+            return (events, interaction_states);
         };
 
         // Hit-test to find all nodes under cursor (shallow to deep)
@@ -138,6 +147,22 @@ impl EventDispatcher {
         }
 
         self.hovered_nodes = new_hovered;
+
+        // Populate interaction states for all nodes with IDs
+        // This determines whether each node should be rendered as Idle, Hovered, or Active
+        for hit in &hits {
+            if let Some(node_id) = &hit.node_id {
+                let is_pressed = input.is_button_down(MouseButton::Left);
+
+                let state = if is_pressed {
+                    InteractionState::Active
+                } else {
+                    InteractionState::Hovered
+                };
+
+                interaction_states.insert(node_id.clone(), state);
+            }
+        }
 
         // Handle drag state
         if let Some(drag) = &mut self.drag_state {
@@ -226,7 +251,7 @@ impl EventDispatcher {
             }
         }
 
-        events
+        (events, interaction_states)
     }
 }
 

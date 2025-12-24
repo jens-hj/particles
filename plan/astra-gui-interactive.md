@@ -706,6 +706,654 @@ pub fn update_slider_from_drag(
 8. ✅ Create interactive button example
 9. ✅ Test and refine
 
+### Phase 1.5: Transitions and Interactive States
+
+**Goal**: Enable declarative hover/active states with smooth transitions at the node level, eliminating manual state tracking in components.
+
+#### Overview
+Currently, button states are managed manually (tracking `ButtonState`, checking hover/press). This phase moves state handling into the core Node itself, making ANY node interactive with simple builder methods.
+
+**Benefits**:
+- No manual state tracking needed
+- Automatic smooth transitions between states
+- Reusable for all future components
+- Cleaner component code
+
+---
+
+#### 1.5.1 Style Aggregation
+
+**Goal**: Create a unified `Style` struct to aggregate visual properties
+
+**File**: `crates/astra-gui/src/style.rs` (new)
+
+**Design Decisions**:
+- Only include properties that make sense to transition (colors, opacity, border radius)
+- Exclude layout properties (width, height, padding, margin) - these should NOT animate as they affect layout
+- Make all fields `Option<T>` so styles can be partial (only override specific properties)
+
+**Implementation**:
+```rust
+/// Visual style properties that can be transitioned
+#[derive(Debug, Clone, Default)]
+pub struct Style {
+    /// Background fill color (for shapes)
+    pub fill_color: Option<Color>,
+    
+    /// Stroke color (for shapes with borders)
+    pub stroke_color: Option<Color>,
+    
+    /// Stroke width
+    pub stroke_width: Option<f32>,
+    
+    /// Corner radius (for Round corner shape)
+    pub corner_radius: Option<f32>,
+    
+    /// Node opacity (0.0 = transparent, 1.0 = opaque)
+    pub opacity: Option<f32>,
+    
+    /// Text color (for text content)
+    pub text_color: Option<Color>,
+}
+
+impl Style {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
+    /// Create a style with only fill color
+    pub fn fill(color: Color) -> Self {
+        Self {
+            fill_color: Some(color),
+            ..Default::default()
+        }
+    }
+    
+    /// Merge this style with another, preferring values from `other` when present
+    pub fn merge(&self, other: &Style) -> Style {
+        Style {
+            fill_color: other.fill_color.or(self.fill_color),
+            stroke_color: other.stroke_color.or(self.stroke_color),
+            stroke_width: other.stroke_width.or(self.stroke_width),
+            corner_radius: other.corner_radius.or(self.corner_radius),
+            opacity: other.opacity.or(self.opacity),
+            text_color: other.text_color.or(self.text_color),
+        }
+    }
+    
+    /// Apply this style to a node (modify node properties)
+    pub(crate) fn apply_to_node(&self, node: &mut Node) {
+        if let Some(opacity) = self.opacity {
+            node.opacity = opacity;
+        }
+        
+        // Apply to shape if present
+        if let Some(ref mut shape) = node.shape {
+            if let Shape::Rect(ref mut rect) = shape {
+                if let Some(color) = self.fill_color {
+                    rect.fill = color;
+                }
+                if let Some(color) = self.stroke_color {
+                    if let Some(ref mut stroke) = rect.stroke {
+                        stroke.color = color;
+                    }
+                }
+                if let Some(width) = self.stroke_width {
+                    if let Some(ref mut stroke) = rect.stroke {
+                        stroke.width = width;
+                    }
+                }
+                if let Some(radius) = self.corner_radius {
+                    rect.corner_shape = CornerShape::Round(radius);
+                }
+            }
+        }
+        
+        // Apply to text content if present
+        if let Some(ref mut content) = node.content {
+            if let Content::Text(ref mut text) = content {
+                if let Some(color) = self.text_color {
+                    text.color = color;
+                }
+            }
+        }
+    }
+}
+```
+
+**Node Changes** (`crates/astra-gui/src/node.rs`):
+```rust
+pub struct Node {
+    // ... existing fields ...
+    
+    /// Base style (always applied)
+    base_style: Option<Style>,
+    
+    /// Style to apply when hovered (merged with base)
+    hover_style: Option<Style>,
+    
+    /// Style to apply when active/pressed (merged with base + hover)
+    active_style: Option<Style>,
+}
+
+impl Node {
+    pub fn with_style(mut self, style: Style) -> Self {
+        self.base_style = Some(style);
+        self
+    }
+    
+    pub fn with_hover_style(mut self, style: Style) -> Self {
+        self.hover_style = Some(style);
+        self
+    }
+    
+    pub fn with_active_style(mut self, style: Style) -> Self {
+        self.active_style = Some(style);
+        self
+    }
+}
+```
+
+---
+
+#### 1.5.2 Easing Functions
+
+**Goal**: Standard easing/interpolation functions for smooth transitions
+
+**File**: `crates/astra-gui/src/transition.rs` (new)
+
+**Implementation**:
+```rust
+/// Easing function type: takes progress (0.0 to 1.0) and returns eased value (0.0 to 1.0)
+pub type EasingFn = fn(f32) -> f32;
+
+/// Linear interpolation (no easing)
+pub fn linear(t: f32) -> f32 {
+    t
+}
+
+/// Ease in (quadratic)
+pub fn ease_in(t: f32) -> f32 {
+    t * t
+}
+
+/// Ease out (quadratic)
+pub fn ease_out(t: f32) -> f32 {
+    t * (2.0 - t)
+}
+
+/// Ease in-out (quadratic)
+pub fn ease_in_out(t: f32) -> f32 {
+    if t < 0.5 {
+        2.0 * t * t
+    } else {
+        -1.0 + (4.0 - 2.0 * t) * t
+    }
+}
+
+/// Ease in (cubic) - stronger effect
+pub fn ease_in_cubic(t: f32) -> f32 {
+    t * t * t
+}
+
+/// Ease out (cubic) - stronger effect
+pub fn ease_out_cubic(t: f32) -> f32 {
+    let t = t - 1.0;
+    t * t * t + 1.0
+}
+
+/// Ease in-out (cubic) - stronger effect
+pub fn ease_in_out_cubic(t: f32) -> f32 {
+    if t < 0.5 {
+        4.0 * t * t * t
+    } else {
+        let t = t - 1.0;
+        1.0 + 4.0 * t * t * t
+    }
+}
+
+/// Lerp between two f32 values
+pub fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+/// Lerp between two colors
+pub fn lerp_color(a: Color, b: Color, t: f32) -> Color {
+    Color {
+        r: lerp_f32(a.r, b.r, t),
+        g: lerp_f32(a.g, b.g, t),
+        b: lerp_f32(a.b, b.b, t),
+        a: lerp_f32(a.a, b.a, t),
+    }
+}
+
+/// Interpolate between two styles
+pub fn lerp_style(from: &Style, to: &Style, t: f32) -> Style {
+    Style {
+        fill_color: match (from.fill_color, to.fill_color) {
+            (Some(a), Some(b)) => Some(lerp_color(a, b, t)),
+            (None, Some(b)) => Some(b),
+            (Some(a), None) => Some(a),
+            (None, None) => None,
+        },
+        stroke_color: match (from.stroke_color, to.stroke_color) {
+            (Some(a), Some(b)) => Some(lerp_color(a, b, t)),
+            (None, Some(b)) => Some(b),
+            (Some(a), None) => Some(a),
+            (None, None) => None,
+        },
+        stroke_width: match (from.stroke_width, to.stroke_width) {
+            (Some(a), Some(b)) => Some(lerp_f32(a, b, t)),
+            (None, Some(b)) => Some(b),
+            (Some(a), None) => Some(a),
+            (None, None) => None,
+        },
+        corner_radius: match (from.corner_radius, to.corner_radius) {
+            (Some(a), Some(b)) => Some(lerp_f32(a, b, t)),
+            (None, Some(b)) => Some(b),
+            (Some(a), None) => Some(a),
+            (None, None) => None,
+        },
+        opacity: match (from.opacity, to.opacity) {
+            (Some(a), Some(b)) => Some(lerp_f32(a, b, t)),
+            (None, Some(b)) => Some(b),
+            (Some(a), None) => Some(a),
+            (None, None) => None,
+        },
+        text_color: match (from.text_color, to.text_color) {
+            (Some(a), Some(b)) => Some(lerp_color(a, b, t)),
+            (None, Some(b)) => Some(b),
+            (Some(a), None) => Some(a),
+            (None, None) => None,
+        },
+    }
+}
+```
+
+---
+
+#### 1.5.3 Transition Configuration
+
+**Goal**: Define how styles transition (duration, easing)
+
+**File**: `crates/astra-gui/src/transition.rs` (continued)
+
+**Implementation**:
+```rust
+/// Transition configuration
+#[derive(Debug, Clone, Copy)]
+pub struct Transition {
+    /// Duration in seconds
+    pub duration: f32,
+    
+    /// Easing function
+    pub easing: EasingFn,
+}
+
+impl Transition {
+    pub fn new(duration: f32, easing: EasingFn) -> Self {
+        Self { duration, easing }
+    }
+    
+    /// Instant transition (no animation)
+    pub fn instant() -> Self {
+        Self {
+            duration: 0.0,
+            easing: linear,
+        }
+    }
+    
+    /// Quick transition (150ms, ease-out)
+    pub fn quick() -> Self {
+        Self {
+            duration: 0.15,
+            easing: ease_out,
+        }
+    }
+    
+    /// Standard transition (250ms, ease-in-out)
+    pub fn standard() -> Self {
+        Self {
+            duration: 0.25,
+            easing: ease_in_out,
+        }
+    }
+    
+    /// Slow transition (400ms, ease-in-out)
+    pub fn slow() -> Self {
+        Self {
+            duration: 0.4,
+            easing: ease_in_out,
+        }
+    }
+}
+
+impl Default for Transition {
+    fn default() -> Self {
+        Self::standard()
+    }
+}
+```
+
+**Node Changes**:
+```rust
+pub struct Node {
+    // ... existing fields ...
+    
+    /// Transition configuration for style changes
+    transition: Option<Transition>,
+}
+
+impl Node {
+    pub fn with_transition(mut self, transition: Transition) -> Self {
+        self.transition = Some(transition);
+        self
+    }
+}
+```
+
+---
+
+#### 1.5.4 Interactive State Tracking
+
+**Goal**: Track which nodes are hovered/active and maintain transition state
+
+**Challenge**: Nodes are stateless, rebuilt every frame. We need external state tracking.
+
+**Solution**: Add `InteractiveStateManager` to track node states across frames.
+
+**File**: `crates/astra-gui-wgpu/src/interactive_state.rs` (new)
+
+**Implementation**:
+```rust
+use astra_gui::{NodeId, Style, Transition};
+use astra_gui::transition::lerp_style;
+use std::collections::HashMap;
+use std::time::Instant;
+
+/// Current interaction state of a node
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InteractionState {
+    Idle,
+    Hovered,
+    Active,
+}
+
+/// Transition state for a single node
+#[derive(Debug)]
+struct NodeTransitionState {
+    /// Current interaction state
+    current_state: InteractionState,
+    
+    /// Previous interaction state (for detecting changes)
+    previous_state: InteractionState,
+    
+    /// When the transition started
+    transition_start: Option<Instant>,
+    
+    /// Style we're transitioning from
+    from_style: Option<Style>,
+    
+    /// Style we're transitioning to
+    to_style: Option<Style>,
+    
+    /// Current computed style (result of interpolation)
+    current_style: Option<Style>,
+}
+
+/// Manages interactive state and transitions for all nodes
+pub struct InteractiveStateManager {
+    states: HashMap<NodeId, NodeTransitionState>,
+    current_time: Instant,
+}
+
+impl InteractiveStateManager {
+    pub fn new() -> Self {
+        Self {
+            states: HashMap::new(),
+            current_time: Instant::now(),
+        }
+    }
+    
+    /// Call at start of each frame
+    pub fn begin_frame(&mut self) {
+        self.current_time = Instant::now();
+    }
+    
+    /// Update interaction state for a node
+    pub fn update_state(
+        &mut self,
+        node_id: &NodeId,
+        new_state: InteractionState,
+        base_style: &Style,
+        hover_style: Option<&Style>,
+        active_style: Option<&Style>,
+        transition: Option<&Transition>,
+    ) -> Style {
+        let entry = self.states.entry(node_id.clone()).or_insert_with(|| {
+            NodeTransitionState {
+                current_state: InteractionState::Idle,
+                previous_state: InteractionState::Idle,
+                transition_start: None,
+                from_style: None,
+                to_style: None,
+                current_style: Some(base_style.clone()),
+            }
+        });
+        
+        // Determine target style based on state
+        let target_style = match new_state {
+            InteractionState::Idle => base_style.clone(),
+            InteractionState::Hovered => {
+                let mut style = base_style.clone();
+                if let Some(hover) = hover_style {
+                    style = style.merge(hover);
+                }
+                style
+            }
+            InteractionState::Active => {
+                let mut style = base_style.clone();
+                if let Some(hover) = hover_style {
+                    style = style.merge(hover);
+                }
+                if let Some(active) = active_style {
+                    style = style.merge(active);
+                }
+                style
+            }
+        };
+        
+        // Detect state change
+        if new_state != entry.current_state {
+            entry.previous_state = entry.current_state;
+            entry.current_state = new_state;
+            entry.from_style = entry.current_style.clone();
+            entry.to_style = Some(target_style.clone());
+            entry.transition_start = Some(self.current_time);
+        }
+        
+        // Update transition
+        if let (Some(start), Some(from), Some(to), Some(trans)) = (
+            entry.transition_start,
+            &entry.from_style,
+            &entry.to_style,
+            transition,
+        ) {
+            let elapsed = (self.current_time - start).as_secs_f32();
+            
+            if elapsed >= trans.duration {
+                // Transition complete
+                entry.current_style = Some(to.clone());
+                entry.transition_start = None;
+            } else {
+                // Interpolate
+                let progress = elapsed / trans.duration;
+                let eased = (trans.easing)(progress);
+                entry.current_style = Some(lerp_style(from, to, eased));
+            }
+        } else {
+            // No transition, use target directly
+            entry.current_style = Some(target_style);
+        }
+        
+        entry.current_style.clone().unwrap_or_else(|| base_style.clone())
+    }
+    
+    /// Check if any transitions are active (need redraw)
+    pub fn has_active_transitions(&self) -> bool {
+        self.states.values().any(|s| s.transition_start.is_some())
+    }
+}
+```
+
+---
+
+#### 1.5.5 Integration with Event System
+
+**Goal**: Automatically determine interaction state from events and apply styles
+
+**File**: `crates/astra-gui-wgpu/src/events.rs` (modify existing)
+
+**Changes**:
+```rust
+impl EventDispatcher {
+    pub fn dispatch(
+        &mut self,
+        input: &InputState,
+        root: &Node,
+    ) -> (Vec<TargetedEvent>, HashMap<NodeId, InteractionState>) {
+        let mut events = Vec::new();
+        let mut interaction_states = HashMap::new();
+        
+        // Hit-test and generate events (existing code)
+        // ...
+        
+        // NEW: Determine interaction state for each node
+        if let Some(cursor_pos) = input.cursor_position {
+            let hits = hit_test_point(root, cursor_pos);
+            
+            for hit in hits {
+                if let Some(node_id) = hit.node_id {
+                    let is_pressed = input.is_button_down(MouseButton::Left);
+                    
+                    let state = if is_pressed {
+                        InteractionState::Active
+                    } else {
+                        InteractionState::Hovered
+                    };
+                    
+                    interaction_states.insert(node_id, state);
+                }
+            }
+        }
+        
+        (events, interaction_states)
+    }
+}
+```
+
+---
+
+#### 1.5.6 Simplified Button Example
+
+**Goal**: Rewrite button to use declarative style approach
+
+**File**: `crates/astra-gui-interactive/src/button.rs` (simplified)
+
+**Before** (manual state tracking):
+```rust
+pub fn button(id: impl Into<String>, label: impl Into<String>, state: ButtonState, style: &ButtonStyle) -> Node {
+    let bg_color = match state {
+        ButtonState::Idle => style.idle_color,
+        ButtonState::Hovered => style.hover_color,
+        ButtonState::Pressed => style.pressed_color,
+        ButtonState::Disabled => style.disabled_color,
+    };
+    // ... build node with color
+}
+```
+
+**After** (declarative):
+```rust
+pub fn button(id: impl Into<String>, label: impl Into<String>, style: &ButtonStyle) -> Node {
+    Node::new()
+        .with_id(NodeId::new(id))
+        .with_style(Style {
+            fill_color: Some(style.idle_color),
+            text_color: Some(style.text_color),
+            corner_radius: Some(style.border_radius),
+            ..Default::default()
+        })
+        .with_hover_style(Style {
+            fill_color: Some(style.hover_color),
+            ..Default::default()
+        })
+        .with_active_style(Style {
+            fill_color: Some(style.pressed_color),
+            ..Default::default()
+        })
+        .with_transition(Transition::quick())
+        .with_padding(style.padding)
+        .with_content(Content::Text(TextContent {
+            text: label.into(),
+            font_size: style.font_size,
+            // color will be overridden by style
+            ..Default::default()
+        }))
+}
+```
+
+---
+
+#### Implementation Steps
+
+1. ✅ Create `crates/astra-gui/src/style.rs` with `Style` struct
+2. ✅ Create `crates/astra-gui/src/transition.rs` with easing functions, interpolation, and `Transition` config
+3. ✅ Add `base_style`, `hover_style`, `active_style`, `transition` fields to `Node`
+4. ✅ Add `with_style()`, `with_hover_style()`, `with_active_style()`, `with_transition()` builder methods
+5. ✅ Create `crates/astra-gui-wgpu/src/interactive_state.rs` with `InteractiveStateManager`
+6. ✅ Modify `EventDispatcher::dispatch()` to return interaction states
+7. ✅ Integrate `InteractiveStateManager` into example's render loop
+8. ✅ Simplify button component to use declarative styles
+9. ✅ Update button example to use new approach
+10. ✅ Test smooth transitions on hover/click
+
+---
+
+#### Critical Design Questions
+
+**Q1**: Should we apply styles during tree building or during rendering?
+**A**: During rendering. The node tree is built fresh each frame, but we need persistent state for transitions. The render loop will:
+1. Build node tree (declarative)
+2. Generate events and interaction states
+3. Update InteractiveStateManager with states
+4. Apply computed styles to nodes (mutate tree)
+5. Layout and render
+
+**Q2**: How do we handle nodes without IDs?
+**A**: Only nodes with explicit IDs can have interactive states. This is intentional - forces developers to identify interactive elements.
+
+**Q3**: Should layout properties (padding, size) be in Style?
+**A**: NO. Animating layout properties causes expensive re-layouts every frame. Keep Style limited to visual properties only.
+
+**Q4**: What about disabled state?
+**A**: Add `with_disabled_style()` and track as fourth state, OR use opacity/pointer-events in base style. For now, handle externally (don't build hover/active styles if disabled).
+
+**Q5**: Performance with many interactive nodes?
+**A**: HashMap lookup per interactive node per frame. Should be fine for hundreds of nodes. Can optimize later with spatial indexing if needed.
+
+---
+
+#### Success Criteria
+
+- ✅ Button component simplified (no manual state tracking)
+- ✅ Smooth color transition on hover (visible animation)
+- ✅ Smooth color transition on press (visible animation)
+- ✅ No frame lag or jank
+- ✅ Works with multiple buttons independently
+- ✅ Transitions complete smoothly when quickly moving mouse on/off button
+- ✅ Code is cleaner and more declarative than Phase 1 approach
+
 ### Phase 2: Extend to Toggle (Future)
 1. Implement toggle component
 2. Add toggle to example
@@ -777,14 +1425,14 @@ fn assign_auto_ids(node: &mut Node, path: &str, index: usize) {
 - ✅ Code is clean, well-documented, follows astra-gui patterns
 
 ### Phase 2 (Toggle):
-- ✅ Toggle switches on click
-- ✅ Visual feedback (color change)
-- ✅ (Optional) Smooth animation
+- Toggle switches on click
+- Visual feedback (color change)
+- (Optional) Smooth animation
 
 ### Phase 3 (Slider):
-- ✅ Drag to change value
-- ✅ Visual thumb positioning
-- ✅ Value clamped to range
+- Drag to change value
+- Visual thumb positioning
+- Value clamped to range
 
 ---
 

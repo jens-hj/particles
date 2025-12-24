@@ -3,8 +3,8 @@
 //! Provides a clickable button widget with hover and press states.
 
 use astra_gui::{
-    Color, Content, CornerShape, HorizontalAlign, Node, NodeId, Size, Spacing, StyledRect,
-    TextContent, VerticalAlign,
+    Color, Content, CornerShape, HorizontalAlign, Node, NodeId, Size, Spacing, Style, StyledRect,
+    TextContent, Transition, VerticalAlign,
 };
 use astra_gui_wgpu::{InteractionEvent, TargetedEvent};
 
@@ -86,37 +86,26 @@ impl Default for ButtonStyle {
     }
 }
 
-/// Create a button node
+/// Create a button node with declarative hover/active/disabled states
 ///
-/// This is a stateless function that builds a button node based on the current state.
-/// The button's visual appearance changes based on its state.
+/// This version uses the new style system with automatic state management.
+/// No need to manually track button state - hover and active states are
+/// applied automatically based on mouse interaction.
 ///
 /// # Arguments
 /// * `id` - Unique identifier for the button (used for event targeting)
 /// * `label` - Text label displayed on the button
-/// * `state` - Current visual state of the button
+/// * `disabled` - Whether the button is disabled (cannot be interacted with)
 /// * `style` - Visual styling configuration
 ///
 /// # Returns
-/// A configured `Node` representing the button
+/// A configured `Node` representing the button with automatic state transitions
 pub fn button(
     id: impl Into<String>,
     label: impl Into<String>,
-    state: ButtonState,
+    disabled: bool,
     style: &ButtonStyle,
 ) -> Node {
-    let bg_color = match state {
-        ButtonState::Idle => style.idle_color,
-        ButtonState::Hovered => style.hover_color,
-        ButtonState::Pressed => style.pressed_color,
-        ButtonState::Disabled => style.disabled_color,
-    };
-
-    let text_color = match state {
-        ButtonState::Disabled => style.disabled_text_color,
-        _ => style.text_color,
-    };
-
     Node::new()
         .with_id(NodeId::new(id))
         .with_width(Size::FitContent)
@@ -125,16 +114,39 @@ pub fn button(
         .with_shape(astra_gui::Shape::Rect(StyledRect {
             rect: astra_gui::Rect::default(), // Will be filled during layout
             corner_shape: CornerShape::Round(style.border_radius),
-            fill: bg_color,
+            fill: style.idle_color, // Will be overridden by style system
             stroke: None,
         }))
         .with_content(Content::Text(TextContent {
             text: label.into(),
             font_size: style.font_size,
-            color: text_color,
+            color: style.text_color, // Will be overridden by style system
             h_align: HorizontalAlign::Center,
             v_align: VerticalAlign::Center,
         }))
+        // Declarative styles - no manual state tracking needed!
+        .with_style(Style {
+            fill_color: Some(style.idle_color),
+            text_color: Some(style.text_color),
+            corner_radius: Some(style.border_radius),
+            ..Default::default()
+        })
+        .with_hover_style(Style {
+            fill_color: Some(style.hover_color),
+            ..Default::default()
+        })
+        .with_active_style(Style {
+            fill_color: Some(style.pressed_color),
+            ..Default::default()
+        })
+        .with_disabled_style(Style {
+            fill_color: Some(style.disabled_color),
+            text_color: Some(style.disabled_text_color),
+            corner_radius: Some(style.border_radius),
+            ..Default::default()
+        })
+        .with_disabled(disabled)
+        .with_transition(Transition::quick())
 }
 
 /// Check if a button with the given ID was clicked this frame

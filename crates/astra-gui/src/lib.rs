@@ -16,7 +16,9 @@ mod mesh;
 mod node;
 mod output;
 mod primitives;
+mod style;
 mod tessellate;
+pub mod transition;
 
 pub use color::*;
 pub use content::*;
@@ -28,4 +30,6 @@ pub use mesh::*;
 pub use node::*;
 pub use output::*;
 pub use primitives::*;
+pub use style::*;
 pub use tessellate::*;
+pub use transition::*;
