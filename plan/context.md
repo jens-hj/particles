@@ -167,6 +167,52 @@ Performance impact:
    - Updated all callsites in `node.rs` to use `try_resolve()` with appropriate fallbacks
    - Enforces clearer semantics: resolve() only for Fixed/Relative, try_resolve() for all cases
 
+### ✅ Completed: Interactive components system with disabled state (Dec 2025)
+
+Implemented a complete declarative styling system for interactive components:
+
+1. **Style System** (`style.rs`, `transition.rs`):
+   - `Style` struct with optional visual properties (fill_color, text_color, opacity, etc.)
+   - Style merging for layered states (base → hover → active → disabled)
+   - Easing functions (linear, ease-in, ease-out, ease-in-out, cubic variants)
+   - `Transition` configuration with duration and easing
+   - Style interpolation with `lerp_style()` for smooth animations
+
+2. **Node Integration** (`node.rs`):
+   - Added `base_style`, `hover_style`, `active_style`, `disabled_style` fields
+   - Added `disabled` boolean field
+   - Builder methods: `with_style()`, `with_hover_style()`, `with_active_style()`, `with_disabled_style()`, `with_disabled()`
+   - Getter methods for accessing styles and disabled state
+
+3. **Interactive State Management** (`interactive_state.rs`):
+   - `InteractionState` enum: Idle, Hovered, Active, Disabled
+   - `InteractiveStateManager` tracks transition state per node ID across frames
+   - Automatic style interpolation with configurable transitions
+   - `apply_styles()` recursively applies computed styles to node tree
+   - Disabled nodes always use disabled_style (or fallback with reduced opacity)
+
+4. **Hit Testing** (`hit_test.rs`):
+   - Modified `hit_test_recursive()` to skip disabled nodes
+   - Disabled nodes don't receive interaction events
+   - Children of disabled nodes can still be interactive (if not disabled themselves)
+
+5. **Button Component** (`button.rs`):
+   - Updated to accept `disabled` parameter
+   - Automatically applies disabled_style when disabled
+   - Uses declarative style system - no manual state tracking needed
+
+6. **Example** (`button.rs` example):
+   - Demonstrates increment/decrement buttons with counter
+   - Toggle button to enable/disable counter buttons
+   - Shows smooth transitions between all states including disabled
+
+Features:
+- Declarative styling with automatic state transitions
+- Smooth animations using easing functions
+- No manual state tracking required
+- Disabled state prevents all interaction
+- Works with multiple buttons independently
+
 Remaining optimizations from plan (deferred to future):
 - GPU compute tessellation (high effort, very high impact)
 - Layout caching with dirty tracking (high effort, very high impact)
