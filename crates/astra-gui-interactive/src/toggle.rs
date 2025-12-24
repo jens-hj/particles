@@ -101,7 +101,8 @@ pub fn toggle(id: impl Into<String>, value: bool, disabled: bool, style: &Toggle
         .with_disabled(disabled)
         .with_transition(Transition::quick())
         .with_child(
-            // Knob (sliding circle)
+            // Knob (positioned with offset - no animation on position currently)
+            // TODO: Add offset animation support to style system for smooth sliding
             Node::new()
                 .with_width(Size::px(style.knob_diameter))
                 .with_height(Size::px(style.knob_diameter))
