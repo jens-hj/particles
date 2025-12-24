@@ -1,5 +1,5 @@
 /// RGBA color in linear space with values in [0, 1]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
