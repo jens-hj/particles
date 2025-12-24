@@ -26,6 +26,12 @@ pub struct Style {
 
     /// Text color (for text content)
     pub text_color: Option<Color>,
+
+    /// Horizontal offset from default position
+    pub offset_x: Option<f32>,
+
+    /// Vertical offset from default position
+    pub offset_y: Option<f32>,
 }
 
 impl Style {
@@ -70,6 +76,8 @@ impl Style {
             corner_radius: other.corner_radius.or(self.corner_radius),
             opacity: other.opacity.or(self.opacity),
             text_color: other.text_color.or(self.text_color),
+            offset_x: other.offset_x.or(self.offset_x),
+            offset_y: other.offset_y.or(self.offset_y),
         }
     }
 
@@ -110,6 +118,14 @@ impl Style {
             if let Some(color) = self.text_color {
                 text.color = color;
             }
+        }
+
+        // Apply offset if present
+        if self.offset_x.is_some() || self.offset_y.is_some() {
+            let current_offset = node.offset();
+            let new_x = self.offset_x.unwrap_or(current_offset.x);
+            let new_y = self.offset_y.unwrap_or(current_offset.y);
+            node.set_offset(crate::layout::Offset::new(new_x, new_y));
         }
     }
 }

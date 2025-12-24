@@ -106,6 +106,18 @@ pub fn lerp_style(from: &Style, to: &Style, t: f32) -> Style {
             (Some(a), None) => Some(a),
             (None, None) => None,
         },
+        offset_x: match (from.offset_x, to.offset_x) {
+            (Some(a), Some(b)) => Some(lerp_f32(a, b, t)),
+            (None, Some(b)) => Some(b),
+            (Some(a), None) => Some(a),
+            (None, None) => None,
+        },
+        offset_y: match (from.offset_y, to.offset_y) {
+            (Some(a), Some(b)) => Some(lerp_f32(a, b, t)),
+            (None, Some(b)) => Some(b),
+            (Some(a), None) => Some(a),
+            (None, None) => None,
+        },
     }
 }
 

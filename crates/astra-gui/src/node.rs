@@ -280,6 +280,16 @@ impl Node {
         self.opacity = opacity;
     }
 
+    /// Get the offset
+    pub(crate) fn offset(&self) -> Offset {
+        self.offset
+    }
+
+    /// Set the offset (used by style system)
+    pub(crate) fn set_offset(&mut self, offset: Offset) {
+        self.offset = offset;
+    }
+
     /// Get the overflow policy
     pub(crate) fn overflow(&self) -> Overflow {
         self.overflow
