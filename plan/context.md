@@ -172,11 +172,12 @@ Performance impact:
 Implemented a complete declarative styling system for interactive components:
 
 1. **Style System** (`style.rs`, `transition.rs`):
-   - `Style` struct with optional visual properties (fill_color, text_color, opacity, etc.)
+   - `Style` struct with optional visual properties (fill_color, text_color, opacity, offset, etc.)
    - Style merging for layered states (base → hover → active → disabled)
    - Easing functions (linear, ease-in, ease-out, ease-in-out, cubic variants)
    - `Transition` configuration with duration and easing
    - Style interpolation with `lerp_style()` for smooth animations
+   - **Offset animation support**: offset_x and offset_y can be animated for smooth position transitions
 
 2. **Node Integration** (`node.rs`):
    - Added `base_style`, `hover_style`, `active_style`, `disabled_style` fields
@@ -202,8 +203,9 @@ Implemented a complete declarative styling system for interactive components:
    - Uses declarative style system - no manual state tracking needed
 
 6. **Toggle Component** (`toggle.rs`):
-   - iOS-style toggle switch with sliding knob animation
-   - Smooth transitions between on/off states
+   - iOS-style toggle switch with smooth sliding knob animation
+   - Knob position animates smoothly using offset_x/offset_y style properties
+   - Background color smoothly transitions between on/off states
    - Visual feedback for hover and active states
    - Supports disabled state
    - Customizable styling with `ToggleStyle`
