@@ -3,6 +3,34 @@ use crate::layout::{ComputedLayout, LayoutDirection, Offset, Overflow, Size, Spa
 use crate::measure::{ContentMeasurer, IntrinsicSize, MeasureTextRequest};
 use crate::primitives::{Rect, Shape};
 
+/// Unique identifier for a node, used for hit-testing and event routing
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NodeId(String);
+
+impl NodeId {
+    /// Create a new NodeId from a string
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    /// Get the ID as a string slice
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for NodeId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+impl From<String> for NodeId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
 /// A UI node that can contain a shape, content, and/or children
 ///
 /// Nodes can be either:
@@ -12,6 +40,8 @@ use crate::primitives::{Rect, Shape};
 ///
 /// All fields are private - use the builder pattern methods (`with_*`) to configure nodes.
 pub struct Node {
+    /// Optional identifier for this node (used for hit-testing and event routing)
+    id: Option<NodeId>,
     /// Width of the node
     width: Size,
     /// Height of the node
@@ -48,6 +78,7 @@ impl Node {
     /// Create a new node with default settings
     pub fn new() -> Self {
         Self {
+            id: None,
             width: Size::default(),
             height: Size::default(),
             offset: Offset::zero(),
@@ -67,6 +98,17 @@ impl Node {
     /// Check if this is a content node (has content, cannot have children)
     pub fn is_content_node(&self) -> bool {
         self.content.is_some()
+    }
+
+    /// Set the node ID (used for hit-testing and event routing)
+    pub fn with_id(mut self, id: impl Into<NodeId>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Get the node ID, if set
+    pub fn id(&self) -> Option<&NodeId> {
+        self.id.as_ref()
     }
 
     /// Set the width

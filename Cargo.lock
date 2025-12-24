@@ -192,6 +192,14 @@ name = "astra-gui-fonts"
 version = "0.1.0"
 
 [[package]]
+name = "astra-gui-interactive"
+version = "0.1.0"
+dependencies = [
+ "astra-gui",
+ "astra-gui-wgpu",
+]
+
+[[package]]
 name = "astra-gui-text"
 version = "0.1.0"
 dependencies = [
@@ -206,6 +214,7 @@ name = "astra-gui-wgpu"
 version = "0.1.0"
 dependencies = [
  "astra-gui",
+ "astra-gui-interactive",
  "astra-gui-text",
  "bytemuck",
  "cosmic-text",

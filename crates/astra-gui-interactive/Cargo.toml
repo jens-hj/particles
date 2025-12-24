@@ -1,0 +1,9 @@
+[package]
+name = "astra-gui-interactive"
+version = "0.1.0"
+edition = "2021"
+description = "Interactive components library for astra-gui"
+
+[dependencies]
+astra-gui = { workspace = true }
+astra-gui-wgpu = { workspace = true }

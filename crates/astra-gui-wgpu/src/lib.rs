@@ -2,10 +2,16 @@
 //!
 //! WGPU rendering backend for astra-gui.
 
+mod events;
+mod input;
+
 #[cfg(feature = "text-cosmic")]
 mod text;
 
 mod vertex;
+
+pub use events::*;
+pub use input::*;
 
 use astra_gui::{FullOutput, Shape, Tessellator};
 use vertex::WgpuVertex;

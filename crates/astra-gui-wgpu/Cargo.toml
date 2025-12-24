@@ -12,6 +12,7 @@ text-cosmic = ["dep:cosmic-text"]
 astra-gui = { workspace = true }
 astra-gui-text = { workspace = true }
 wgpu = { workspace = true }
+winit = { workspace = true }
 bytemuck = { version = "1.24", features = ["derive"] }
 cosmic-text = { version = "0.15", optional = true }
 
@@ -20,3 +21,4 @@ winit = { workspace = true }
 pollster = { workspace = true }
 env_logger = { workspace = true }
 log = { workspace = true }
+astra-gui-interactive = { workspace = true }

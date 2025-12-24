@@ -9,6 +9,7 @@
 mod color;
 mod content;
 mod debug;
+mod hit_test;
 mod layout;
 mod measure;
 mod mesh;
@@ -20,6 +21,7 @@ mod tessellate;
 pub use color::*;
 pub use content::*;
 pub use debug::*;
+pub use hit_test::*;
 pub use layout::*;
 pub use measure::*;
 pub use mesh::*;

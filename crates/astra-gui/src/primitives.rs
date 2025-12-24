@@ -1,6 +1,40 @@
 use crate::color::Color;
 use crate::content::{HorizontalAlign, TextContent, VerticalAlign};
 
+/// A 2D point in screen space
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Point {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Point {
+    /// Create a new point
+    pub const fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+
+    /// Create a point at the origin (0, 0)
+    pub const fn zero() -> Self {
+        Self { x: 0.0, y: 0.0 }
+    }
+}
+
+impl From<[f32; 2]> for Point {
+    fn from(arr: [f32; 2]) -> Self {
+        Self {
+            x: arr[0],
+            y: arr[1],
+        }
+    }
+}
+
+impl From<Point> for [f32; 2] {
+    fn from(point: Point) -> Self {
+        [point.x, point.y]
+    }
+}
+
 /// Stroke definition with width and color
 #[derive(Clone, Copy, Debug)]
 pub struct Stroke {
@@ -39,6 +73,41 @@ impl Rect {
 
     pub fn height(&self) -> f32 {
         self.max[1] - self.min[1]
+    }
+
+    /// Check if a point is inside this rectangle
+    pub fn contains(&self, point: Point) -> bool {
+        point.x >= self.min[0]
+            && point.x <= self.max[0]
+            && point.y >= self.min[1]
+            && point.y <= self.max[1]
+    }
+
+    /// Get the intersection of this rect with another
+    pub fn intersect(&self, other: &Rect) -> Option<Rect> {
+        let min_x = self.min[0].max(other.min[0]);
+        let min_y = self.min[1].max(other.min[1]);
+        let max_x = self.max[0].min(other.max[0]);
+        let max_y = self.max[1].min(other.max[1]);
+
+        if min_x <= max_x && min_y <= max_y {
+            Some(Rect {
+                min: [min_x, min_y],
+                max: [max_x, max_y],
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Convert min corner to Point
+    pub fn min_point(&self) -> Point {
+        Point::new(self.min[0], self.min[1])
+    }
+
+    /// Convert max corner to Point
+    pub fn max_point(&self) -> Point {
+        Point::new(self.max[0], self.max[1])
     }
 }
 
