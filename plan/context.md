@@ -167,7 +167,7 @@ Performance impact:
    - Updated all callsites in `node.rs` to use `try_resolve()` with appropriate fallbacks
    - Enforces clearer semantics: resolve() only for Fixed/Relative, try_resolve() for all cases
 
-### ✅ Completed: Interactive components system with disabled state (Dec 2025)
+### ✅ Completed: Interactive components system with disabled state and toggle (Dec 2025)
 
 Implemented a complete declarative styling system for interactive components:
 
@@ -201,17 +201,26 @@ Implemented a complete declarative styling system for interactive components:
    - Automatically applies disabled_style when disabled
    - Uses declarative style system - no manual state tracking needed
 
-6. **Example** (`button.rs` example):
+6. **Toggle Component** (`toggle.rs`):
+   - iOS-style toggle switch with sliding knob animation
+   - Smooth transitions between on/off states
+   - Visual feedback for hover and active states
+   - Supports disabled state
+   - Customizable styling with `ToggleStyle`
+
+7. **Example** (`button.rs` example):
    - Demonstrates increment/decrement buttons with counter
-   - Toggle button to enable/disable counter buttons
+   - Toggle switch to enable/disable counter buttons
    - Shows smooth transitions between all states including disabled
+   - Label + toggle component demonstrates layout composition
 
 Features:
 - Declarative styling with automatic state transitions
 - Smooth animations using easing functions
 - No manual state tracking required
 - Disabled state prevents all interaction
-- Works with multiple buttons independently
+- Works with multiple interactive components independently
+- Toggle component with iOS-style design
 
 Remaining optimizations from plan (deferred to future):
 - GPU compute tessellation (high effort, very high impact)

@@ -1,18 +1,21 @@
-//! Interactive button example
+//! Interactive button and toggle example
 //!
-//! Demonstrates the button component with hover and click states.
+//! Demonstrates button and toggle components with hover and click states.
 //!
-//! Click the button to increment the counter!
+//! Click buttons to change the counter, use toggle to enable/disable.
 //!
 //! Controls:
-//! - Click button to increment counter
+//! - Click +/- buttons to change counter
+//! - Click toggle to enable/disable buttons
 //! - ESC: quit
 
 use astra_gui::{
     Color, Content, FullOutput, HorizontalAlign, LayoutDirection, Node, Rect, Size, Spacing,
     TextContent, VerticalAlign,
 };
-use astra_gui_interactive::{button, button_clicked, ButtonStyle};
+use astra_gui_interactive::{
+    button, button_clicked, toggle, toggle_clicked, ButtonStyle, ToggleStyle,
+};
 use astra_gui_text::Engine as TextEngine;
 use astra_gui_wgpu::{EventDispatcher, InputState, InteractiveStateManager, Renderer};
 use std::sync::Arc;
@@ -95,7 +98,7 @@ impl App {
             println!("Decrement clicked! Counter: {}", self.counter);
         }
 
-        if button_clicked("toggle_btn", &events) {
+        if toggle_clicked("enable_toggle", &events) {
             self.buttons_disabled = !self.buttons_disabled;
             println!(
                 "Toggle clicked! Buttons are now {}",
@@ -244,30 +247,35 @@ impl App {
                     ),
             )
             .with_child(
-                // Toggle button container
+                // Toggle container
                 Node::new()
                     .with_width(Size::Fill)
                     .with_layout_direction(LayoutDirection::Horizontal)
+                    .with_gap(16.0)
                     .with_child(
                         // Spacer
                         Node::new().with_width(Size::Fill),
                     )
                     .with_child(
-                        // Toggle Button
-                        button(
-                            "toggle_btn",
-                            if self.buttons_disabled {
-                                "Enable Buttons"
-                            } else {
-                                "Disable Buttons"
-                            },
-                            false, // Toggle button is never disabled
-                            &ButtonStyle {
-                                idle_color: Color::rgb(0.5, 0.5, 0.5),
-                                hover_color: Color::rgb(0.6, 0.6, 0.6),
-                                pressed_color: Color::rgb(0.4, 0.4, 0.4),
-                                ..Default::default()
-                            },
+                        // Label
+                        Node::new()
+                            .with_width(Size::FitContent)
+                            .with_height(Size::FitContent)
+                            .with_content(Content::Text(TextContent {
+                                text: "Enable buttons:".to_string(),
+                                font_size: 20.0,
+                                color: Color::rgb(0.9, 0.9, 0.9),
+                                h_align: HorizontalAlign::Center,
+                                v_align: VerticalAlign::Center,
+                            })),
+                    )
+                    .with_child(
+                        // Toggle Switch
+                        toggle(
+                            "enable_toggle",
+                            !self.buttons_disabled, // Toggle is ON when buttons are enabled
+                            false,                  // Toggle itself is never disabled
+                            &ToggleStyle::default(),
                         ),
                     )
                     .with_child(
@@ -280,7 +288,7 @@ impl App {
                 Node::new()
                     .with_width(Size::Fill)
                     .with_content(Content::Text(TextContent {
-                        text: "Click the toggle button to enable/disable the counter buttons!"
+                        text: "Use the toggle switch to enable/disable the counter buttons!"
                             .to_string(),
                         font_size: 16.0,
                         color: Color::rgb(0.7, 0.7, 0.7),
