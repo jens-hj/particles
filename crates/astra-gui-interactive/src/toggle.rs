@@ -3,7 +3,7 @@
 //! Provides an iOS-style toggle switch with smooth animations.
 
 use astra_gui::{
-    Color, CornerShape, LayoutDirection, Node, NodeId, Offset, Size, Style, StyledRect, Transition,
+    Color, CornerShape, LayoutDirection, Node, NodeId, Size, Style, StyledRect, Transition,
 };
 use astra_gui_wgpu::{InteractionEvent, TargetedEvent};
 
@@ -54,6 +54,7 @@ impl Default for ToggleStyle {
 /// # Returns
 /// A configured `Node` representing the toggle switch with automatic state transitions
 pub fn toggle(id: impl Into<String>, value: bool, disabled: bool, style: &ToggleStyle) -> Node {
+    let id_str = id.into();
     let knob_offset_x = if value {
         style.track_width - style.knob_diameter - style.knob_margin
     } else {
@@ -62,7 +63,7 @@ pub fn toggle(id: impl Into<String>, value: bool, disabled: bool, style: &Toggle
 
     // Track (background)
     Node::new()
-        .with_id(NodeId::new(id))
+        .with_id(NodeId::new(id_str.clone()))
         .with_width(Size::px(style.track_width))
         .with_height(Size::px(style.track_height))
         .with_layout_direction(LayoutDirection::Horizontal)
@@ -102,10 +103,12 @@ pub fn toggle(id: impl Into<String>, value: bool, disabled: bool, style: &Toggle
         .with_transition(Transition::quick())
         .with_child(
             // Knob (sliding circle with smooth offset animation)
+            // Note: we use style offset instead of with_offset() so it can be animated
+            // The knob needs an ID so InteractiveStateManager can track its transitions
             Node::new()
+                .with_id(NodeId::new(format!("{}_knob", id_str)))
                 .with_width(Size::px(style.knob_diameter))
                 .with_height(Size::px(style.knob_diameter))
-                .with_offset(Offset::new(knob_offset_x, style.knob_margin))
                 .with_shape(astra_gui::Shape::Rect(StyledRect {
                     rect: astra_gui::Rect::default(),
                     corner_shape: CornerShape::Round(style.knob_diameter / 2.0),
