@@ -247,10 +247,10 @@ pub mod cosmic {
             //
             // NOTE: `FontSystem` API accepts raw font bytes; cosmic-text parses and stores them.
             // We intentionally do not pin an external file path.
-            let _ = font_system
+            font_system
                 .db_mut()
                 .load_font_data(astra_gui_fonts::inter::variable_opsz_wght().to_vec());
-            let _ = font_system
+            font_system
                 .db_mut()
                 .load_font_data(astra_gui_fonts::inter::italic_variable_opsz_wght().to_vec());
 
@@ -292,7 +292,7 @@ pub mod cosmic {
 
                 let family_name = face
                     .families
-                    .get(0)
+                    .first()
                     .map(|f| f.0.as_str())
                     .unwrap_or_default();
 
@@ -355,7 +355,7 @@ pub mod cosmic {
             // Then the renderer can place quads with:
             //   quad_pos = origin_px + (glyph.x_px, glyph.y_px) + bearing_px
             // where `bearing_px` is derived from swash placement.
-            for run in buffer.layout_runs() {
+            if let Some(run) = buffer.layout_runs().next() {
                 out.metrics.width_px = out.metrics.width_px.max(run.line_w);
                 out.metrics.height_px = run.line_height;
 
@@ -390,7 +390,6 @@ pub mod cosmic {
                 }
 
                 // Single line requested; use the first visible run.
-                break;
             }
 
             let origin_px = align_origin(
@@ -441,8 +440,8 @@ pub mod cosmic {
                 return None;
             }
 
-            let w = image.placement.width as u32;
-            let h = image.placement.height as u32;
+            let w = image.placement.width;
+            let h = image.placement.height;
 
             let pixels = image.data;
 
