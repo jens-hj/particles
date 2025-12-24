@@ -159,8 +159,14 @@ Performance impact:
 4. **Opacity optimization** (`output.rs`): Skip color mutations when opacity is 1.0
    - Avoids unnecessary work in common case
 
+#### ✅ Medium-term optimizations (Dec 2025):
+1. **Size::resolve() semantics fix** (`layout.rs`): 
+   - Changed `resolve()` to panic on Fill/FitContent instead of misleading fallbacks
+   - Added `try_resolve()` as non-panicking alternative that returns `Option<f32>`
+   - Updated all callsites in `node.rs` to use `try_resolve()` with appropriate fallbacks
+   - Enforces clearer semantics: resolve() only for Fixed/Relative, try_resolve() for all cases
+
 Remaining optimizations from plan (deferred to future):
-- Fix Size::resolve() semantics (medium effort, medium impact)
 - GPU compute tessellation (high effort, very high impact)
 - Layout caching with dirty tracking (high effort, very high impact)
 
