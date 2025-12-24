@@ -44,17 +44,31 @@ impl Size {
 
     /// Resolve the size given the parent's dimension
     ///
-    /// Notes:
-    /// - For `Fill`, this returns the full `parent_size` as a fallback; actual fill is computed
-    ///   by the layout algorithm based on remaining space.
-    /// - For `FitContent`, this currently returns `parent_size` as a conservative fallback until
-    ///   intrinsic measurement is implemented by the layout algorithm.
+    /// This only works for `Fixed` and `Relative` sizes. For `Fill` and `FitContent`,
+    /// the layout algorithm must compute the size differently:
+    /// - `Fill`: Computed based on remaining space after other siblings
+    /// - `FitContent`: Computed via intrinsic measurement of content/children
+    ///
+    /// # Panics
+    /// Panics if called on `Fill` or `FitContent` - these must be handled by the layout algorithm.
     pub fn resolve(&self, parent_size: f32) -> f32 {
         match self {
             Size::Fixed(px) => *px,
             Size::Relative(fraction) => parent_size * fraction,
-            Size::Fill => parent_size,
-            Size::FitContent => parent_size,
+            Size::Fill => panic!("Cannot resolve Size::Fill - must be computed by layout algorithm based on remaining space"),
+            Size::FitContent => panic!("Cannot resolve Size::FitContent - must be computed via intrinsic measurement"),
+        }
+    }
+
+    /// Try to resolve the size, returning None for Fill and FitContent
+    ///
+    /// This is a non-panicking version of `resolve()` that returns `None`
+    /// for sizes that cannot be resolved without additional context.
+    pub fn try_resolve(&self, parent_size: f32) -> Option<f32> {
+        match self {
+            Size::Fixed(px) => Some(*px),
+            Size::Relative(fraction) => Some(parent_size * fraction),
+            Size::Fill | Size::FitContent => None,
         }
     }
 

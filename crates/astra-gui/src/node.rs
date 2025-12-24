@@ -423,7 +423,9 @@ impl Node {
                 measured_width.min(available_width)
             }
         } else {
-            self.width.resolve(available_width)
+            self.width
+                .try_resolve(available_width)
+                .unwrap_or(available_width)
         };
 
         let height = if self.height.is_fit_content() {
@@ -437,7 +439,9 @@ impl Node {
                 measured_height.min(available_height)
             }
         } else {
-            self.height.resolve(available_height)
+            self.height
+                .try_resolve(available_height)
+                .unwrap_or(available_height)
         };
 
         // Position is already adjusted for margins by parent, don't add them again
@@ -517,7 +521,8 @@ impl Node {
                     } else if child.width.is_fit_content() {
                         used_width += child.measure_node(measurer).width;
                     } else {
-                        used_width += child.width.resolve(available_width);
+                        // Must be Fixed or Relative
+                        used_width += child.width.try_resolve(available_width).unwrap();
                     }
                 }
 
@@ -540,7 +545,8 @@ impl Node {
                     } else if child.height.is_fit_content() {
                         used_height += child.measure_node(measurer).height;
                     } else {
-                        used_height += child.height.resolve(available_height);
+                        // Must be Fixed or Relative
+                        used_height += child.height.try_resolve(available_height).unwrap();
                     }
                 }
 
@@ -636,8 +642,15 @@ impl Node {
         let available_height = (parent_height - self.margin.top - self.margin.bottom).max(0.0);
 
         // Resolve width and height from available space (after margins)
-        let width = self.width.resolve(available_width);
-        let height = self.height.resolve(available_height);
+        // NOTE: Without a measurer, FitContent falls back to available size
+        let width = self
+            .width
+            .try_resolve(available_width)
+            .unwrap_or(available_width);
+        let height = self
+            .height
+            .try_resolve(available_height)
+            .unwrap_or(available_height);
 
         // Position is already adjusted for margins by parent, don't add them again
         let outer_x = available_rect.min[0];
@@ -725,7 +738,11 @@ impl Node {
                     if child.width.is_fill() {
                         fill_count += 1;
                     } else {
-                        used_width += child.width.resolve(available_width);
+                        // For FitContent without measurer, fall back to available width
+                        used_width += child
+                            .width
+                            .try_resolve(available_width)
+                            .unwrap_or(available_width);
                     }
                 }
 
@@ -748,7 +765,11 @@ impl Node {
                     if child.height.is_fill() {
                         fill_count += 1;
                     } else {
-                        used_height += child.height.resolve(available_height);
+                        // For FitContent without measurer, fall back to available height
+                        used_height += child
+                            .height
+                            .try_resolve(available_height)
+                            .unwrap_or(available_height);
                     }
                 }
 
