@@ -62,14 +62,16 @@ impl Spacing {
 
 **Breaking change**: No (additive only)
 
-#### 1.3 Fix Size::resolve() documentation
-**Files**: `crates/astra-gui/src/layout.rs`
+#### ✅ 1.3 Fix Size::resolve() documentation - COMPLETED
+**Files**: `crates/astra-gui/src/layout.rs`, `crates/astra-gui/src/node.rs`
 
-Either:
-- Remove misleading Fill/FitContent fallbacks and panic with clear message
-- Or rename to `resolve_or_fallback()` and add proper `try_resolve() -> Option<f32>`
+**Implementation:**
+- Changed `resolve()` to panic on Fill/FitContent with clear error messages
+- Added `try_resolve() -> Option<f32>` as non-panicking alternative
+- Updated all callsites in `node.rs` to use `try_resolve()` with appropriate fallbacks
+- Enforces clearer semantics: `resolve()` only for Fixed/Relative, `try_resolve()` for all cases
 
-**Breaking change**: Potentially, if we panic instead of fallback
+**Breaking change**: Yes, but improves API clarity and prevents misuse
 
 ### Phase 2: Core Performance Optimizations (astra-gui)
 
@@ -224,8 +226,8 @@ Benefit: Better text quality at all scales, especially for zoom/transforms
 3. ✅ Batch draw calls by scissor rect (3.3)
 4. ✅ Optimize opacity application (2.3) - skip color mutations when opacity is 1.0
 
-### Medium-term (High value, high effort) - TODO
-1. Fix Size::resolve() semantics (1.3)
+### ✅ Medium-term (High value, high effort) - COMPLETED
+1. ✅ Fix Size::resolve() semantics (1.3) - Changed resolve() to panic on Fill/FitContent, added try_resolve() alternative
 
 ### Future work (Deferred)
 11. GPU compute tessellation (4.1)
