@@ -202,28 +202,24 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Compute stroke alpha (if stroke width > 0)
     var stroke_alpha = 0.0;
     if in.stroke_width > 0.0 {
-        let half_stroke = in.stroke_width * 0.5;
+        // For a stroke, we want to render a "ring" around the shape boundary
+        // The ring extends half_stroke outward and half_stroke inward from dist=0
 
-        // Outer edge of stroke
-        let outer = dist + half_stroke;
-        let outer_alpha = 1.0 - smoothstep(-aa_width, aa_width, outer);
+        // Use the absolute distance from the boundary for stroke calculation
+        let stroke_dist = abs(dist) - in.stroke_width * 0.5;
 
-        // Inner edge of stroke (hollows out the center)
-        let inner = dist - half_stroke;
-        let inner_alpha = smoothstep(-aa_width, aa_width, inner);
-
-        // Stroke exists where: outside inner edge AND inside outer edge
-        stroke_alpha = outer_alpha * inner_alpha;
+        // Stroke is visible when stroke_dist < 0 (inside the stroke ring)
+        stroke_alpha = 1.0 - smoothstep(-aa_width, aa_width, stroke_dist);
     }
 
     // Blend fill and stroke
-    // Pre-multiply alpha for correct blending
-    let fill_contrib = in.fill_color * fill_alpha;
-    let stroke_contrib = in.stroke_color * stroke_alpha;
+    // Stroke is drawn on top of fill using standard alpha compositing
+    let fill_color = in.fill_color * fill_alpha;
+    let stroke_color = in.stroke_color * stroke_alpha;
 
-    // Stroke on top of fill (painter's algorithm)
-    let final_rgb = mix(fill_contrib.rgb, stroke_contrib.rgb, stroke_alpha);
-    let final_alpha = max(fill_alpha * in.fill_color.a, stroke_alpha * in.stroke_color.a);
+    // Alpha compositing: stroke over fill
+    // result = src + dst * (1 - src.a)
+    let final_color = stroke_color + fill_color * (1.0 - stroke_alpha);
 
-    return vec4<f32>(final_rgb, final_alpha);
+    return final_color;
 }
