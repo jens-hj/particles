@@ -1,3 +1,7 @@
+use astra_gui::{
+    catppuccin::mocha, Content, FullOutput as AstraFullOutput, LayoutDirection, Node, Rect, Shape,
+    Spacing, StyledRect, TextContent,
+};
 use egui::Context;
 use egui_wgpu::Renderer;
 use egui_winit::State;
@@ -817,4 +821,39 @@ fn get_element_name(z: u32) -> &'static str {
 
 fn get_element_symbol(z: u32) -> &'static str {
     ELEMENT_SYMBOLS.get(z as usize).copied().unwrap_or("?")
+}
+
+/// Build diagnostics panel using astra-gui
+pub fn build_diagnostics_panel(ui_state: &UiState, window_size: [f32; 2]) -> AstraFullOutput {
+    // Container with padding and background
+    let container = Node::new()
+        .with_padding(Spacing::all(10.0))
+        .with_gap(5.0)
+        .with_layout_direction(LayoutDirection::Vertical)
+        .with_shape(Shape::Rect(StyledRect::new(
+            Rect::new([10.0, 10.0], [200.0, 150.0]),
+            mocha::SURFACE0,
+        )))
+        .with_children(vec![
+            // Title
+            Node::new().with_content(Content::Text(
+                TextContent::new("Diagnostics")
+                    .with_font_size(18.0)
+                    .with_color(mocha::TEXT),
+            )),
+            // FPS label
+            Node::new().with_content(Content::Text(
+                TextContent::new(format!("FPS: {:.1}", ui_state.fps))
+                    .with_font_size(16.0)
+                    .with_color(mocha::TEXT),
+            )),
+            // Frame time label
+            Node::new().with_content(Content::Text(
+                TextContent::new(format!("Frame Time: {:.2} ms", ui_state.frame_time))
+                    .with_font_size(16.0)
+                    .with_color(mocha::TEXT),
+            )),
+        ]);
+
+    AstraFullOutput::from_node_with_debug(container, (window_size[0], window_size[1]), None)
 }

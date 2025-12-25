@@ -4,7 +4,6 @@
 
 mod gui;
 
-use astra_gui::{ClippedShape, Color, CornerShape, FullOutput, Rect, Shape, Stroke, StyledRect};
 use astra_gui_wgpu::Renderer as AstraRenderer;
 use glam::Vec3;
 use gui::{Gui, UiState};
@@ -831,7 +830,7 @@ impl GpuState {
             self.queue.submit(std::iter::once(encoder.finish()));
         }
 
-        // Render Astra GUI (test container)
+        // Render Astra GUI diagnostics panel
         {
             let mut encoder = self
                 .device
@@ -839,28 +838,17 @@ impl GpuState {
                     label: Some("Astra GUI Encoder"),
                 });
 
-            let astra_output = FullOutput::with_shapes(vec![ClippedShape::new(
-                Rect::new(
-                    [0.0, 0.0],
-                    [self.config.width as f32, self.config.height as f32],
-                ),
-                Shape::Rect(
-                    StyledRect::new(
-                        Rect::new([100.0, 100.0], [300.0, 250.0]),
-                        Color::new(0.2, 0.4, 0.8, 0.9),
-                    )
-                    .with_corner_shape(CornerShape::Round(10.0))
-                    .with_stroke(Stroke::new(2.0, Color::new(1.0, 1.0, 1.0, 1.0))),
-                ),
-            )]);
+            let size = window.inner_size();
+            let window_size = [size.width as f32, size.height as f32];
+            let astra_output = gui::build_diagnostics_panel(&self.ui_state, window_size);
 
             self.astra_renderer.render(
                 &self.device,
                 &self.queue,
                 &mut encoder,
                 &view,
-                self.config.width as f32,
-                self.config.height as f32,
+                window_size[0],
+                window_size[1],
                 &astra_output,
             );
 
