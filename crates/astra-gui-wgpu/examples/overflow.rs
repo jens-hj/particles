@@ -433,20 +433,19 @@ fn create_demo_ui(
                             mocha::SURFACE0,
                         )]),
                 ]),
-            // Footer
+            // Help bar
             Node::new()
-                .with_height(Size::px(66.0))
+                .with_height(Size::px(30.0))
                 .with_width(Size::Fill)
-                .with_padding(Spacing::all(16.0))
+                .with_padding(Spacing::horizontal(10.0))
                 .with_shape(panel(mocha::SURFACE0))
-                .with_children(vec![label(
-                    DEBUG_HELP_TEXT_ONELINE,
-                    16.0,
-                    mocha::SUBTEXT0,
-                    HorizontalAlign::Left,
-                    VerticalAlign::Center,
-                )
-                .with_height(Size::Fill)]),
+                .with_content(Content::Text(
+                    TextContent::new(DEBUG_HELP_TEXT_ONELINE)
+                        .with_font_size(16.0)
+                        .with_color(mocha::TEXT)
+                        .with_h_align(HorizontalAlign::Left)
+                        .with_v_align(VerticalAlign::Center),
+                )),
         ]);
 
     FullOutput::from_node_with_debug_and_measurer(
