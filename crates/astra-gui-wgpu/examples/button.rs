@@ -18,6 +18,19 @@ use astra_gui_interactive::{
 };
 use astra_gui_text::Engine as TextEngine;
 use astra_gui_wgpu::{EventDispatcher, InputState, InteractiveStateManager, RenderMode, Renderer};
+
+const DEBUG_HELP_TEXT: &str = "Debug controls:
+  M - Toggle margins (red overlay)
+  P - Toggle padding (blue overlay)
+  B - Toggle borders (green outline)
+  C - Toggle content area (yellow outline)
+  R - Toggle clip rects (red outline)
+  G - Toggle gaps (purple overlay)
+  D - Toggle all debug visualizations
+  S - Toggle render mode (SDF/Mesh)
+  ESC - Exit";
+
+const DEBUG_HELP_TEXT_ONELINE: &str = "M:Margins | P:Padding | B:Borders | C:Content | R:ClipRects | G:Gaps | D:All | S:RenderMode | ESC:Exit";
 use std::sync::Arc;
 use wgpu::Trace;
 use winit::{
@@ -313,7 +326,7 @@ impl App {
                         mocha::SURFACE0,
                     )))
                     .with_content(Content::Text(
-                        TextContent::new(DEBUG_HELP_TEXT)
+                        TextContent::new(DEBUG_HELP_TEXT_ONELINE)
                             .with_font_size(16.0)
                             .with_color(mocha::TEXT)
                             .with_h_align(HorizontalAlign::Left)

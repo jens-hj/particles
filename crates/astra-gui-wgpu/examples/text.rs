@@ -28,6 +28,8 @@ const DEBUG_HELP_TEXT: &str = "Debug controls:
   S - Toggle render mode (SDF/Mesh)
   ESC - Exit";
 
+const DEBUG_HELP_TEXT_ONELINE: &str = "M:Margins | P:Padding | B:Borders | C:Content | R:ClipRects | G:Gaps | D:All | S:RenderMode | ESC:Exit";
+
 fn handle_debug_keybinds(
     event: &WindowEvent,
     debug_options: &mut DebugOptions,
@@ -434,7 +436,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                 .with_padding(Spacing::all(14.0))
                 .with_shape(panel(mocha::SURFACE0))
                 .with_children(vec![label(
-                    DEBUG_HELP_TEXT,
+                    DEBUG_HELP_TEXT_ONELINE,
                     16.0,
                     mocha::SUBTEXT0,
                     HorizontalAlign::Left,
