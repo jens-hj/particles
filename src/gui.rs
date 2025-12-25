@@ -820,52 +820,49 @@ pub fn build_diagnostics_panel(
     debug_options: &DebugOptions,
 ) -> AstraFullOutput {
     // Container with padding and background
-    let container = Node::new()
-        .with_padding(Spacing::all(10.0))
-        .with_gap(5.0)
-        .with_child(
-            Node::new()
-                .with_shape(Shape::Rect(
-                    StyledRect::new(Default::default(), mocha::BASE)
-                        .with_corner_shape(CornerShape::Round(20.0))
-                        .with_stroke(Stroke::new(2.0, mocha::MAUVE)),
-                ))
-                .with_padding(Spacing::all(10.0))
-                .with_height(Size::px(100.0))
-                .with_width(Size::px(200.0))
-                .with_children(vec![
-                    // Title
-                    Node::new()
-                        .with_content(Content::Text(
-                            TextContent::new("Diagnostics")
-                                .with_font_size(24.0)
-                                .with_color(mocha::TEXT)
-                                .with_v_align(VerticalAlign::Top),
-                        ))
-                        .with_width(Size::FitContent)
-                        .with_height(Size::fraction(0.4)),
-                    // FPS label
-                    Node::new()
-                        .with_content(Content::Text(
-                            TextContent::new(format!("FPS: {:.1}", ui_state.fps))
-                                .with_font_size(16.0)
-                                .with_color(mocha::TEXT)
-                                .with_v_align(VerticalAlign::Bottom),
-                        ))
-                        .with_width(Size::FitContent)
-                        .with_height(Size::Fill),
-                    // Frame time label
-                    Node::new()
-                        .with_content(Content::Text(
-                            TextContent::new(format!("Frame Time: {:.2} ms", ui_state.frame_time))
-                                .with_font_size(16.0)
-                                .with_color(mocha::TEXT)
-                                .with_v_align(VerticalAlign::Bottom),
-                        ))
-                        .with_width(Size::FitContent)
-                        .with_height(Size::Fill),
-                ]),
-        );
+    let container = Node::new().with_padding(Spacing::all(10.0)).with_child(
+        Node::new()
+            .with_shape(Shape::Rect(
+                StyledRect::new(Default::default(), mocha::BASE)
+                    .with_corner_shape(CornerShape::Cut(20.0))
+                    .with_stroke(Stroke::new(3.0, mocha::SURFACE0)),
+            ))
+            .with_padding(Spacing::all(20.0))
+            .with_height(Size::px(120.0))
+            .with_width(Size::px(200.0))
+            .with_children(vec![
+                // Title
+                Node::new()
+                    .with_content(Content::Text(
+                        TextContent::new("Diagnostics")
+                            .with_font_size(24.0)
+                            .with_color(mocha::TEXT)
+                            .with_v_align(VerticalAlign::Top),
+                    ))
+                    .with_width(Size::FitContent)
+                    .with_height(Size::fraction(0.4)),
+                // FPS label
+                Node::new()
+                    .with_content(Content::Text(
+                        TextContent::new(format!("FPS: {:.1}", ui_state.fps))
+                            .with_font_size(16.0)
+                            .with_color(mocha::TEXT)
+                            .with_v_align(VerticalAlign::Bottom),
+                    ))
+                    .with_width(Size::FitContent)
+                    .with_height(Size::Fill),
+                // Frame time label
+                Node::new()
+                    .with_content(Content::Text(
+                        TextContent::new(format!("Frame Time: {:.2} ms", ui_state.frame_time))
+                            .with_font_size(16.0)
+                            .with_color(mocha::TEXT)
+                            .with_v_align(VerticalAlign::Bottom),
+                    ))
+                    .with_width(Size::FitContent)
+                    .with_height(Size::Fill),
+            ]),
+    );
 
     AstraFullOutput::from_node_with_debug(
         container,
