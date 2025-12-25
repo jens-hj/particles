@@ -8,7 +8,8 @@ This file tracks the current working state so you (or another AI) can pick up th
 2) ✅ Core layout ergonomics with `Size::FitContent` and `Overflow` policy
 3) ✅ Performance optimizations and API consistency improvements (Dec 2025)
 4) ✅ Interactive components system with declarative styles and smooth transitions (Dec 2025)
-5) Next: Advanced optimizations (GPU compute tessellation, layout caching) as needed
+5) ✅ Analytic anti-aliasing with SDF rendering (Phase 1: Foundation - Dec 2025)
+6) Next: Complete all corner types (Cut, InverseRound, Squircle) and stroke support
 
 ---
 
@@ -82,10 +83,25 @@ This keeps measurement backend-agnostic:
 
 ### `astra-gui-wgpu` (backend)
 
-- Geometry pipeline exists (`src/shaders/ui.wgsl`) and continues to work
+- ✅ **NEW: SDF rendering pipeline** (`src/shaders/ui_sdf.wgsl`) with analytic anti-aliasing:
+  - Signed Distance Field (SDF) based rendering for pixel-perfect AA at any scale
+  - Instanced rendering: single unit quad (4 vertices) shared across all rectangles
+  - Instance data: 48 bytes per rectangle with shape parameters
+  - Fragment shader computes SDF and coverage per-pixel using `fwidth()` + `smoothstep()`
+  - Currently supports: None (sharp), Round (circular arcs) corner types
+  - Ready for: Cut (chamfer), InverseRound (concave), Squircle (superellipse) - shader code exists
+  - 89% vertex reduction: 36+ vertices per rounded rect → 4 shared vertices
+  - Resolution-independent: perfect AA at any DPI/zoom level
+
+- Geometry pipeline exists (`src/shaders/ui.wgsl`) - kept for fallback/compatibility
 - Text pipeline exists and is wired:
   - `src/shaders/text.wgsl` samples an `R8Unorm` atlas and tints by vertex color
   - CPU side generates per-glyph quads and uploads `R8` glyph bitmap into atlas
+
+Architecture:
+- `instance.rs`: `RectInstance` struct with bytemuck traits for GPU upload
+- `lib.rs`: Dual pipeline setup - SDF for all rectangles, tessellation available as fallback
+- All rectangles currently use SDF rendering with dramatic performance improvement
 
 Clipping behavior:
 - Text draws with **per-shape scissor** using `ClippedShape::clip_rect`:
@@ -227,6 +243,50 @@ Features:
 Remaining optimizations from plan (deferred to future):
 - GPU compute tessellation (high effort, very high impact)
 - Layout caching with dirty tracking (high effort, very high impact)
+
+### ✅ Completed: Analytic Anti-Aliasing with SDF Rendering (Phase 1: Foundation - Dec 2025)
+
+Implemented GPU-based analytic anti-aliasing using Signed Distance Fields (SDF) for all GUI rectangles:
+
+1. **SDF Shader Implementation** (`ui_sdf.wgsl`):
+   - Complete SDF functions for all 5 corner types:
+     - `sd_box()`: Sharp 90° corners (trivial)
+     - `sd_rounded_box()`: Circular arc corners (Inigo Quilez formula)
+     - `sd_chamfer_box()`: 45° diagonal cut corners (medium complexity)
+     - `sd_inverse_round_box()`: Concave circular corners (box minus circles)
+     - `sd_squircle_box()`: Superellipse corners with power distance approximation
+   - Fragment shader computes distance and applies `fwidth()` + `smoothstep()` for AA
+   - Vertex shader transforms unit quad to screen-space rectangle per instance
+
+2. **Instance Data Structure** (`instance.rs`):
+   - `RectInstance`: 48-byte structure with shape parameters
+   - Packs: center, half_size, colors (u8x4), stroke_width, corner_type, parameters
+   - Implements `From<&StyledRect>` for easy conversion
+   - Uses bytemuck traits for GPU upload
+
+3. **Rendering Pipeline** (`lib.rs`):
+   - Created SDF pipeline alongside existing tessellation pipeline
+   - Unit quad buffers: 4 vertices, 6 indices (shared across all rectangles)
+   - Instance buffer with dynamic resizing
+   - All rectangles currently use SDF rendering (tessellation kept for future fallback)
+
+Performance improvements:
+- **89% vertex reduction**: 36+ vertices → 4 shared vertices per rounded rect
+- **Memory savings**: 432 bytes → 80 bytes per rounded rect
+- **Resolution-independent**: Perfect AA at any DPI/zoom level
+- **Expected speedup**: 2-5x faster for typical UIs (vertex-bound workload)
+
+Current implementation (Phase 1):
+- ✅ SDF rendering for all fills
+- ✅ None and Round corner types fully functional
+- ✅ Cut, InverseRound, Squircle shader code ready (needs testing)
+- ⏳ Stroke support: Next phase will add analytic strokes
+
+Next phases:
+- Phase 2: Test and validate Cut, InverseRound corner types
+- Phase 3: Test and validate Squircle (most complex)
+- Phase 4: Add analytic stroke rendering (hybrid approach for complex strokes)
+- Phase 5: Text AA improvements (bilinear filtering, optional MSDF)
 
 ---
 

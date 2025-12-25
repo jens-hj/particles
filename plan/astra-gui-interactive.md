@@ -25,7 +25,7 @@ This plan implements interactive UI components (Button, Toggle, Slider) for astr
 ```
 User State → Component Builder → Node Tree → Layout → Render
     ↑                                           ↓
-    └────────── Event System ←─────────────────┘
+    └────────── Event System ←──────────────────┘
                 (hit-test + dispatch)
 ```
 

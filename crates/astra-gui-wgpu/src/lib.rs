@@ -4,6 +4,7 @@
 
 mod events;
 mod input;
+mod instance;
 mod interactive_state;
 
 #[cfg(feature = "text-cosmic")]
@@ -16,6 +17,7 @@ pub use input::*;
 pub use interactive_state::*;
 
 use astra_gui::{FullOutput, Shape, Tessellator};
+use instance::RectInstance;
 use vertex::WgpuVertex;
 
 #[cfg(feature = "text-cosmic")]
@@ -51,7 +53,7 @@ pub struct Renderer {
     index_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
-    tessellator: Tessellator,
+    _tessellator: Tessellator,
     vertex_capacity: usize,
     index_capacity: usize,
     wgpu_vertices: Vec<WgpuVertex>,
@@ -59,6 +61,15 @@ pub struct Renderer {
     // Performance optimization: track previous frame sizes to pre-allocate buffers
     last_frame_vertex_count: usize,
     last_frame_index_count: usize,
+
+    // SDF rendering pipeline (analytic anti-aliasing)
+    sdf_pipeline: wgpu::RenderPipeline,
+    sdf_instance_buffer: wgpu::Buffer,
+    sdf_instance_capacity: usize,
+    sdf_instances: Vec<RectInstance>,
+    sdf_quad_vertex_buffer: wgpu::Buffer,
+    sdf_quad_index_buffer: wgpu::Buffer,
+    last_frame_sdf_instance_count: usize,
 
     #[cfg(feature = "text-cosmic")]
     text_pipeline: wgpu::RenderPipeline,
@@ -188,6 +199,100 @@ impl Renderer {
             label: Some("Astra UI Index Buffer"),
             size: (INITIAL_INDEX_CAPACITY * std::mem::size_of::<u32>()) as u64,
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Create SDF pipeline and buffers
+        let sdf_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Astra UI SDF Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/ui_sdf.wgsl").into()),
+        });
+
+        let sdf_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Astra UI SDF Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &sdf_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[
+                    // Vertex buffer: unit quad
+                    wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &[wgpu::VertexAttribute {
+                            offset: 0,
+                            shader_location: 0,
+                            format: wgpu::VertexFormat::Float32x2,
+                        }],
+                    },
+                    // Instance buffer
+                    RectInstance::desc(),
+                ],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &sdf_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
+        // Unit quad vertices: [-1, -1] to [1, 1]
+        let quad_vertices: &[[f32; 2]] = &[
+            [-1.0, -1.0], // bottom-left
+            [1.0, -1.0],  // bottom-right
+            [1.0, 1.0],   // top-right
+            [-1.0, 1.0],  // top-left
+        ];
+        let quad_indices: &[u32] = &[0, 1, 2, 0, 2, 3];
+
+        let sdf_quad_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Astra UI SDF Quad Vertex Buffer"),
+            size: (quad_vertices.len() * std::mem::size_of::<[f32; 2]>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: true,
+        });
+        sdf_quad_vertex_buffer
+            .slice(..)
+            .get_mapped_range_mut()
+            .copy_from_slice(bytemuck::cast_slice(quad_vertices));
+        sdf_quad_vertex_buffer.unmap();
+
+        let sdf_quad_index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Astra UI SDF Quad Index Buffer"),
+            size: (quad_indices.len() * std::mem::size_of::<u32>()) as u64,
+            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: true,
+        });
+        sdf_quad_index_buffer
+            .slice(..)
+            .get_mapped_range_mut()
+            .copy_from_slice(bytemuck::cast_slice(quad_indices));
+        sdf_quad_index_buffer.unmap();
+
+        const INITIAL_SDF_INSTANCE_CAPACITY: usize = 256;
+        let sdf_instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Astra UI SDF Instance Buffer"),
+            size: (INITIAL_SDF_INSTANCE_CAPACITY * std::mem::size_of::<RectInstance>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -351,12 +456,20 @@ impl Renderer {
             index_buffer,
             uniform_buffer,
             uniform_bind_group,
-            tessellator: Tessellator::new(),
+            _tessellator: Tessellator::new(),
             vertex_capacity: INITIAL_VERTEX_CAPACITY,
             index_capacity: INITIAL_INDEX_CAPACITY,
             wgpu_vertices: Vec::new(),
             last_frame_vertex_count: 0,
             last_frame_index_count: 0,
+
+            sdf_pipeline,
+            sdf_instance_buffer,
+            sdf_instance_capacity: INITIAL_SDF_INSTANCE_CAPACITY,
+            sdf_instances: Vec::new(),
+            sdf_quad_vertex_buffer,
+            sdf_quad_index_buffer,
+            last_frame_sdf_instance_count: 0,
 
             #[cfg(feature = "text-cosmic")]
             text_pipeline,
@@ -397,60 +510,29 @@ impl Renderer {
         screen_height: f32,
         output: &FullOutput,
     ) {
-        // Tessellate shapes per clip rect for proper scissor clipping.
-        // We build up vertices/indices and track draw calls with their scissor rects.
+        // Separate shapes into SDF-renderable and tessellated.
+        // SDF rendering is used for simple shapes (currently: all fills, simple strokes).
         // OPTIMIZATION: Pre-allocate based on previous frame to reduce allocations
+        self.sdf_instances.clear();
+        self.sdf_instances
+            .reserve(self.last_frame_sdf_instance_count);
+
         self.wgpu_vertices.clear();
         self.wgpu_vertices.reserve(self.last_frame_vertex_count);
 
         let mut indices: Vec<u32> = Vec::new();
         indices.reserve(self.last_frame_index_count);
 
-        let mut geometry_draws: Vec<ClippedDraw> = Vec::new();
+        let geometry_draws: Vec<ClippedDraw> = Vec::new();
 
         for clipped in &output.shapes {
-            let Shape::Rect(_) = &clipped.shape else {
+            let Shape::Rect(rect) = &clipped.shape else {
                 continue;
             };
 
-            // Compute scissor rect clamped to framebuffer bounds.
-            let sc_min_x = clipped.clip_rect.min[0].max(0.0).floor() as i32;
-            let sc_min_y = clipped.clip_rect.min[1].max(0.0).floor() as i32;
-            let sc_max_x = clipped.clip_rect.max[0].min(screen_width).ceil() as i32;
-            let sc_max_y = clipped.clip_rect.max[1].min(screen_height).ceil() as i32;
-
-            let sc_w = (sc_max_x - sc_min_x).max(0) as u32;
-            let sc_h = (sc_max_y - sc_min_y).max(0) as u32;
-
-            if sc_w == 0 || sc_h == 0 {
-                continue;
-            }
-
-            let scissor = (sc_min_x as u32, sc_min_y as u32, sc_w, sc_h);
-            let index_start = indices.len() as u32;
-
-            // Tessellate this single rect shape.
-            let single_shape =
-                astra_gui::ClippedShape::new(clipped.clip_rect, clipped.shape.clone());
-            let mesh = self.tessellator.tessellate(&[single_shape]);
-
-            // Append vertices with offset indices.
-            let base_vertex = self.wgpu_vertices.len() as u32;
-            for v in &mesh.vertices {
-                self.wgpu_vertices.push(WgpuVertex::from(*v));
-            }
-            for idx in &mesh.indices {
-                indices.push(base_vertex + idx);
-            }
-
-            let index_end = indices.len() as u32;
-            if index_end > index_start {
-                geometry_draws.push(ClippedDraw {
-                    scissor,
-                    index_start,
-                    index_end,
-                });
-            }
+            // For Phase 1: Use SDF for all rectangles (fills only, no complex strokes yet)
+            // Future: Add logic to fallback to tessellation for complex strokes
+            self.sdf_instances.push(RectInstance::from(rect));
         }
 
         // Resize vertex buffer if needed
@@ -489,6 +571,26 @@ impl Renderer {
         let uniforms = [screen_width, screen_height];
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&uniforms));
 
+        // Upload SDF instances
+        if !self.sdf_instances.is_empty() {
+            // Resize instance buffer if needed
+            if self.sdf_instances.len() > self.sdf_instance_capacity {
+                self.sdf_instance_capacity = (self.sdf_instances.len() * 2).next_power_of_two();
+                self.sdf_instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("Astra UI SDF Instance Buffer"),
+                    size: (self.sdf_instance_capacity * std::mem::size_of::<RectInstance>()) as u64,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+            }
+
+            queue.write_buffer(
+                &self.sdf_instance_buffer,
+                0,
+                bytemuck::cast_slice(&self.sdf_instances),
+            );
+        }
+
         // Render pass
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Astra UI Render Pass"),
@@ -505,6 +607,19 @@ impl Renderer {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
+
+        // Draw SDF instances (analytic anti-aliasing)
+        if !self.sdf_instances.is_empty() {
+            render_pass.set_pipeline(&self.sdf_pipeline);
+            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.sdf_quad_vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.sdf_instance_buffer.slice(..));
+            render_pass.set_index_buffer(
+                self.sdf_quad_index_buffer.slice(..),
+                wgpu::IndexFormat::Uint32,
+            );
+            render_pass.draw_indexed(0..6, 0, 0..self.sdf_instances.len() as u32);
+        }
 
         // Draw geometry with batched scissor clipping
         // OPTIMIZATION: Batch consecutive draws with the same scissor rect to reduce draw calls
@@ -786,5 +901,6 @@ impl Renderer {
         // Update frame tracking for geometry buffers
         self.last_frame_vertex_count = self.wgpu_vertices.len();
         self.last_frame_index_count = indices.len();
+        self.last_frame_sdf_instance_count = self.sdf_instances.len();
     }
 }
