@@ -17,9 +17,9 @@
 //! - Toggle borders (B) and content area (C) to understand which rect is clipping.
 
 use astra_gui::{
-    Color, Content, ContentMeasurer, CornerShape, DebugOptions, FullOutput, HorizontalAlign,
-    LayoutDirection, Node, Overflow, Rect, Shape, Size, Spacing, Stroke, StyledRect, TextContent,
-    VerticalAlign,
+    catppuccin::mocha, Color, Content, ContentMeasurer, CornerShape, DebugOptions, FullOutput,
+    HorizontalAlign, LayoutDirection, Node, Overflow, Rect, Shape, Size, Spacing, Stroke,
+    StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_text::Engine as TextEngine;
 use astra_gui_wgpu::Renderer;
@@ -200,9 +200,9 @@ impl GpuState {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.06,
-                                g: 0.06,
-                                b: 0.08,
+                                r: mocha::BASE.r as f64,
+                                g: mocha::BASE.g as f64,
+                                b: mocha::BASE.b as f64,
                                 a: 1.0,
                             }),
                             store: wgpu::StoreOp::Store,
@@ -252,7 +252,7 @@ fn panel(fill: Color) -> Shape {
     Shape::Rect(
         StyledRect::new(Default::default(), fill)
             .with_corner_shape(CornerShape::Round(14.0))
-            .with_stroke(Stroke::new(2.0, Color::new(0.20, 0.20, 0.25, 1.0))),
+            .with_stroke(Stroke::new(2.0, mocha::SURFACE1)),
     )
 }
 
@@ -285,7 +285,7 @@ fn demo_box(title: &str, overflow_mode: Overflow, color: Color) -> Node {
 
     Node::new()
         .with_width(Size::Fill)
-        .with_height(Size::px(400.0))
+        .with_height(Size::Fill)
         .with_padding(Spacing::all(16.0))
         .with_gap(14.0)
         .with_layout_direction(LayoutDirection::Vertical)
@@ -299,7 +299,7 @@ fn demo_box(title: &str, overflow_mode: Overflow, color: Color) -> Node {
                 .with_children(vec![label(
                     title,
                     22.0,
-                    Color::new(0.92, 0.92, 0.95, 1.0),
+                    mocha::TEXT,
                     HorizontalAlign::Left,
                     VerticalAlign::Center,
                 )]),
@@ -310,7 +310,7 @@ fn demo_box(title: &str, overflow_mode: Overflow, color: Color) -> Node {
                 .with_height(Size::Fill)
                 .with_width(Size::Fill)
                 .with_padding(Spacing::all(14.0))
-                .with_shape(panel(Color::new(0.12, 0.12, 0.16, 0.70)))
+                .with_shape(panel(mocha::SURFACE0))
                 .with_layout_direction(LayoutDirection::Horizontal)
                 .with_overflow(overflow_mode) // Propagate overflow mode
                 .with_children(vec![Node::new()
@@ -318,7 +318,7 @@ fn demo_box(title: &str, overflow_mode: Overflow, color: Color) -> Node {
                     .with_children(vec![label(
                         long_text,
                         26.0,
-                        Color::new(0.90, 0.92, 0.95, 1.0),
+                        mocha::TEXT,
                         HorizontalAlign::Left,
                         VerticalAlign::Top,
                     )])]),
@@ -340,23 +340,20 @@ fn create_demo_ui(
         .with_padding(Spacing::all(24.0))
         .with_gap(18.0)
         .with_layout_direction(LayoutDirection::Vertical)
-        .with_shape(Shape::Rect(
-            StyledRect::new(Default::default(), Color::transparent())
-                .with_corner_shape(CornerShape::Round(24.0))
-                .with_stroke(Stroke::new(2.0, Color::new(0.15, 0.15, 0.2, 1.0))),
-        ))
         .with_width(Size::Fill)
+        .with_height(Size::Fill)
         .with_children(vec![
             // Header
             Node::new()
                 .with_height(Size::px(120.0))
+                .with_width(Size::Fill)
                 .with_padding(Spacing::all(18.0))
-                .with_shape(panel(Color::new(0.12, 0.12, 0.16, 1.0)))
+                .with_shape(panel(mocha::SURFACE0))
                 .with_children(vec![
                     label(
                         "astra-gui: Overflow demo",
                         34.0,
-                        Color::new(0.92, 0.92, 0.95, 1.0),
+                        mocha::TEXT,
                         HorizontalAlign::Left,
                         VerticalAlign::Top,
                     )
@@ -364,7 +361,7 @@ fn create_demo_ui(
                     label(
                         "Each column has one viewport + one text child that starts outside the viewport. Hidden/Scroll clip; Visible does not.",
                         18.0,
-                        Color::new(0.70, 0.72, 0.78, 1.0),
+                        mocha::SUBTEXT0,
                         HorizontalAlign::Left,
                         VerticalAlign::Bottom,
                     )
@@ -373,42 +370,47 @@ fn create_demo_ui(
             // Columns
             Node::new()
                 .with_width(Size::Fill)
+                .with_height(Size::Fill)
                 .with_gap(18.0)
                 .with_layout_direction(LayoutDirection::Vertical)
                 .with_overflow(Overflow::Visible) // Allow children to overflow
                 .with_children(vec![
                     Node::new()
-                        .with_width(Size::fraction(0.333))
+                        .with_width(Size::px(400.0))
+                        .with_height(Size::Fill)
                         .with_children(vec![demo_box(
                             "Overflow: Hidden (default)",
                             Overflow::Hidden,
-                            Color::new(0.12, 0.10, 0.12, 1.0),
+                            mocha::CRUST,
                         )]),
                     Node::new()
-                        .with_width(Size::fraction(0.333))
+                        .with_width(Size::px(400.0))
+                        .with_height(Size::Fill)
                         .with_overflow(Overflow::Visible) // Allow child to overflow
                         .with_children(vec![demo_box(
                             "Overflow: Visible",
                             Overflow::Visible,
-                            Color::new(0.10, 0.12, 0.16, 1.0),
+                            mocha::MANTLE,
                         )]),
                     Node::new()
-                        .with_width(Size::fraction(0.333))
+                        .with_width(Size::px(400.0))
+                        .with_height(Size::Fill)
                         .with_children(vec![demo_box(
                             "Overflow: Scroll (placeholder)",
                             Overflow::Scroll,
-                            Color::new(0.10, 0.14, 0.12, 1.0),
+                            mocha::SURFACE0,
                         )]),
                 ]),
             // Footer
             Node::new()
                 .with_height(Size::px(66.0))
+                .with_width(Size::Fill)
                 .with_padding(Spacing::all(16.0))
-                .with_shape(panel(Color::new(0.12, 0.12, 0.16, 1.0)))
+                .with_shape(panel(mocha::SURFACE0))
                 .with_children(vec![label(
                     "Keys: D/M/P/B/C toggle debug overlays; Esc quit.",
                     18.0,
-                    Color::new(0.70, 0.72, 0.78, 1.0),
+                    mocha::SUBTEXT0,
                     HorizontalAlign::Left,
                     VerticalAlign::Center,
                 )

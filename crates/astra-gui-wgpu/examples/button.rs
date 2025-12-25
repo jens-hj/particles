@@ -10,8 +10,8 @@
 //! - ESC: quit
 
 use astra_gui::{
-    Color, Content, FullOutput, HorizontalAlign, LayoutDirection, Node, Rect, Size, Spacing,
-    TextContent, VerticalAlign,
+    catppuccin::mocha, Content, FullOutput, HorizontalAlign, LayoutDirection, Node, Rect, Size,
+    Spacing, TextContent, VerticalAlign,
 };
 use astra_gui_interactive::{
     button, button_clicked, toggle, toggle_clicked, ButtonStyle, ToggleStyle,
@@ -146,9 +146,9 @@ impl App {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.1,
-                        g: 0.1,
-                        b: 0.15,
+                        r: mocha::BASE.r as f64,
+                        g: mocha::BASE.g as f64,
+                        b: mocha::BASE.b as f64,
                         a: 1.0,
                     }),
                     store: wgpu::StoreOp::Store,
@@ -196,7 +196,7 @@ impl App {
                     .with_content(Content::Text(TextContent {
                         text: "Interactive Button Example".to_string(),
                         font_size: 32.0,
-                        color: Color::rgb(1.0, 1.0, 1.0),
+                        color: mocha::TEXT,
                         h_align: HorizontalAlign::Center,
                         v_align: VerticalAlign::Center,
                     })),
@@ -208,7 +208,7 @@ impl App {
                     .with_content(Content::Text(TextContent {
                         text: format!("Count: {}", self.counter),
                         font_size: 48.0,
-                        color: Color::rgb(0.8, 0.9, 1.0),
+                        color: mocha::LAVENDER,
                         h_align: HorizontalAlign::Center,
                         v_align: VerticalAlign::Center,
                     })),
@@ -264,7 +264,7 @@ impl App {
                             .with_content(Content::Text(TextContent {
                                 text: "Enable buttons:".to_string(),
                                 font_size: 20.0,
-                                color: Color::rgb(0.9, 0.9, 0.9),
+                                color: mocha::TEXT,
                                 h_align: HorizontalAlign::Center,
                                 v_align: VerticalAlign::Center,
                             })),
@@ -291,7 +291,7 @@ impl App {
                         text: "Use the toggle switch to enable/disable the counter buttons!"
                             .to_string(),
                         font_size: 16.0,
-                        color: Color::rgb(0.7, 0.7, 0.7),
+                        color: mocha::SUBTEXT0,
                         h_align: HorizontalAlign::Center,
                         v_align: VerticalAlign::Center,
                     })),

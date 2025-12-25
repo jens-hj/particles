@@ -3,7 +3,8 @@
 //! Provides an iOS-style toggle switch with smooth animations.
 
 use astra_gui::{
-    Color, CornerShape, LayoutDirection, Node, NodeId, Size, Spacing, Style, StyledRect, Transition,
+    catppuccin::mocha, Color, CornerShape, LayoutDirection, Node, NodeId, Size, Spacing, Style,
+    StyledRect, Transition,
 };
 use astra_gui_wgpu::{InteractionEvent, TargetedEvent};
 
@@ -29,9 +30,9 @@ pub struct ToggleStyle {
 impl Default for ToggleStyle {
     fn default() -> Self {
         Self {
-            off_color: Color::rgb(0.35, 0.35, 0.35),
-            on_color: Color::rgb(0.2, 0.6, 1.0),
-            knob_color: Color::rgb(1.0, 1.0, 1.0),
+            off_color: mocha::SURFACE0,
+            on_color: mocha::MAUVE,
+            knob_color: mocha::BASE,
             track_width: 50.0,
             track_height: 30.0,
             knob_width: 26.0,
@@ -89,16 +90,16 @@ pub fn toggle(id: impl Into<String>, value: bool, disabled: bool, style: &Toggle
             ..Default::default()
         })
         .with_hover_style(Style {
-            fill_color: Some(Color::rgb(0.2, 0.2, 0.2)),
-            opacity: Some(0.75),
+            fill_color: Some(mocha::SURFACE1),
+            opacity: Some(0.9),
             ..Default::default()
         })
         .with_active_style(Style {
-            opacity: Some(0.5),
+            opacity: Some(0.7),
             ..Default::default()
         })
         .with_disabled_style(Style {
-            fill_color: Some(Color::rgb(0.3, 0.3, 0.3)),
+            fill_color: Some(mocha::SURFACE0),
             opacity: Some(0.5),
             ..Default::default()
         })

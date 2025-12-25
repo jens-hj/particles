@@ -1,7 +1,7 @@
 ///! Demonstrates the node-based layout system with nested elements
 use astra_gui::{
-    Color, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node, Offset, Shape, Size,
-    Spacing, Stroke, StyledRect,
+    catppuccin::mocha, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node, Offset, Shape,
+    Size, Spacing, Stroke, StyledRect,
 };
 use astra_gui_wgpu::Renderer;
 use std::sync::Arc;
@@ -175,9 +175,9 @@ impl GpuState {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.05,
-                            g: 0.05,
-                            b: 0.05,
+                            r: mocha::BASE.r as f64,
+                            g: mocha::BASE.g as f64,
+                            b: mocha::BASE.b as f64,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -222,26 +222,61 @@ impl GpuState {
     }
 }
 
+fn child() -> Node {
+    return Node::new().with_height(Size::Fill).with_shape(Shape::Rect(
+        StyledRect::new(Default::default(), mocha::SURFACE1)
+            .with_corner_shape(CornerShape::Round(30.0))
+            .with_stroke(Stroke::new(3.0, mocha::SURFACE2)),
+    ));
+}
+
 fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> FullOutput {
     // Root container - full window with padding
     let root = Node::new()
         .with_padding(Spacing::all(20.0))
         .with_gap(25.0)
         .with_layout_direction(LayoutDirection::Vertical)
-        .with_shape(Shape::Rect(
-            StyledRect::new(Default::default(), Color::transparent())
-                .with_corner_shape(CornerShape::Round(25.0))
-                .with_stroke(Stroke::new(2.0, Color::new(1.0, 0.0, 0.0, 0.0))),
-        ))
         .with_children(vec![
             // Header
             Node::new()
+                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_gap(10.0)
                 .with_height(Size::fraction(0.15))
                 .with_shape(Shape::Rect(
-                    StyledRect::new(Default::default(), Color::new(0.2, 0.3, 0.5, 1.0))
+                    StyledRect::new(Default::default(), mocha::SURFACE0)
                         .with_corner_shape(CornerShape::Round(50.0))
-                        .with_stroke(Stroke::new(2.0, Color::new(0.4, 0.5, 0.7, 1.0))),
-                )),
+                        .with_stroke(Stroke::new(3.0, mocha::BLUE)),
+                ))
+                .with_padding(Spacing::all(20.0))
+                .with_children(vec![
+                    Node::new()
+                        .with_width(Size::Relative(0.7))
+                        .with_shape(Shape::Rect(
+                            StyledRect::new(Default::default(), mocha::SURFACE1)
+                                .with_corner_shape(CornerShape::Round(30.0))
+                                .with_stroke(Stroke::new(3.0, mocha::SURFACE2)),
+                        )),
+                    Node::new()
+                        .with_width(Size::Fill)
+                        .with_layout_direction(LayoutDirection::Vertical)
+                        .with_gap(10.0)
+                        .with_children(vec![
+                            Node::new()
+                                .with_shape(Shape::Rect(
+                                    StyledRect::new(Default::default(), mocha::SURFACE1)
+                                        .with_corner_shape(CornerShape::Round(30.0))
+                                        .with_stroke(Stroke::new(3.0, mocha::SURFACE2)),
+                                ))
+                                .with_height(Size::Fill),
+                            Node::new()
+                                .with_shape(Shape::Rect(
+                                    StyledRect::new(Default::default(), mocha::SURFACE1)
+                                        .with_corner_shape(CornerShape::Round(30.0))
+                                        .with_stroke(Stroke::new(3.0, mocha::SURFACE2)),
+                                ))
+                                .with_height(Size::Fill),
+                        ]),
+                ]),
             // Main content area - horizontal layout
             Node::new()
                 .with_height(Size::fraction(0.75))
@@ -251,70 +286,36 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                     // Left sidebar - 25% width
                     Node::new()
                         .with_width(Size::fraction(0.25))
-                        .with_padding(Spacing::all(10.0))
+                        .with_padding(Spacing::all(20.0))
                         .with_gap(10.0)
                         .with_shape(Shape::Rect(
-                            StyledRect::new(Default::default(), Color::new(0.3, 0.2, 0.4, 1.0))
-                                .with_corner_shape(CornerShape::Round(50.0)),
+                            StyledRect::new(Default::default(), mocha::SURFACE0)
+                                .with_corner_shape(CornerShape::Round(50.0))
+                                .with_stroke(Stroke::new(3.0, mocha::MAUVE)),
                         ))
                         .with_layout_direction(LayoutDirection::Vertical)
                         .with_children(vec![
                             // Sidebar items
-                            Node::new()
-                                .with_height(Size::px(150.0))
-                                .with_shape(Shape::Rect(
-                                    StyledRect::new(
-                                        Default::default(),
-                                        Color::new(0.5, 0.3, 0.6, 1.0),
-                                    )
-                                    .with_corner_shape(CornerShape::Round(40.0)),
-                                )),
-                            Node::new()
-                                .with_height(Size::px(150.0))
-                                .with_shape(Shape::Rect(
-                                    StyledRect::new(
-                                        Default::default(),
-                                        Color::new(0.5, 0.3, 0.6, 1.0),
-                                    )
-                                    .with_corner_shape(CornerShape::Round(40.0)),
-                                )),
-                            Node::new()
-                                .with_height(Size::px(150.0))
-                                .with_shape(Shape::Rect(
-                                    StyledRect::new(
-                                        Default::default(),
-                                        Color::new(0.5, 0.3, 0.6, 1.0),
-                                    )
-                                    .with_corner_shape(CornerShape::Round(40.0)),
-                                )),
-                            Node::new()
-                                .with_height(Size::px(150.0))
-                                .with_shape(Shape::Rect(
-                                    StyledRect::new(
-                                        Default::default(),
-                                        Color::new(0.5, 0.3, 0.6, 1.0),
-                                    )
-                                    .with_corner_shape(CornerShape::Round(40.0)),
-                                )),
-                            Node::new()
-                                .with_height(Size::px(150.0))
-                                .with_shape(Shape::Rect(
-                                    StyledRect::new(
-                                        Default::default(),
-                                        Color::new(0.5, 0.3, 0.6, 1.0),
-                                    )
-                                    .with_corner_shape(CornerShape::Round(40.0)),
-                                )),
+                            child(),
+                            child(),
+                            child(),
+                            child(),
+                            child(),
+                            child(),
+                            child(),
+                            child(),
+                            child(),
+                            child(),
                         ]),
                     // Right of sidebar
                     Node::new()
                         .with_width(Size::fraction(0.75))
-                        .with_padding(Spacing::all(25.0))
-                        .with_gap(25.0)
+                        .with_padding(Spacing::all(20.0))
+                        .with_gap(20.0)
                         .with_shape(Shape::Rect(
-                            StyledRect::new(Default::default(), Color::new(0.15, 0.15, 0.2, 1.0))
+                            StyledRect::new(Default::default(), mocha::SURFACE0)
                                 .with_corner_shape(CornerShape::Round(50.0))
-                                .with_stroke(Stroke::new(2.0, Color::new(0.3, 0.3, 0.4, 1.0))),
+                                .with_stroke(Stroke::new(3.0, mocha::PEACH)),
                         ))
                         .with_layout_direction(LayoutDirection::Vertical)
                         .with_children(vec![
@@ -322,58 +323,37 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                             Node::new()
                                 .with_height(Size::fraction(0.3))
                                 .with_shape(Shape::Rect(
-                                    StyledRect::new(
-                                        Default::default(),
-                                        Color::new(0.3, 0.5, 0.3, 1.0),
-                                    )
-                                    .with_corner_shape(CornerShape::Round(25.0)),
+                                    StyledRect::new(Default::default(), mocha::SURFACE1)
+                                        .with_corner_shape(CornerShape::Round(30.0))
+                                        .with_stroke(Stroke::new(3.0, mocha::SURFACE2)),
                                 )),
                             // Horizontal row of smaller cards
                             Node::new()
                                 .with_height(Size::fraction(0.3))
-                                .with_gap(25.0)
+                                .with_gap(20.0)
                                 .with_layout_direction(LayoutDirection::Horizontal)
                                 .with_children(vec![
                                     Node::new().with_width(Size::fraction(0.5)).with_shape(
                                         Shape::Rect(
-                                            StyledRect::new(
-                                                Default::default(),
-                                                Color::new(0.5, 0.3, 0.3, 1.0),
-                                            )
-                                            .with_corner_shape(CornerShape::Cut(25.0))
-                                            .with_stroke(Stroke::new(
-                                                5.0,
-                                                Color::new(0.4, 0.2, 0.2, 1.0),
-                                            )),
+                                            StyledRect::new(Default::default(), mocha::SURFACE1)
+                                                .with_corner_shape(CornerShape::Cut(30.0))
+                                                .with_stroke(Stroke::new(3.0, mocha::SURFACE2)),
                                         ),
                                     ),
                                     Node::new().with_width(Size::fraction(0.5)).with_shape(
                                         Shape::Rect(
-                                            StyledRect::new(
-                                                Default::default(),
-                                                Color::new(0.3, 0.3, 0.5, 1.0),
-                                            )
-                                            .with_corner_shape(CornerShape::Cut(25.0))
-                                            .with_stroke(Stroke::new(
-                                                5.0,
-                                                Color::new(0.2, 0.2, 0.4, 1.0),
-                                            )),
+                                            StyledRect::new(Default::default(), mocha::SURFACE1)
+                                                .with_corner_shape(CornerShape::Cut(30.0))
+                                                .with_stroke(Stroke::new(3.0, mocha::SURFACE2)),
                                         ),
                                     ),
                                 ]),
                             Node::new()
                                 .with_height(Size::fraction(0.4))
                                 .with_shape(Shape::Rect(
-                                    StyledRect::new(
-                                        Default::default(),
-                                        Color::new(0.5, 0.5, 0.3, 1.0),
-                                    )
-                                    .with_corner_shape(
-                                        CornerShape::Squircle {
-                                            radius: 50.0,
-                                            smoothness: 1.0,
-                                        },
-                                    ),
+                                    StyledRect::new(Default::default(), mocha::SURFACE1)
+                                        .with_corner_shape(CornerShape::Round(30.0))
+                                        .with_stroke(Stroke::new(3.0, mocha::SURFACE2)),
                                 )),
                         ]),
                 ]),
@@ -381,25 +361,29 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
             Node::new()
                 .with_height(Size::fraction(0.1))
                 .with_offset(Offset::new(0.0, 0.0))
-                .with_padding(Spacing::all(10.0))
-                .with_gap(10.0)
+                .with_padding(Spacing::all(20.0))
+                .with_gap(20.0)
                 .with_layout_direction(LayoutDirection::Horizontal)
                 .with_shape(Shape::Rect(
-                    StyledRect::new(Default::default(), Color::new(0.2, 0.2, 0.25, 1.0))
-                        .with_corner_shape(CornerShape::Round(50.0)),
+                    StyledRect::new(Default::default(), mocha::SURFACE0)
+                        .with_corner_shape(CornerShape::Round(50.0))
+                        .with_stroke(Stroke::new(3.0, mocha::BLUE)),
                 ))
                 .with_children(vec![
                     Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
-                        StyledRect::new(Default::default(), Color::new(0.4, 0.3, 0.5, 1.0))
-                            .with_corner_shape(CornerShape::Round(40.0)),
+                        StyledRect::new(Default::default(), mocha::SURFACE1)
+                            .with_corner_shape(CornerShape::Round(30.0))
+                            .with_stroke(Stroke::new(3.0, mocha::SURFACE2)),
                     )),
                     Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
-                        StyledRect::new(Default::default(), Color::new(0.3, 0.4, 0.5, 1.0))
-                            .with_corner_shape(CornerShape::Round(40.0)),
+                        StyledRect::new(Default::default(), mocha::SURFACE1)
+                            .with_corner_shape(CornerShape::Round(30.0))
+                            .with_stroke(Stroke::new(3.0, mocha::SURFACE2)),
                     )),
                     Node::new().with_width(Size::Fill).with_shape(Shape::Rect(
-                        StyledRect::new(Default::default(), Color::new(0.5, 0.4, 0.3, 1.0))
-                            .with_corner_shape(CornerShape::Round(40.0)),
+                        StyledRect::new(Default::default(), mocha::SURFACE1)
+                            .with_corner_shape(CornerShape::Round(30.0))
+                            .with_stroke(Stroke::new(3.0, mocha::SURFACE2)),
                     )),
                 ]),
         ]);

@@ -4,8 +4,9 @@
 //! including alignment, padding/content rect behavior, and scissor-based clipping.
 
 use astra_gui::{
-    Color, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign, LayoutDirection, Node,
-    Offset, Overflow, Rect, Shape, Size, Spacing, Stroke, StyledRect, TextContent, VerticalAlign,
+    catppuccin::mocha, Color, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign,
+    LayoutDirection, Node, Offset, Overflow, Rect, Shape, Size, Spacing, Stroke, StyledRect,
+    TextContent, VerticalAlign,
 };
 use astra_gui_wgpu::Renderer;
 use std::sync::Arc;
@@ -180,9 +181,9 @@ impl GpuState {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.06,
-                                g: 0.06,
-                                b: 0.08,
+                                r: mocha::BASE.r as f64,
+                                g: mocha::BASE.g as f64,
+                                b: mocha::BASE.b as f64,
                                 a: 1.0,
                             }),
                             store: wgpu::StoreOp::Store,
@@ -248,7 +249,7 @@ fn panel(fill: Color) -> Shape {
     Shape::Rect(
         StyledRect::new(Default::default(), fill)
             .with_corner_shape(CornerShape::Round(18.0))
-            .with_stroke(Stroke::new(2.0, Color::new(0.20, 0.20, 0.25, 1.0))),
+            .with_stroke(Stroke::new(2.0, mocha::SURFACE1)),
     )
 }
 
@@ -263,20 +264,20 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
         .with_shape(Shape::Rect(
             StyledRect::new(Default::default(), Color::transparent())
                 .with_corner_shape(CornerShape::Round(24.0))
-                .with_stroke(Stroke::new(2.0, Color::new(0.15, 0.15, 0.2, 1.0))),
+                .with_stroke(Stroke::new(2.0, mocha::SURFACE0)),
         ))
         .with_children(vec![
             // Header
             Node::new()
                 .with_height(Size::px(110.0))
                 .with_padding(Spacing::all(18.0))
-                .with_shape(panel(Color::new(0.12, 0.12, 0.16, 1.0)))
+                .with_shape(panel(mocha::SURFACE0))
                 .with_children(vec![
                     // Title: large, left/top aligned
                     label(
                         "astra-gui: text nodes",
                         34.0,
-                        Color::new(0.92, 0.92, 0.95, 1.0),
+                        mocha::TEXT,
                         HorizontalAlign::Left,
                         VerticalAlign::Top,
                     )
@@ -285,7 +286,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                     label(
                         "alignment, padding content rects, and clipping (when implemented)",
                         16.0,
-                        Color::new(0.70, 0.72, 0.78, 1.0),
+                        mocha::SUBTEXT0,
                         HorizontalAlign::Left,
                         VerticalAlign::Bottom,
                     )
@@ -302,13 +303,13 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                         .with_width(Size::fraction(0.55))
                         .with_padding(Spacing::all(16.0))
                         .with_gap(12.0)
-                        .with_shape(panel(Color::new(0.10, 0.10, 0.14, 1.0)))
+                        .with_shape(panel(mocha::MANTLE))
                         .with_layout_direction(LayoutDirection::Vertical)
                         .with_children(vec![
                             label(
                                 "Alignment grid (L/C/R × T/C/B)",
                                 18.0,
-                                Color::new(0.85, 0.85, 0.9, 1.0),
+                                mocha::TEXT,
                                 HorizontalAlign::Left,
                                 VerticalAlign::Top,
                             )
@@ -328,13 +329,13 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                         .with_width(Size::fraction(0.45))
                         .with_padding(Spacing::all(16.0))
                         .with_gap(14.0)
-                        .with_shape(panel(Color::new(0.10, 0.10, 0.14, 1.0)))
+                        .with_shape(panel(mocha::MANTLE))
                         .with_layout_direction(LayoutDirection::Vertical)
                         .with_children(vec![
                             label(
                                 "Font sizes + padding behavior",
                                 18.0,
-                                Color::new(0.85, 0.85, 0.9, 1.0),
+                                mocha::TEXT,
                                 HorizontalAlign::Left,
                                 VerticalAlign::Top,
                             )
@@ -342,11 +343,11 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                             Node::new()
                                 .with_height(Size::px(70.0))
                                 .with_padding(Spacing::all(10.0))
-                                .with_shape(panel(Color::new(0.14, 0.14, 0.19, 1.0)))
+                                .with_shape(panel(mocha::SURFACE0))
                                 .with_children(vec![label(
                                     "Small (14px) in padded panel",
                                     14.0,
-                                    Color::new(0.85, 0.9, 0.95, 1.0),
+                                    mocha::SKY,
                                     HorizontalAlign::Left,
                                     VerticalAlign::Top,
                                 )
@@ -354,11 +355,11 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                             Node::new()
                                 .with_height(Size::px(90.0))
                                 .with_padding(Spacing::all(10.0))
-                                .with_shape(panel(Color::new(0.14, 0.14, 0.19, 1.0)))
+                                .with_shape(panel(mocha::SURFACE0))
                                 .with_children(vec![label(
                                     "Medium (22px)",
                                     22.0,
-                                    Color::new(0.95, 0.85, 0.75, 1.0),
+                                    mocha::PEACH,
                                     HorizontalAlign::Left,
                                     VerticalAlign::Center,
                                 )
@@ -366,11 +367,11 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                             Node::new()
                                 .with_height(Size::px(120.0))
                                 .with_padding(Spacing::all(10.0))
-                                .with_shape(panel(Color::new(0.14, 0.14, 0.19, 1.0)))
+                                .with_shape(panel(mocha::SURFACE0))
                                 .with_children(vec![label(
                                     "Large (42px)",
                                     42.0,
-                                    Color::new(0.90, 0.82, 0.98, 1.0),
+                                    mocha::MAUVE,
                                     HorizontalAlign::Left,
                                     VerticalAlign::Bottom,
                                 )
@@ -381,16 +382,16 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                                 .with_padding(Spacing::all(10.0))
                                 .with_overflow(Overflow::Hidden)
                                 .with_shape(Shape::Rect(
-                                    StyledRect::new(Default::default(), Color::new(0.16, 0.10, 0.12, 1.0))
+                                    StyledRect::new(Default::default(), mocha::CRUST)
                                         .with_corner_shape(CornerShape::Round(14.0))
-                                        .with_stroke(Stroke::new(2.0, Color::new(0.35, 0.20, 0.25, 1.0))),
+                                        .with_stroke(Stroke::new(2.0, mocha::SURFACE0)),
                                 ))
                                 // Optional offset to demonstrate bounds interactions.
                                 .with_offset(Offset::new(0.0, 0.0))
                                 .with_children(vec![label(
                                     "This string is intentionally very long to demonstrate clipping/scissoring. So let's make this even longer to make sure it clips.",
                                     18.0,
-                                    Color::new(1.0, 0.9, 0.9, 1.0),
+                                    mocha::RED,
                                     HorizontalAlign::Left,
                                     VerticalAlign::Top,
                                 )
@@ -401,11 +402,11 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
             Node::new()
                 .with_height(Size::px(54.0))
                 .with_padding(Spacing::all(14.0))
-                .with_shape(panel(Color::new(0.12, 0.12, 0.16, 1.0)))
+                .with_shape(panel(mocha::SURFACE0))
                 .with_children(vec![label(
                     "Keys: D/M/P/B/C toggle debug overlays; Esc quit.",
                     15.0,
-                    Color::new(0.70, 0.72, 0.78, 1.0),
+                    mocha::SUBTEXT0,
                     HorizontalAlign::Left,
                     VerticalAlign::Center,
                 )
@@ -429,18 +430,13 @@ fn alignment_cell(h: HorizontalAlign, v: VerticalAlign, label_text: &'static str
         .with_height(Size::Fill)
         .with_padding(Spacing::all(10.0))
         .with_shape(Shape::Rect(
-            StyledRect::new(Default::default(), Color::new(0.14, 0.14, 0.19, 1.0))
+            StyledRect::new(Default::default(), mocha::SURFACE0)
                 .with_corner_shape(CornerShape::Round(14.0))
-                .with_stroke(Stroke::new(2.0, Color::new(0.22, 0.22, 0.28, 1.0))),
+                .with_stroke(Stroke::new(2.0, mocha::SURFACE2)),
         ))
-        .with_children(vec![label(
-            label_text,
-            16.0,
-            Color::new(0.90, 0.92, 0.95, 1.0),
-            h,
-            v,
-        )
-        .with_height(Size::Fill)])
+        .with_children(vec![
+            label(label_text, 16.0, mocha::TEXT, h, v).with_height(Size::Fill)
+        ])
 }
 
 fn alignment_row(v_name: &'static str, v: VerticalAlign) -> Node {

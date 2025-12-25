@@ -3,8 +3,8 @@
 //! Provides a clickable button widget with hover and press states.
 
 use astra_gui::{
-    Color, Content, CornerShape, HorizontalAlign, Node, NodeId, Size, Spacing, Style, StyledRect,
-    TextContent, Transition, VerticalAlign,
+    catppuccin::mocha, Color, Content, CornerShape, HorizontalAlign, Node, NodeId, Size, Spacing,
+    Style, StyledRect, TextContent, Transition, VerticalAlign,
 };
 use astra_gui_wgpu::{InteractionEvent, TargetedEvent};
 
@@ -73,15 +73,15 @@ pub struct ButtonStyle {
 impl Default for ButtonStyle {
     fn default() -> Self {
         Self {
-            idle_color: Color::rgb(0.3, 0.5, 0.8),
-            hover_color: Color::rgb(0.4, 0.6, 0.9),
-            pressed_color: Color::rgb(0.2, 0.4, 0.7),
-            disabled_color: Color::rgb(0.3, 0.3, 0.3),
-            text_color: Color::rgb(1.0, 1.0, 1.0),
-            disabled_text_color: Color::rgb(0.5, 0.5, 0.5),
+            idle_color: mocha::OVERLAY0,
+            hover_color: mocha::MAUVE,
+            pressed_color: mocha::SURFACE2,
+            disabled_color: mocha::SURFACE0,
+            text_color: mocha::BASE,
+            disabled_text_color: mocha::OVERLAY0,
             padding: Spacing::symmetric(32.0, 16.0),
-            border_radius: 8.0,
-            font_size: 24.0,
+            border_radius: 24.0,
+            font_size: 32.0,
         }
     }
 }

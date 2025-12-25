@@ -4,8 +4,8 @@
 //! can be visualized using the existing `DebugOptions` functionality.
 
 use astra_gui::{
-    Color, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node, Overflow, Shape, Size,
-    Spacing, Stroke, StyledRect,
+    catppuccin::mocha, Color, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node,
+    Overflow, Shape, Size, Spacing, Stroke, StyledRect,
 };
 use astra_gui_wgpu::Renderer;
 use std::sync::Arc;
@@ -179,9 +179,9 @@ impl GpuState {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.1,
-                            b: 0.1,
+                            r: mocha::BASE.r as f64,
+                            g: mocha::BASE.g as f64,
+                            b: mocha::BASE.b as f64,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -226,11 +226,11 @@ impl GpuState {
     }
 }
 
-fn card(fill: Color, corner_shape: CornerShape, stroke_width: f32) -> Shape {
+fn card(stroke_color: Color, corner_shape: CornerShape, stroke_width: f32) -> Shape {
     Shape::Rect(
-        StyledRect::new(Default::default(), fill)
+        StyledRect::new(Default::default(), mocha::SURFACE0)
             .with_corner_shape(corner_shape)
-            .with_stroke(Stroke::new(stroke_width, Color::new(1.0, 1.0, 1.0, 1.0))),
+            .with_stroke(Stroke::new(stroke_width, stroke_color)),
     )
 }
 
@@ -256,29 +256,17 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                     Node::new()
                         .with_width(Size::Fill)
                         .with_padding(Spacing::all(20.0))
-                        .with_shape(card(
-                            Color::new(0.8, 0.3, 0.3, 1.0),
-                            CornerShape::None,
-                            20.0,
-                        )),
+                        .with_shape(card(mocha::MAROON, CornerShape::None, 20.0)),
                     // Round
                     Node::new()
                         .with_width(Size::Fill)
                         .with_padding(Spacing::all(20.0))
-                        .with_shape(card(
-                            Color::new(0.3, 0.8, 0.3, 1.0),
-                            CornerShape::Round(50.0),
-                            20.0,
-                        )),
+                        .with_shape(card(mocha::GREEN, CornerShape::Round(50.0), 20.0)),
                     // Cut
                     Node::new()
                         .with_width(Size::Fill)
                         .with_padding(Spacing::all(20.0))
-                        .with_shape(card(
-                            Color::new(0.3, 0.3, 0.8, 1.0),
-                            CornerShape::Cut(50.0),
-                            20.0,
-                        )),
+                        .with_shape(card(mocha::BLUE, CornerShape::Cut(50.0), 20.0)),
                 ]),
             Node::new()
                 .with_height(Size::Fill)
@@ -290,17 +278,13 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                     Node::new()
                         .with_width(Size::Fill)
                         .with_padding(Spacing::all(20.0))
-                        .with_shape(card(
-                            Color::new(0.8, 0.8, 0.3, 1.0),
-                            CornerShape::InverseRound(50.0),
-                            20.0,
-                        )),
+                        .with_shape(card(mocha::YELLOW, CornerShape::InverseRound(50.0), 20.0)),
                     // Squircle low smoothness
                     Node::new()
                         .with_width(Size::Fill)
                         .with_padding(Spacing::all(20.0))
                         .with_shape(card(
-                            Color::new(0.8, 0.3, 0.8, 1.0),
+                            mocha::MAUVE,
                             CornerShape::Squircle {
                                 radius: 50.0,
                                 smoothness: 0.5,
@@ -312,7 +296,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                         .with_width(Size::Fill)
                         .with_padding(Spacing::all(20.0))
                         .with_shape(card(
-                            Color::new(0.3, 0.8, 0.8, 1.0),
+                            mocha::TEAL,
                             CornerShape::Squircle {
                                 radius: 50.0,
                                 smoothness: 3.0,
