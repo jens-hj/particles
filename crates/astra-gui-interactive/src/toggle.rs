@@ -3,7 +3,7 @@
 //! Provides an iOS-style toggle switch with smooth animations.
 
 use astra_gui::{
-    Color, CornerShape, LayoutDirection, Node, NodeId, Size, Style, StyledRect, Transition,
+    Color, CornerShape, LayoutDirection, Node, NodeId, Size, Spacing, Style, StyledRect, Transition,
 };
 use astra_gui_wgpu::{InteractionEvent, TargetedEvent};
 
@@ -21,7 +21,7 @@ pub struct ToggleStyle {
     /// Height of the track
     pub track_height: f32,
     /// Diameter of the knob
-    pub knob_diameter: f32,
+    pub knob_width: f32,
     /// Margin between knob and track edges
     pub knob_margin: f32,
 }
@@ -34,7 +34,7 @@ impl Default for ToggleStyle {
             knob_color: Color::rgb(1.0, 1.0, 1.0),
             track_width: 50.0,
             track_height: 30.0,
-            knob_diameter: 26.0,
+            knob_width: 26.0,
             knob_margin: 2.0,
         }
     }
@@ -56,9 +56,9 @@ impl Default for ToggleStyle {
 pub fn toggle(id: impl Into<String>, value: bool, disabled: bool, style: &ToggleStyle) -> Node {
     let id_str = id.into();
     let knob_offset_x = if value {
-        style.track_width - style.knob_diameter - style.knob_margin
+        style.track_width - style.knob_width - style.knob_margin * 2.0
     } else {
-        style.knob_margin
+        0.0
     };
 
     // Track (background)
@@ -67,6 +67,7 @@ pub fn toggle(id: impl Into<String>, value: bool, disabled: bool, style: &Toggle
         .with_width(Size::px(style.track_width))
         .with_height(Size::px(style.track_height))
         .with_layout_direction(LayoutDirection::Horizontal)
+        .with_padding(Spacing::all(style.knob_margin))
         .with_shape(astra_gui::Shape::Rect(StyledRect {
             rect: astra_gui::Rect::default(),
             corner_shape: CornerShape::Round(style.track_height / 2.0),
@@ -109,19 +110,18 @@ pub fn toggle(id: impl Into<String>, value: bool, disabled: bool, style: &Toggle
             // The knob needs an ID so InteractiveStateManager can track its transitions
             Node::new()
                 .with_id(NodeId::new(format!("{}_knob", id_str)))
-                .with_width(Size::px(style.knob_diameter))
-                .with_height(Size::px(style.knob_diameter))
+                .with_width(Size::px(style.knob_width))
+                .with_height(Size::Fill)
                 .with_shape(astra_gui::Shape::Rect(StyledRect {
                     rect: astra_gui::Rect::default(),
-                    corner_shape: CornerShape::Round(style.knob_diameter / 2.0),
+                    corner_shape: CornerShape::Round(style.knob_width / 2.0),
                     fill: style.knob_color,
                     stroke: None,
                 }))
                 .with_style(Style {
                     fill_color: Some(style.knob_color),
-                    corner_radius: Some(style.knob_diameter / 2.0),
+                    corner_radius: Some(style.knob_width / 2.0),
                     offset_x: Some(knob_offset_x),
-                    offset_y: Some(style.knob_margin),
                     ..Default::default()
                 })
                 .with_transition(Transition::quick()),
@@ -137,7 +137,9 @@ pub fn toggle(id: impl Into<String>, value: bool, disabled: bool, style: &Toggle
 /// # Returns
 /// `true` if the toggle was clicked, `false` otherwise
 pub fn toggle_clicked(toggle_id: &str, events: &[TargetedEvent]) -> bool {
+    let knob_id = format!("{}_knob", toggle_id);
     events.iter().any(|e| {
-        matches!(e.event, InteractionEvent::Click { .. }) && e.target.as_str() == toggle_id
+        matches!(e.event, InteractionEvent::Click { .. })
+            && (e.target.as_str() == toggle_id || e.target.as_str() == knob_id)
     })
 }
