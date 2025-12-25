@@ -1238,7 +1238,7 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
-                // Handle astra-gui debug keybindings
+                // Handle astra-gui debug keybindings (matching corner_shapes.rs example)
                 let handled = match key_code {
                     KeyCode::KeyM => {
                         self.astra_debug_options.show_margins =
@@ -1249,7 +1249,15 @@ impl ApplicationHandler for App {
                         );
                         true
                     }
-                    // Note: KeyP conflicts with picking mode toggle, so skip it
+                    KeyCode::KeyP => {
+                        self.astra_debug_options.show_padding =
+                            !self.astra_debug_options.show_padding;
+                        println!(
+                            "Astra GUI Padding: {}",
+                            self.astra_debug_options.show_padding
+                        );
+                        true
+                    }
                     KeyCode::KeyB => {
                         self.astra_debug_options.show_borders =
                             !self.astra_debug_options.show_borders;
@@ -1259,7 +1267,7 @@ impl ApplicationHandler for App {
                         );
                         true
                     }
-                    KeyCode::KeyO => {
+                    KeyCode::KeyC => {
                         self.astra_debug_options.show_content_area =
                             !self.astra_debug_options.show_content_area;
                         println!(
@@ -1268,7 +1276,7 @@ impl ApplicationHandler for App {
                         );
                         true
                     }
-                    KeyCode::KeyL => {
+                    KeyCode::KeyR => {
                         self.astra_debug_options.show_clip_rects =
                             !self.astra_debug_options.show_clip_rects;
                         println!(
@@ -1282,7 +1290,7 @@ impl ApplicationHandler for App {
                         println!("Astra GUI Gaps: {}", self.astra_debug_options.show_gaps);
                         true
                     }
-                    KeyCode::KeyA => {
+                    KeyCode::KeyD => {
                         if self.astra_debug_options.is_enabled() {
                             self.astra_debug_options = DebugOptions::none();
                             println!("Astra GUI Debug: OFF");
@@ -1291,6 +1299,22 @@ impl ApplicationHandler for App {
                             println!("Astra GUI Debug: ALL ON");
                         }
                         true
+                    }
+                    KeyCode::KeyS => {
+                        if let Some(gpu_state) = &mut self.gpu_state {
+                            let new_mode = match gpu_state.astra_renderer.render_mode() {
+                                astra_gui_wgpu::RenderMode::Sdf
+                                | astra_gui_wgpu::RenderMode::Auto => {
+                                    astra_gui_wgpu::RenderMode::Mesh
+                                }
+                                astra_gui_wgpu::RenderMode::Mesh => astra_gui_wgpu::RenderMode::Sdf,
+                            };
+                            gpu_state.astra_renderer.set_render_mode(new_mode);
+                            println!("Astra GUI Render mode: {:?}", new_mode);
+                            true
+                        } else {
+                            false
+                        }
                     }
                     _ => false,
                 };
