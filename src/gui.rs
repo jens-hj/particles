@@ -1,6 +1,6 @@
 use astra_gui::{
     catppuccin::mocha, Content, CornerShape, DebugOptions, FullOutput as AstraFullOutput, Node,
-    Shape, Size, Spacing, Stroke, StyledRect, TextContent,
+    Shape, Size, Spacing, Stroke, StyledRect, TextContent, VerticalAlign,
 };
 use egui::Context;
 use egui_wgpu::Renderer;
@@ -218,16 +218,6 @@ impl Gui {
             state.step_one_frame = true;
             state.steps_remaining -= 1;
         }
-
-        // Diagnostics Panel (Top Left)
-        egui::Window::new("Diagnostics")
-            .anchor(egui::Align2::LEFT_TOP, [10.0, 10.0])
-            .resizable(false)
-            .collapsible(true)
-            .show(ctx, |ui| {
-                ui.label(format!("FPS: {:.1}", state.fps));
-                ui.label(format!("Frame Time: {:.2} ms", state.frame_time));
-            });
 
         // Statistics Panel (Top Right)
         egui::Window::new("Statistics")
@@ -836,7 +826,7 @@ pub fn build_diagnostics_panel(
         .with_child(
             Node::new()
                 .with_shape(Shape::Rect(
-                    StyledRect::new(Default::default(), mocha::SURFACE0)
+                    StyledRect::new(Default::default(), mocha::BASE)
                         .with_corner_shape(CornerShape::Round(20.0))
                         .with_stroke(Stroke::new(2.0, mocha::MAUVE)),
                 ))
@@ -845,23 +835,35 @@ pub fn build_diagnostics_panel(
                 .with_width(Size::px(200.0))
                 .with_children(vec![
                     // Title
-                    Node::new().with_content(Content::Text(
-                        TextContent::new("Diagnostics")
-                            .with_font_size(24.0)
-                            .with_color(mocha::TEXT),
-                    )),
+                    Node::new()
+                        .with_content(Content::Text(
+                            TextContent::new("Diagnostics")
+                                .with_font_size(24.0)
+                                .with_color(mocha::TEXT)
+                                .with_v_align(VerticalAlign::Top),
+                        ))
+                        .with_width(Size::FitContent)
+                        .with_height(Size::fraction(0.4)),
                     // FPS label
-                    Node::new().with_content(Content::Text(
-                        TextContent::new(format!("FPS: {:.1}", ui_state.fps))
-                            .with_font_size(16.0)
-                            .with_color(mocha::TEXT),
-                    )),
+                    Node::new()
+                        .with_content(Content::Text(
+                            TextContent::new(format!("FPS: {:.1}", ui_state.fps))
+                                .with_font_size(16.0)
+                                .with_color(mocha::TEXT)
+                                .with_v_align(VerticalAlign::Bottom),
+                        ))
+                        .with_width(Size::FitContent)
+                        .with_height(Size::Fill),
                     // Frame time label
-                    Node::new().with_content(Content::Text(
-                        TextContent::new(format!("Frame Time: {:.2} ms", ui_state.frame_time))
-                            .with_font_size(16.0)
-                            .with_color(mocha::TEXT),
-                    )),
+                    Node::new()
+                        .with_content(Content::Text(
+                            TextContent::new(format!("Frame Time: {:.2} ms", ui_state.frame_time))
+                                .with_font_size(16.0)
+                                .with_color(mocha::TEXT)
+                                .with_v_align(VerticalAlign::Bottom),
+                        ))
+                        .with_width(Size::FitContent)
+                        .with_height(Size::Fill),
                 ]),
         );
 
