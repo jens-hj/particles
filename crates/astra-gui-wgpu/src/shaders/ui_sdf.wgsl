@@ -57,11 +57,13 @@ fn vs_main(vert: VertexInput, inst: InstanceInput) -> VertexOutput {
     out.world_pos = inst.center + vert.pos * expanded_size;
 
     // Convert to normalized device coordinates (NDC)
-    let ndc = (out.world_pos / uniforms.screen_size) * 2.0 - 1.0;
+    // Add 0.5 to world_pos to account for pixel centers being at half-integer coordinates
+    let ndc = ((out.world_pos + 0.5) / uniforms.screen_size) * 2.0 - 1.0;
     out.clip_pos = vec4<f32>(ndc.x, -ndc.y, 0.0, 1.0);
 
     // Pass through instance data to fragment shader
-    out.local_pos = vert.pos * inst.half_size;  // Position relative to center
+    // local_pos is relative to the shape boundary (not the expanded quad with stroke padding)
+    out.local_pos = vert.pos * inst.half_size;
     out.fill_color = inst.fill_color;
     out.stroke_color = inst.stroke_color;
     out.stroke_width = inst.stroke_width;
@@ -195,33 +197,31 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // This ensures AA is always ~1 pixel wide regardless of zoom level
     let aa_width = length(vec2<f32>(dpdx(dist), dpdy(dist)));
 
-    // Compute fill alpha with smooth transition
-    // smoothstep creates a smooth gradient from 0 to 1 across the edge
-    let fill_alpha = 1.0 - smoothstep(-aa_width, aa_width, dist);
+    // Stroke rendering: stroke is a ring, fill is the interior
+    // We need to choose stroke OR fill, not blend them
 
-    // Compute stroke alpha (if stroke width > 0)
-    var stroke_alpha = 0.0;
+    var final_color: vec4<f32>;
+
     if in.stroke_width > 0.0 {
-        // For a stroke, we want to render a "ring" around the shape boundary
-        // The ring extends half_stroke outward and half_stroke inward from dist=0
+        // Stroke distance: creates a ring around the boundary
+        let stroke_dist = abs(dist) - in.stroke_width;
 
-        // Use the absolute distance from the boundary for stroke calculation
-        let stroke_dist = abs(dist) - in.stroke_width * 0.5;
-
-        // Stroke is visible when stroke_dist < 0 (inside the stroke ring)
-        stroke_alpha = 1.0 - smoothstep(-aa_width, aa_width, stroke_dist);
+        // Decide: are we in stroke region or fill region?
+        // Use the UN-antialiased distance to make a hard decision
+        if abs(dist) < in.stroke_width {
+            // In stroke ring - render stroke with AA
+            let alpha = 1.0 - smoothstep(-aa_width, aa_width, stroke_dist);
+            final_color = in.stroke_color * alpha;
+        } else {
+            // Outside stroke ring - render fill (if inside shape) with AA
+            let alpha = 1.0 - smoothstep(-aa_width, aa_width, dist);
+            final_color = in.fill_color * alpha;
+        }
+    } else {
+        // No stroke - just fill
+        let alpha = 1.0 - smoothstep(-aa_width, aa_width, dist);
+        final_color = in.fill_color * alpha;
     }
-
-    // Blend fill and stroke
-    // The stroke should be drawn on top of the fill, completely replacing it in the stroke region
-
-    // First apply fill
-    var final_color = in.fill_color * fill_alpha;
-
-    // Then blend stroke on top using standard "over" operator
-    // When stroke_alpha = 1, stroke completely replaces fill
-    // When stroke_alpha = 0, fill shows through
-    final_color = mix(final_color, in.stroke_color, stroke_alpha);
 
     return final_color;
 }

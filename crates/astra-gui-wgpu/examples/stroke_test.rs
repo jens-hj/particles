@@ -178,19 +178,24 @@ fn create_stroke_test_ui(width: f32, height: f32) -> FullOutput {
     // - Rows: Different stroke widths (0.5px, 1px, 3px, 10px, 20px)
     // - Columns: Different corner types (None, Round, Cut, InverseRound, Squircle)
 
-    let stroke_widths = vec![0.5, 1.0, 3.0, 10.0, 20.0];
+    let stroke_widths = vec![0.0, 0.5, 1.0, 3.0, 10.0, 20.0];
 
     let corner_types = vec![
-        ("None", CornerShape::None),
-        ("Round", CornerShape::Round(30.0)),
-        ("Cut", CornerShape::Cut(30.0)),
-        ("InverseRound", CornerShape::InverseRound(30.0)),
+        ("None", CornerShape::None, mocha::BLUE),
+        ("Round", CornerShape::Round(30.0), mocha::MAUVE),
+        ("Cut", CornerShape::Cut(30.0), mocha::RED),
+        (
+            "InverseRound",
+            CornerShape::InverseRound(30.0),
+            mocha::YELLOW,
+        ),
         (
             "Squircle",
             CornerShape::Squircle {
                 radius: 30.0,
                 smoothness: 1.0,
             },
+            mocha::GREEN,
         ),
     ];
 
@@ -199,14 +204,14 @@ fn create_stroke_test_ui(width: f32, height: f32) -> FullOutput {
     for stroke_width in stroke_widths {
         let mut cells = vec![];
 
-        for (_, corner_shape) in &corner_types {
+        for (_, corner_shape, corner_color) in &corner_types {
             cells.push(
                 Node::new()
                     .with_width(Size::Fill)
                     .with_height(Size::px(100.0))
                     .with_shape(rect_with_stroke(
                         mocha::SURFACE0,
-                        mocha::BLUE,
+                        *corner_color,
                         *corner_shape,
                         stroke_width,
                     )),
@@ -216,15 +221,15 @@ fn create_stroke_test_ui(width: f32, height: f32) -> FullOutput {
         rows.push(
             Node::new()
                 .with_height(Size::px(120.0))
-                .with_gap(20.0)
+                .with_gap(60.0)
                 .with_layout_direction(LayoutDirection::Horizontal)
                 .with_children(cells),
         );
     }
 
     let root = Node::new()
-        .with_padding(Spacing::all(40.0))
-        .with_gap(20.0)
+        .with_padding(Spacing::all(60.0))
+        .with_gap(60.0)
         .with_layout_direction(LayoutDirection::Vertical)
         .with_overflow(Overflow::Visible)
         .with_children(rows);
