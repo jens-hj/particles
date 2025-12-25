@@ -213,13 +213,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Blend fill and stroke
-    // Stroke is drawn on top of fill using standard alpha compositing
-    let fill_color = in.fill_color * fill_alpha;
-    let stroke_color = in.stroke_color * stroke_alpha;
+    // The stroke should be drawn on top of the fill, completely replacing it in the stroke region
 
-    // Alpha compositing: stroke over fill
-    // result = src + dst * (1 - src.a)
-    let final_color = stroke_color + fill_color * (1.0 - stroke_alpha);
+    // First apply fill
+    var final_color = in.fill_color * fill_alpha;
+
+    // Then blend stroke on top using standard "over" operator
+    // When stroke_alpha = 1, stroke completely replaces fill
+    // When stroke_alpha = 0, fill shows through
+    final_color = mix(final_color, in.stroke_color, stroke_alpha);
 
     return final_color;
 }
