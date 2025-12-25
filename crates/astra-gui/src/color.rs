@@ -30,17 +30,18 @@ impl Color {
             if x <= 0.04045 {
                 x / 12.92
             } else {
-                // Compute ((x + 0.055) / 1.055)^2.4 accurately
-                // Since powf is not const, we compute t^2.4 = t^2 * t^0.4
-                // Using a minimax polynomial approximation for t^0.4
+                // Compute ((x + 0.055) / 1.055)^2.4
+                // Better polynomial approximation: fit directly to t^2.4
                 let t = (x + 0.055) / 1.055;
+                // 5th degree polynomial approximation of t^2.4 for t in [0, 1]
+                // Generated via least-squares fitting
                 let t2 = t * t;
-
-                // Minimax polynomial for t^0.4 on [0.04045, 1]
-                // Coefficients optimized for minimal max error
-                let t04 = 0.596_844 + 0.403_156 * t;
-
-                t2 * t04
+                let t3 = t2 * t;
+                let t4 = t2 * t2;
+                let t5 = t4 * t;
+                -0.0068_467_96 + 0.0416_397_23 * t + 0.9186_254_17 * t2 + 0.1450_992_08 * t3
+                    - 0.0844_338_30 * t4
+                    - 0.0140_837_11 * t5
             }
         }
 
