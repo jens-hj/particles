@@ -375,16 +375,6 @@ impl ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        // Handle debug keybinds
-        let renderer = self.gpu_state.as_mut().map(|s| &mut s.renderer);
-        if handle_debug_keybinds(&event, &mut self.debug_options, renderer) {
-            // Redraw if debug options changed
-            if let Some(window) = &self.window {
-                window.request_redraw();
-            }
-            return;
-        }
-
         match event {
             WindowEvent::CloseRequested
             | WindowEvent::KeyboardInput {
@@ -396,6 +386,12 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => event_loop.exit(),
+
+            WindowEvent::KeyboardInput { .. } => {
+                // Debug controls (D/M/P/B/C/R/G/S).
+                let renderer = self.gpu_state.as_mut().map(|s| &mut s.renderer);
+                let _handled = handle_debug_keybinds(&event, &mut self.debug_options, renderer);
+            }
 
             WindowEvent::Resized(physical_size) => {
                 if let Some(gpu_state) = &mut self.gpu_state {

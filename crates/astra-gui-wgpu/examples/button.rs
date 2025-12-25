@@ -31,6 +31,83 @@ const DEBUG_HELP_TEXT: &str = "Debug controls:
   ESC - Exit";
 
 const DEBUG_HELP_TEXT_ONELINE: &str = "M:Margins | P:Padding | B:Borders | C:Content | R:ClipRects | G:Gaps | D:All | S:RenderMode | ESC:Exit";
+
+fn handle_debug_keybinds(
+    event: &WindowEvent,
+    debug_options: &mut DebugOptions,
+    renderer: Option<&mut Renderer>,
+) -> bool {
+    let WindowEvent::KeyboardInput {
+        event:
+            KeyEvent {
+                physical_key: winit::keyboard::PhysicalKey::Code(key_code),
+                state: ElementState::Pressed,
+                ..
+            },
+        ..
+    } = event
+    else {
+        return false;
+    };
+
+    match *key_code {
+        winit::keyboard::KeyCode::KeyM => {
+            debug_options.show_margins = !debug_options.show_margins;
+            println!("Margins: {}", debug_options.show_margins);
+            true
+        }
+        winit::keyboard::KeyCode::KeyP => {
+            debug_options.show_padding = !debug_options.show_padding;
+            println!("Padding: {}", debug_options.show_padding);
+            true
+        }
+        winit::keyboard::KeyCode::KeyB => {
+            debug_options.show_borders = !debug_options.show_borders;
+            println!("Borders: {}", debug_options.show_borders);
+            true
+        }
+        winit::keyboard::KeyCode::KeyC => {
+            debug_options.show_content_area = !debug_options.show_content_area;
+            println!("Content area: {}", debug_options.show_content_area);
+            true
+        }
+        winit::keyboard::KeyCode::KeyR => {
+            debug_options.show_clip_rects = !debug_options.show_clip_rects;
+            println!("Clip rects: {}", debug_options.show_clip_rects);
+            true
+        }
+        winit::keyboard::KeyCode::KeyG => {
+            debug_options.show_gaps = !debug_options.show_gaps;
+            println!("Gaps: {}", debug_options.show_gaps);
+            true
+        }
+        winit::keyboard::KeyCode::KeyD => {
+            if debug_options.is_enabled() {
+                *debug_options = DebugOptions::none();
+                println!("Debug: OFF");
+            } else {
+                *debug_options = DebugOptions::all();
+                println!("Debug: ALL ON");
+            }
+            true
+        }
+        winit::keyboard::KeyCode::KeyS => {
+            if let Some(renderer) = renderer {
+                let new_mode = match renderer.render_mode() {
+                    RenderMode::Sdf | RenderMode::Auto => RenderMode::Mesh,
+                    RenderMode::Mesh => RenderMode::Sdf,
+                };
+                renderer.set_render_mode(new_mode);
+                println!("Render mode: {:?}", new_mode);
+                true
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
 use std::sync::Arc;
 use wgpu::Trace;
 use winit::{
@@ -365,66 +442,22 @@ impl ApplicationHandler for App {
         event: WindowEvent,
     ) {
         match event {
-            WindowEvent::CloseRequested => {
-                event_loop.exit();
-            }
-            WindowEvent::KeyboardInput {
+            WindowEvent::CloseRequested
+            | WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
-                        physical_key: winit::keyboard::PhysicalKey::Code(key_code),
-                        state: ElementState::Pressed,
+                        physical_key:
+                            winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape),
                         ..
                     },
                 ..
-            } => match key_code {
-                winit::keyboard::KeyCode::Escape => {
-                    event_loop.exit();
-                }
-                winit::keyboard::KeyCode::KeyM => {
-                    self.debug_options.show_margins = !self.debug_options.show_margins;
-                    println!("Margins: {}", self.debug_options.show_margins);
-                }
-                winit::keyboard::KeyCode::KeyP => {
-                    self.debug_options.show_padding = !self.debug_options.show_padding;
-                    println!("Padding: {}", self.debug_options.show_padding);
-                }
-                winit::keyboard::KeyCode::KeyB => {
-                    self.debug_options.show_borders = !self.debug_options.show_borders;
-                    println!("Borders: {}", self.debug_options.show_borders);
-                }
-                winit::keyboard::KeyCode::KeyC => {
-                    self.debug_options.show_content_area = !self.debug_options.show_content_area;
-                    println!("Content area: {}", self.debug_options.show_content_area);
-                }
-                winit::keyboard::KeyCode::KeyR => {
-                    self.debug_options.show_clip_rects = !self.debug_options.show_clip_rects;
-                    println!("Clip rects: {}", self.debug_options.show_clip_rects);
-                }
-                winit::keyboard::KeyCode::KeyG => {
-                    self.debug_options.show_gaps = !self.debug_options.show_gaps;
-                    println!("Gaps: {}", self.debug_options.show_gaps);
-                }
-                winit::keyboard::KeyCode::KeyD => {
-                    if self.debug_options.is_enabled() {
-                        self.debug_options = DebugOptions::none();
-                        println!("Debug: OFF");
-                    } else {
-                        self.debug_options = DebugOptions::all();
-                        println!("Debug: ALL ON");
-                    }
-                }
-                winit::keyboard::KeyCode::KeyS => {
-                    if let Some(gpu_state) = &mut self.gpu_state {
-                        let new_mode = match gpu_state.renderer.render_mode() {
-                            RenderMode::Sdf | RenderMode::Auto => RenderMode::Mesh,
-                            RenderMode::Mesh => RenderMode::Sdf,
-                        };
-                        gpu_state.renderer.set_render_mode(new_mode);
-                        println!("Render mode: {:?}", new_mode);
-                    }
-                }
-                _ => {}
-            },
+            } => event_loop.exit(),
+
+            WindowEvent::KeyboardInput { .. } => {
+                // Debug controls (D/M/P/B/C/R/G/S).
+                let renderer = self.gpu_state.as_mut().map(|s| &mut s.renderer);
+                let _handled = handle_debug_keybinds(&event, &mut self.debug_options, renderer);
+            }
             WindowEvent::CursorMoved { .. } | WindowEvent::MouseInput { .. } => {
                 self.input_state.handle_event(&event);
                 if let Some(ref window) = self.window {
@@ -447,6 +480,10 @@ impl ApplicationHandler for App {
                 self.render();
             }
             _ => {}
+        }
+
+        if let Some(window) = &self.window {
+            window.request_redraw();
         }
     }
 }
@@ -524,6 +561,9 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut app = App::new();
+
+    println!("{}", DEBUG_HELP_TEXT);
+
     event_loop
         .run_app(&mut app)
         .expect("Failed to run event loop");
