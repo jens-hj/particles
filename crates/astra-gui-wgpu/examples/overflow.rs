@@ -22,7 +22,7 @@ use astra_gui::{
     StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_text::Engine as TextEngine;
-use astra_gui_wgpu::Renderer;
+use astra_gui_wgpu::{RenderMode, Renderer};
 use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
@@ -37,9 +37,14 @@ const DEBUG_HELP_TEXT: &str = "Debug controls:
   P - Toggle padding (blue)
   B - Toggle borders (green)
   C - Toggle content area (yellow)
+  S - Toggle render mode (SDF/Mesh)
   ESC - Exit";
 
-fn handle_debug_keybinds(event: &WindowEvent, debug_options: &mut DebugOptions) -> bool {
+fn handle_debug_keybinds(
+    event: &WindowEvent,
+    debug_options: &mut DebugOptions,
+    renderer: Option<&mut Renderer>,
+) -> bool {
     let WindowEvent::KeyboardInput {
         event:
             KeyEvent {
@@ -83,6 +88,19 @@ fn handle_debug_keybinds(event: &WindowEvent, debug_options: &mut DebugOptions) 
                 println!("Debug: ALL ON");
             }
             true
+        }
+        winit::keyboard::KeyCode::KeyS => {
+            if let Some(renderer) = renderer {
+                let new_mode = match renderer.render_mode() {
+                    RenderMode::Sdf | RenderMode::Auto => RenderMode::Mesh,
+                    RenderMode::Mesh => RenderMode::Sdf,
+                };
+                renderer.set_render_mode(new_mode);
+                println!("Render mode: {:?}", new_mode);
+                true
+            } else {
+                false
+            }
         }
         _ => false,
     }
@@ -461,8 +479,9 @@ impl ApplicationHandler for App {
             } => event_loop.exit(),
 
             WindowEvent::KeyboardInput { .. } => {
-                // Debug controls (D/M/P/B/C).
-                let _handled = handle_debug_keybinds(&event, &mut self.debug_options);
+                // Debug controls (D/M/P/B/C/S).
+                let renderer = self.gpu_state.as_mut().map(|s| &mut s.renderer);
+                let _handled = handle_debug_keybinds(&event, &mut self.debug_options, renderer);
             }
 
             WindowEvent::Resized(physical_size) => {

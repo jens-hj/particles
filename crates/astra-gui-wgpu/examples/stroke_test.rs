@@ -1,10 +1,10 @@
 //! Tests stroke rendering with various widths and corner types
 
 use astra_gui::{
-    catppuccin::mocha, Color, CornerShape, FullOutput, LayoutDirection, Node, Overflow, Shape,
-    Size, Spacing, Stroke, StyledRect,
+    catppuccin::mocha, Color, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node,
+    Overflow, Shape, Size, Spacing, Stroke, StyledRect,
 };
-use astra_gui_wgpu::Renderer;
+use astra_gui_wgpu::{RenderMode, Renderer};
 use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
@@ -13,9 +13,67 @@ use winit::{
     window::{Window, WindowId},
 };
 
+const DEBUG_HELP_TEXT: &str = "Debug controls:
+  R - Toggle clip rects (red outline)
+  D - Toggle all debug visualizations
+  S - Toggle render mode (SDF/Mesh)
+  ESC - Exit";
+
+fn handle_debug_keybinds(
+    event: &WindowEvent,
+    debug_options: &mut DebugOptions,
+    renderer: Option<&mut Renderer>,
+) -> bool {
+    let WindowEvent::KeyboardInput {
+        event:
+            KeyEvent {
+                physical_key: winit::keyboard::PhysicalKey::Code(key_code),
+                state: ElementState::Pressed,
+                ..
+            },
+        ..
+    } = event
+    else {
+        return false;
+    };
+
+    match *key_code {
+        winit::keyboard::KeyCode::KeyR => {
+            debug_options.show_clip_rects = !debug_options.show_clip_rects;
+            println!("Clip rects: {}", debug_options.show_clip_rects);
+            true
+        }
+        winit::keyboard::KeyCode::KeyD => {
+            if debug_options.is_enabled() {
+                *debug_options = DebugOptions::none();
+                println!("Debug: OFF");
+            } else {
+                *debug_options = DebugOptions::all();
+                println!("Debug: ALL ON");
+            }
+            true
+        }
+        winit::keyboard::KeyCode::KeyS => {
+            if let Some(renderer) = renderer {
+                let new_mode = match renderer.render_mode() {
+                    RenderMode::Sdf | RenderMode::Auto => RenderMode::Mesh,
+                    RenderMode::Mesh => RenderMode::Sdf,
+                };
+                renderer.set_render_mode(new_mode);
+                println!("Render mode: {:?}", new_mode);
+                true
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
 struct App {
     window: Option<Arc<Window>>,
     gpu_state: Option<GpuState>,
+    debug_options: DebugOptions,
 }
 
 struct GpuState {
@@ -97,7 +155,7 @@ impl GpuState {
         }
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    fn render(&mut self, debug_options: &DebugOptions) -> Result<(), wgpu::SurfaceError> {
         let surface_texture = self.surface.get_current_texture()?;
         let view = surface_texture
             .texture
@@ -135,7 +193,11 @@ impl GpuState {
 
         self.queue.submit(std::iter::once(encoder.finish()));
 
-        let ui_output = create_stroke_test_ui(self.config.width as f32, self.config.height as f32);
+        let ui_output = create_stroke_test_ui(
+            self.config.width as f32,
+            self.config.height as f32,
+            debug_options,
+        );
 
         let mut encoder = self
             .device
@@ -173,7 +235,7 @@ fn rect_with_stroke(
     )
 }
 
-fn create_stroke_test_ui(width: f32, height: f32) -> FullOutput {
+fn create_stroke_test_ui(width: f32, height: f32, debug_options: &DebugOptions) -> FullOutput {
     // Test matrix:
     // - Rows: Different stroke widths (0.5px, 1px, 3px, 10px, 20px)
     // - Columns: Different corner types (None, Round, Cut, InverseRound, Squircle)
@@ -234,7 +296,7 @@ fn create_stroke_test_ui(width: f32, height: f32) -> FullOutput {
         .with_overflow(Overflow::Visible)
         .with_children(rows);
 
-    FullOutput::from_node(root, (width, height))
+    FullOutput::from_node_with_debug(root, (width, height), Some(*debug_options))
 }
 
 impl ApplicationHandler for App {
@@ -256,6 +318,16 @@ impl ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        // Handle debug keybinds
+        let renderer = self.gpu_state.as_mut().map(|s| &mut s.renderer);
+        if handle_debug_keybinds(&event, &mut self.debug_options, renderer) {
+            // Redraw if debug options changed
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+            return;
+        }
+
         match event {
             WindowEvent::CloseRequested
             | WindowEvent::KeyboardInput {
@@ -276,7 +348,7 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 if let Some(gpu_state) = &mut self.gpu_state {
-                    match gpu_state.render() {
+                    match gpu_state.render(&self.debug_options) {
                         Ok(_) => {}
                         Err(wgpu::SurfaceError::Lost) => {
                             if let Some(window) = &self.window {
@@ -307,12 +379,14 @@ fn main() {
     let mut app = App {
         window: None,
         gpu_state: None,
+        debug_options: DebugOptions::none(),
     };
 
     println!("Stroke Test - Testing various stroke widths on all corner types");
     println!("Rows: 0.5px, 1px, 3px, 10px, 20px stroke widths");
     println!("Columns: None, Round, Cut, InverseRound, Squircle");
-    println!("Press ESC to exit");
+    println!();
+    println!("{}", DEBUG_HELP_TEXT);
 
     event_loop.run_app(&mut app).unwrap();
 }

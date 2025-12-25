@@ -81,6 +81,7 @@ fn vs_main(vert: VertexInput, inst: InstanceInput) -> VertexOutput {
 
 /// Signed distance to a box (sharp corners)
 /// Returns negative inside, positive outside, zero on the boundary
+/// Based on Inigo Quilez's formula: https://iquilezles.org/articles/distfunctions2d/
 fn sd_box(p: vec2<f32>, size: vec2<f32>) -> f32 {
     let d = abs(p) - size;
     return length(max(d, vec2<f32>(0.0))) + min(max(d.x, d.y), 0.0);
@@ -94,6 +95,7 @@ fn sd_rounded_box(p: vec2<f32>, size: vec2<f32>, radius: f32) -> f32 {
 }
 
 /// Signed distance to a chamfered box (diagonal cut corners at 45°)
+/// Based on Inigo Quilez's formula: https://iquilezles.org/articles/distfunctions2d/
 fn sd_chamfer_box(p: vec2<f32>, size: vec2<f32>, chamfer: f32) -> f32 {
     var p_local = abs(p) - size;
 
@@ -103,7 +105,7 @@ fn sd_chamfer_box(p: vec2<f32>, size: vec2<f32>, chamfer: f32) -> f32 {
     }
 
     p_local.y = p_local.y + chamfer;
-    let k = 1.0 - sqrt(2.0) * 0.5;
+    let k = 1.0 - sqrt(2.0);
 
     if p_local.y < 0.0 && p_local.y + p_local.x * k < 0.0 {
         return p_local.x;
@@ -116,19 +118,22 @@ fn sd_chamfer_box(p: vec2<f32>, size: vec2<f32>, chamfer: f32) -> f32 {
 
 /// Signed distance to an inverse rounded box (concave circular corners)
 /// This creates a shape like a ticket with punched corners
-fn sd_inverse_round_box(p: vec2<f32>, size: vec2<f32>, radius: f32) -> f32 {
+fn sd_inverse_round_box(p: vec2<f32>, size: vec2<f32>, radius: f32, stroke_width: f32) -> f32 {
     // Inverse rounded corners: circles centered at the corners carve into the rectangle
     // Creating concave (inward-curving) corners like a ticket punch
     let p_abs = abs(p);
 
     // Distance to corner point
     let to_corner = p_abs - size;
+    let to_corner_cut = p_abs - (size + radius + stroke_width / 2.0);
 
     // Box boundary distance (compute once to avoid discontinuities)
     let box_dist = max(to_corner.x, to_corner.y);
 
     // In corner region (close enough to corner to be affected by circle)
-    if to_corner.x > -radius && to_corner.y > -radius {
+    let corner_dist = -radius - stroke_width / 2.0;
+    let close_to_corner = to_corner.x > corner_dist && to_corner.y > corner_dist;
+    if close_to_corner {
         // Circle centered at corner (size.x, size.y)
         let circle_dist = length(p_abs - size) - radius;
 
@@ -173,23 +178,23 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     switch in.corner_type {
         case 0u: {  // None (sharp corners)
-            dist = sd_box(in.local_pos, in.half_size);
+            dist = sd_box(in.local_pos, in.half_size - in.stroke_width / 2.0);
         }
         case 1u: {  // Round (circular arcs)
-            dist = sd_rounded_box(in.local_pos, in.half_size, in.corner_param1);
+            dist = sd_rounded_box(in.local_pos, in.half_size - in.stroke_width / 2.0, in.corner_param1);
         }
         case 2u: {  // Cut (chamfered at 45°)
-            dist = sd_chamfer_box(in.local_pos, in.half_size, in.corner_param1);
+            dist = sd_chamfer_box(in.local_pos, in.half_size - in.stroke_width / 2.0, in.corner_param1);
         }
         case 3u: {  // InverseRound (concave arcs)
-            dist = sd_inverse_round_box(in.local_pos, in.half_size, in.corner_param1);
+            dist = sd_inverse_round_box(in.local_pos, in.half_size - in.stroke_width / 2.0, in.corner_param1, in.stroke_width);
         }
         case 4u: {  // Squircle (superellipse)
-            dist = sd_squircle_box(in.local_pos, in.half_size, in.corner_param1, in.corner_param2);
+            dist = sd_squircle_box(in.local_pos, in.half_size - in.stroke_width / 2.0, in.corner_param1, in.corner_param2);
         }
         default: {
             // Fallback to sharp corners
-            dist = sd_box(in.local_pos, in.half_size);
+            dist = sd_box(in.local_pos, in.half_size - in.stroke_width / 2.0);
         }
     }
 
@@ -202,23 +207,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var final_color: vec4<f32>;
 
-    if in.stroke_width > 0.0 {
-        // Stroke distance: creates a ring around the boundary
-        let stroke_dist = abs(dist) - in.stroke_width;
-
-        // Decide: are we in stroke region or fill region?
-        // Use the UN-antialiased distance to make a hard decision
-        if abs(dist) < in.stroke_width {
-            // In stroke ring - render stroke with AA
-            let alpha = 1.0 - smoothstep(-aa_width, aa_width, stroke_dist);
-            final_color = in.stroke_color * alpha;
-        } else {
-            // Outside stroke ring - render fill (if inside shape) with AA
-            let alpha = 1.0 - smoothstep(-aa_width, aa_width, dist);
-            final_color = in.fill_color * alpha;
-        }
+    let stroke_dist = abs(dist) - in.stroke_width * 0.5;
+    if stroke_dist < 0.0 {
+        // In stroke ring - render stroke with AA
+        let alpha = 1.0 - smoothstep(-aa_width, aa_width, stroke_dist);
+        final_color = in.stroke_color * alpha;
     } else {
-        // No stroke - just fill
+        // Outside stroke ring - render fill (if inside shape) with AA
         let alpha = 1.0 - smoothstep(-aa_width, aa_width, dist);
         final_color = in.fill_color * alpha;
     }

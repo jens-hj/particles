@@ -7,7 +7,7 @@ use astra_gui::{
     catppuccin::mocha, Color, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node,
     Overflow, Shape, Size, Spacing, Stroke, StyledRect,
 };
-use astra_gui_wgpu::Renderer;
+use astra_gui_wgpu::{RenderMode, Renderer};
 use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
@@ -22,9 +22,14 @@ const DEBUG_HELP_TEXT: &str = "Debug controls:
   P - Toggle padding (blue)
   B - Toggle borders (green)
   C - Toggle content area (yellow)
+  S - Toggle render mode (SDF/Mesh)
   ESC - Exit";
 
-fn handle_debug_keybinds(event: &WindowEvent, debug_options: &mut DebugOptions) -> bool {
+fn handle_debug_keybinds(
+    event: &WindowEvent,
+    debug_options: &mut DebugOptions,
+    renderer: Option<&mut Renderer>,
+) -> bool {
     let WindowEvent::KeyboardInput {
         event:
             KeyEvent {
@@ -68,6 +73,19 @@ fn handle_debug_keybinds(event: &WindowEvent, debug_options: &mut DebugOptions) 
                 println!("Debug: ALL ON");
             }
             true
+        }
+        winit::keyboard::KeyCode::KeyS => {
+            if let Some(renderer) = renderer {
+                let new_mode = match renderer.render_mode() {
+                    RenderMode::Sdf | RenderMode::Auto => RenderMode::Mesh,
+                    RenderMode::Mesh => RenderMode::Sdf,
+                };
+                renderer.set_render_mode(new_mode);
+                println!("Render mode: {:?}", new_mode);
+                true
+            } else {
+                false
+            }
         }
         _ => false,
     }
@@ -241,6 +259,8 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
     //  - Row 2: 3 equal-width cards
     //
     // Sizes are chosen to roughly match the old shape-based showcase.
+    let corner_size = 100.0;
+    let stroke_width = 40.0;
     let root = Node::new()
         .with_padding(Spacing::all(40.0))
         .with_gap(40.0)
@@ -256,17 +276,25 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                     Node::new()
                         .with_width(Size::Fill)
                         .with_padding(Spacing::all(20.0))
-                        .with_shape(card(mocha::MAROON, CornerShape::None, 20.0)),
+                        .with_shape(card(mocha::MAROON, CornerShape::None, stroke_width)),
                     // Round
                     Node::new()
                         .with_width(Size::Fill)
                         .with_padding(Spacing::all(20.0))
-                        .with_shape(card(mocha::GREEN, CornerShape::Round(50.0), 20.0)),
+                        .with_shape(card(
+                            mocha::GREEN,
+                            CornerShape::Round(corner_size),
+                            stroke_width,
+                        )),
                     // Cut
                     Node::new()
                         .with_width(Size::Fill)
                         .with_padding(Spacing::all(20.0))
-                        .with_shape(card(mocha::BLUE, CornerShape::Cut(50.0), 20.0)),
+                        .with_shape(card(
+                            mocha::BLUE,
+                            CornerShape::Cut(corner_size),
+                            stroke_width,
+                        )),
                 ]),
             Node::new()
                 .with_height(Size::Fill)
@@ -278,7 +306,11 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                     Node::new()
                         .with_width(Size::Fill)
                         .with_padding(Spacing::all(20.0))
-                        .with_shape(card(mocha::YELLOW, CornerShape::InverseRound(50.0), 20.0)),
+                        .with_shape(card(
+                            mocha::YELLOW,
+                            CornerShape::InverseRound(corner_size),
+                            stroke_width,
+                        )),
                     // Squircle low smoothness
                     Node::new()
                         .with_width(Size::Fill)
@@ -286,10 +318,10 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                         .with_shape(card(
                             mocha::MAUVE,
                             CornerShape::Squircle {
-                                radius: 50.0,
+                                radius: corner_size,
                                 smoothness: 0.5,
                             },
-                            20.0,
+                            stroke_width,
                         )),
                     // Squircle high smoothness
                     Node::new()
@@ -298,10 +330,10 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                         .with_shape(card(
                             mocha::TEAL,
                             CornerShape::Squircle {
-                                radius: 50.0,
+                                radius: corner_size,
                                 smoothness: 3.0,
                             },
-                            20.0,
+                            stroke_width,
                         )),
                 ]),
         ]);
@@ -349,8 +381,9 @@ impl ApplicationHandler for App {
             } => event_loop.exit(),
 
             WindowEvent::KeyboardInput { .. } => {
-                // Debug controls (D/M/P/B/C).
-                let _handled = handle_debug_keybinds(&event, &mut self.debug_options);
+                // Debug controls (D/M/P/B/C/S).
+                let renderer = self.gpu_state.as_mut().map(|s| &mut s.renderer);
+                let _handled = handle_debug_keybinds(&event, &mut self.debug_options, renderer);
             }
 
             WindowEvent::Resized(physical_size) => {

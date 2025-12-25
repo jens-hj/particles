@@ -397,4 +397,16 @@ fn collect_debug_shapes_clipped(
             ),
         ));
     }
+
+    // Draw clip rectangle (red outline showing the clipping boundary)
+    if options.show_clip_rects {
+        out.push((
+            clip_rect,
+            clip_rect, // Don't clip the clip rect visualization itself
+            Shape::Rect(
+                StyledRect::new(Default::default(), Color::transparent())
+                    .with_stroke(Stroke::new(2.0, Color::new(1.0, 0.0, 0.0, 0.8))),
+            ),
+        ));
+    }
 }

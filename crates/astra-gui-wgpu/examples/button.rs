@@ -17,7 +17,7 @@ use astra_gui_interactive::{
     button, button_clicked, toggle, toggle_clicked, ButtonStyle, ToggleStyle,
 };
 use astra_gui_text::Engine as TextEngine;
-use astra_gui_wgpu::{EventDispatcher, InputState, InteractiveStateManager, Renderer};
+use astra_gui_wgpu::{EventDispatcher, InputState, InteractiveStateManager, RenderMode, Renderer};
 use std::sync::Arc;
 use wgpu::Trace;
 use winit::{
@@ -342,6 +342,16 @@ impl ApplicationHandler for App {
             } => match key_code {
                 winit::keyboard::KeyCode::Escape => {
                     event_loop.exit();
+                }
+                winit::keyboard::KeyCode::KeyS => {
+                    if let Some(gpu_state) = &mut self.gpu_state {
+                        let new_mode = match gpu_state.renderer.render_mode() {
+                            RenderMode::Sdf | RenderMode::Auto => RenderMode::Mesh,
+                            RenderMode::Mesh => RenderMode::Sdf,
+                        };
+                        gpu_state.renderer.set_render_mode(new_mode);
+                        println!("Render mode: {:?}", new_mode);
+                    }
                 }
                 _ => {}
             },

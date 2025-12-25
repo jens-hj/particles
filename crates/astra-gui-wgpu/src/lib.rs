@@ -20,6 +20,19 @@ use astra_gui::{FullOutput, Shape, Tessellator};
 use instance::RectInstance;
 use vertex::WgpuVertex;
 
+/// Rendering mode for rectangles
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RenderMode {
+    /// Use SDF (Signed Distance Field) rendering for analytical anti-aliasing.
+    /// Best quality, especially for strokes and rounded corners.
+    Sdf,
+    /// Use mesh tessellation for rendering.
+    /// More compatible but lower quality anti-aliasing.
+    Mesh,
+    /// Automatically choose based on shape complexity (currently defaults to SDF).
+    Auto,
+}
+
 #[cfg(feature = "text-cosmic")]
 use astra_gui_text as gui_text;
 #[cfg(feature = "text-cosmic")]
@@ -53,7 +66,7 @@ pub struct Renderer {
     index_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
-    _tessellator: Tessellator,
+    tessellator: Tessellator,
     vertex_capacity: usize,
     index_capacity: usize,
     wgpu_vertices: Vec<WgpuVertex>,
@@ -61,6 +74,9 @@ pub struct Renderer {
     // Performance optimization: track previous frame sizes to pre-allocate buffers
     last_frame_vertex_count: usize,
     last_frame_index_count: usize,
+
+    // Rendering mode configuration
+    render_mode: RenderMode,
 
     // SDF rendering pipeline (analytic anti-aliasing)
     sdf_pipeline: wgpu::RenderPipeline,
@@ -104,7 +120,17 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Create a new renderer with the default render mode (Auto/SDF)
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
+        Self::with_render_mode(device, surface_format, RenderMode::Auto)
+    }
+
+    /// Create a new renderer with a specific render mode
+    pub fn with_render_mode(
+        device: &wgpu::Device,
+        surface_format: wgpu::TextureFormat,
+        render_mode: RenderMode,
+    ) -> Self {
         // Load shader
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Astra UI Shader"),
@@ -456,12 +482,14 @@ impl Renderer {
             index_buffer,
             uniform_buffer,
             uniform_bind_group,
-            _tessellator: Tessellator::new(),
+            tessellator: Tessellator::new(),
             vertex_capacity: INITIAL_VERTEX_CAPACITY,
             index_capacity: INITIAL_INDEX_CAPACITY,
             wgpu_vertices: Vec::new(),
             last_frame_vertex_count: 0,
             last_frame_index_count: 0,
+
+            render_mode,
 
             sdf_pipeline,
             sdf_instance_buffer,
@@ -500,6 +528,16 @@ impl Renderer {
         }
     }
 
+    /// Get the current render mode
+    pub fn render_mode(&self) -> RenderMode {
+        self.render_mode
+    }
+
+    /// Set the render mode
+    pub fn set_render_mode(&mut self, mode: RenderMode) {
+        self.render_mode = mode;
+    }
+
     pub fn render(
         &mut self,
         device: &wgpu::Device,
@@ -523,16 +561,71 @@ impl Renderer {
         let mut indices: Vec<u32> = Vec::new();
         indices.reserve(self.last_frame_index_count);
 
-        let geometry_draws: Vec<ClippedDraw> = Vec::new();
+        let mut geometry_draws: Vec<ClippedDraw> = Vec::new();
 
         for clipped in &output.shapes {
             let Shape::Rect(rect) = &clipped.shape else {
                 continue;
             };
 
-            // For Phase 1: Use SDF for all rectangles (fills only, no complex strokes yet)
-            // Future: Add logic to fallback to tessellation for complex strokes
-            self.sdf_instances.push(RectInstance::from(rect));
+            // Decide whether to use SDF or mesh rendering based on render_mode
+            let use_sdf = match self.render_mode {
+                RenderMode::Sdf => true,
+                RenderMode::Mesh => false,
+                RenderMode::Auto => true, // Default to SDF for best quality
+            };
+
+            if use_sdf {
+                // Use SDF rendering (analytical anti-aliasing)
+                self.sdf_instances.push(RectInstance::from(rect));
+            } else {
+                // Use mesh tessellation - collect for batch processing
+                // (Tessellator processes all shapes at once)
+            }
+        }
+
+        // Process mesh shapes if using Mesh render mode
+        if self.render_mode == RenderMode::Mesh {
+            // Tessellate all shapes using mesh rendering
+            let mesh = self.tessellator.tessellate(&output.shapes);
+
+            if !mesh.vertices.is_empty() {
+                // Convert mesh vertices to WgpuVertex format
+                for vertex in &mesh.vertices {
+                    self.wgpu_vertices.push(WgpuVertex {
+                        pos: vertex.pos,
+                        color: [
+                            (vertex.color[0] * 255.0).round().clamp(0.0, 255.0) as u8,
+                            (vertex.color[1] * 255.0).round().clamp(0.0, 255.0) as u8,
+                            (vertex.color[2] * 255.0).round().clamp(0.0, 255.0) as u8,
+                            (vertex.color[3] * 255.0).round().clamp(0.0, 255.0) as u8,
+                        ],
+                    });
+                }
+
+                // Copy indices
+                indices.extend_from_slice(&mesh.indices);
+
+                // Create draw calls with scissor rects
+                for clipped in &output.shapes {
+                    let sc_min_x = clipped.clip_rect.min[0].max(0.0).floor() as i32;
+                    let sc_min_y = clipped.clip_rect.min[1].max(0.0).floor() as i32;
+                    let sc_max_x = clipped.clip_rect.max[0].min(screen_width).ceil() as i32;
+                    let sc_max_y = clipped.clip_rect.max[1].min(screen_height).ceil() as i32;
+
+                    let sc_w = (sc_max_x - sc_min_x).max(0) as u32;
+                    let sc_h = (sc_max_y - sc_min_y).max(0) as u32;
+
+                    if sc_w > 0 && sc_h > 0 {
+                        // Use the entire mesh for now (TODO: track per-shape indices)
+                        geometry_draws.push(ClippedDraw {
+                            scissor: (sc_min_x as u32, sc_min_y as u32, sc_w, sc_h),
+                            index_start: 0,
+                            index_end: indices.len() as u32,
+                        });
+                    }
+                }
+            }
         }
 
         // Resize vertex buffer if needed
