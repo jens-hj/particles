@@ -29,7 +29,7 @@ pub struct ToggleStyle {
 impl Default for ToggleStyle {
     fn default() -> Self {
         Self {
-            off_color: Color::rgb(0.5, 0.5, 0.5),
+            off_color: Color::rgb(0.35, 0.35, 0.35),
             on_color: Color::rgb(0.2, 0.6, 1.0),
             knob_color: Color::rgb(1.0, 1.0, 1.0),
             track_width: 50.0,
@@ -84,14 +84,16 @@ pub fn toggle(id: impl Into<String>, value: bool, disabled: bool, style: &Toggle
                 style.off_color
             }),
             corner_radius: Some(style.track_height / 2.0),
+            opacity: Some(1.0),
             ..Default::default()
         })
         .with_hover_style(Style {
-            opacity: Some(0.9),
+            fill_color: Some(Color::rgb(0.2, 0.2, 0.2)),
+            opacity: Some(0.75),
             ..Default::default()
         })
         .with_active_style(Style {
-            opacity: Some(0.8),
+            opacity: Some(0.5),
             ..Default::default()
         })
         .with_disabled_style(Style {

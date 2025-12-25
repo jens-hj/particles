@@ -3,6 +3,18 @@ use astra_gui::{Node, NodeId, Style, Transition};
 use std::collections::HashMap;
 use std::time::Instant;
 
+/// Check if two styles differ in any animatable property
+fn styles_differ(a: &Style, b: &Style) -> bool {
+    a.fill_color != b.fill_color
+        || a.stroke_color != b.stroke_color
+        || a.stroke_width != b.stroke_width
+        || a.corner_radius != b.corner_radius
+        || a.opacity != b.opacity
+        || a.text_color != b.text_color
+        || a.offset_x != b.offset_x
+        || a.offset_y != b.offset_y
+}
+
 /// Current interaction state of a node
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InteractionState {
@@ -20,6 +32,9 @@ struct NodeTransitionState {
 
     /// Previous interaction state (for detecting changes)
     previous_state: InteractionState,
+
+    /// Previous base style (for detecting property changes)
+    previous_base_style: Option<Style>,
 
     /// When the transition started
     transition_start: Option<Instant>,
@@ -78,6 +93,7 @@ impl InteractiveStateManager {
             .or_insert_with(|| NodeTransitionState {
                 current_state: InteractionState::Idle,
                 previous_state: InteractionState::Idle,
+                previous_base_style: Some(base_style.clone()),
                 transition_start: None,
                 from_style: None,
                 to_style: None,
@@ -117,10 +133,18 @@ impl InteractiveStateManager {
             }
         };
 
-        // Detect state change
-        if new_state != entry.current_state {
+        // Detect state change OR style property change
+        let state_changed = new_state != entry.current_state;
+        let style_changed = entry
+            .previous_base_style
+            .as_ref()
+            .map(|prev| styles_differ(prev, base_style))
+            .unwrap_or(true);
+
+        if state_changed || style_changed {
             entry.previous_state = entry.current_state;
             entry.current_state = new_state;
+            entry.previous_base_style = Some(base_style.clone());
             entry.from_style = entry.current_style.clone();
             entry.to_style = Some(target_style.clone());
             entry.transition_start = Some(self.current_time);
