@@ -1,8 +1,9 @@
 //! Tests stroke rendering with various widths and corner types
 
 use astra_gui::{
-    catppuccin::mocha, Color, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node,
-    Overflow, Shape, Size, Spacing, Stroke, StyledRect,
+    catppuccin::mocha, Color, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign,
+    LayoutDirection, Node, Overflow, Shape, Size, Spacing, Stroke, StyledRect, TextContent,
+    VerticalAlign,
 };
 use astra_gui_wgpu::{RenderMode, Renderer};
 use std::sync::Arc;
@@ -14,7 +15,12 @@ use winit::{
 };
 
 const DEBUG_HELP_TEXT: &str = "Debug controls:
+  M - Toggle margins (red overlay)
+  P - Toggle padding (blue overlay)
+  B - Toggle borders (green outline)
+  C - Toggle content area (yellow outline)
   R - Toggle clip rects (red outline)
+  G - Toggle gaps (purple overlay)
   D - Toggle all debug visualizations
   S - Toggle render mode (SDF/Mesh)
   ESC - Exit";
@@ -38,9 +44,34 @@ fn handle_debug_keybinds(
     };
 
     match *key_code {
+        winit::keyboard::KeyCode::KeyM => {
+            debug_options.show_margins = !debug_options.show_margins;
+            println!("Margins: {}", debug_options.show_margins);
+            true
+        }
+        winit::keyboard::KeyCode::KeyP => {
+            debug_options.show_padding = !debug_options.show_padding;
+            println!("Padding: {}", debug_options.show_padding);
+            true
+        }
+        winit::keyboard::KeyCode::KeyB => {
+            debug_options.show_borders = !debug_options.show_borders;
+            println!("Borders: {}", debug_options.show_borders);
+            true
+        }
+        winit::keyboard::KeyCode::KeyC => {
+            debug_options.show_content_area = !debug_options.show_content_area;
+            println!("Content area: {}", debug_options.show_content_area);
+            true
+        }
         winit::keyboard::KeyCode::KeyR => {
             debug_options.show_clip_rects = !debug_options.show_clip_rects;
             println!("Clip rects: {}", debug_options.show_clip_rects);
+            true
+        }
+        winit::keyboard::KeyCode::KeyG => {
+            debug_options.show_gaps = !debug_options.show_gaps;
+            println!("Gaps: {}", debug_options.show_gaps);
             true
         }
         winit::keyboard::KeyCode::KeyD => {
@@ -289,12 +320,36 @@ fn create_stroke_test_ui(width: f32, height: f32, debug_options: &DebugOptions) 
         );
     }
 
-    let root = Node::new()
+    // Create help bar at the bottom
+    let help_text = Node::new()
+        .with_height(Size::px(30.0))
+        .with_padding(Spacing::horizontal(10.0))
+        .with_shape(Shape::Rect(StyledRect::new(
+            Default::default(),
+            mocha::SURFACE0,
+        )))
+        .with_content(Content::Text(
+            TextContent::new(DEBUG_HELP_TEXT)
+                .with_font_size(12.0)
+                .with_color(mocha::TEXT)
+                .with_h_align(HorizontalAlign::Left)
+                .with_v_align(VerticalAlign::Center),
+        ));
+
+    let content = Node::new()
         .with_padding(Spacing::all(60.0))
         .with_gap(60.0)
+        .with_width(Size::Fill)
+        .with_height(Size::Fill)
         .with_layout_direction(LayoutDirection::Vertical)
         .with_overflow(Overflow::Visible)
         .with_children(rows);
+
+    let root = Node::new()
+        .with_width(Size::Fill)
+        .with_height(Size::Fill)
+        .with_layout_direction(LayoutDirection::Vertical)
+        .with_children(vec![content, help_text]);
 
     FullOutput::from_node_with_debug(root, (width, height), Some(*debug_options))
 }

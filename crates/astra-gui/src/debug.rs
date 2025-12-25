@@ -11,6 +11,8 @@ pub struct DebugOptions {
     pub show_content_area: bool,
     /// Show clip rectangles (red outline)
     pub show_clip_rects: bool,
+    /// Show gaps between children (purple overlay)
+    pub show_gaps: bool,
 }
 
 impl DebugOptions {
@@ -22,6 +24,7 @@ impl DebugOptions {
             show_borders: false,
             show_content_area: false,
             show_clip_rects: false,
+            show_gaps: false,
         }
     }
 
@@ -33,6 +36,7 @@ impl DebugOptions {
             show_borders: true,
             show_content_area: true,
             show_clip_rects: true,
+            show_gaps: true,
         }
     }
 
@@ -66,6 +70,12 @@ impl DebugOptions {
         self
     }
 
+    /// Enable gap visualization
+    pub const fn with_gaps(mut self, enabled: bool) -> Self {
+        self.show_gaps = enabled;
+        self
+    }
+
     /// Check if any debug visualization is enabled
     pub const fn is_enabled(&self) -> bool {
         self.show_margins
@@ -73,5 +83,6 @@ impl DebugOptions {
             || self.show_borders
             || self.show_content_area
             || self.show_clip_rects
+            || self.show_gaps
     }
 }

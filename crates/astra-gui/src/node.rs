@@ -325,6 +325,16 @@ impl Node {
         self.margin
     }
 
+    /// Get the gap between children
+    pub(crate) fn gap(&self) -> f32 {
+        self.gap
+    }
+
+    /// Get the layout direction
+    pub(crate) fn layout_direction(&self) -> LayoutDirection {
+        self.layout_direction
+    }
+
     /// Get the children
     pub(crate) fn children(&self) -> &[Node] {
         &self.children

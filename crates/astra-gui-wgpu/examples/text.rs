@@ -18,11 +18,13 @@ use winit::{
 };
 
 const DEBUG_HELP_TEXT: &str = "Debug controls:
+  M - Toggle margins (red overlay)
+  P - Toggle padding (blue overlay)
+  B - Toggle borders (green outline)
+  C - Toggle content area (yellow outline)
+  R - Toggle clip rects (red outline)
+  G - Toggle gaps (purple overlay)
   D - Toggle all debug visualizations
-  M - Toggle margins (red)
-  P - Toggle padding (blue)
-  B - Toggle borders (green)
-  C - Toggle content area (yellow)
   S - Toggle render mode (SDF/Mesh)
   ESC - Exit";
 
@@ -63,6 +65,16 @@ fn handle_debug_keybinds(
         winit::keyboard::KeyCode::KeyC => {
             debug_options.show_content_area = !debug_options.show_content_area;
             println!("Content area: {}", debug_options.show_content_area);
+            true
+        }
+        winit::keyboard::KeyCode::KeyR => {
+            debug_options.show_clip_rects = !debug_options.show_clip_rects;
+            println!("Clip rects: {}", debug_options.show_clip_rects);
+            true
+        }
+        winit::keyboard::KeyCode::KeyG => {
+            debug_options.show_gaps = !debug_options.show_gaps;
+            println!("Gaps: {}", debug_options.show_gaps);
             true
         }
         winit::keyboard::KeyCode::KeyD => {
@@ -422,8 +434,8 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                 .with_padding(Spacing::all(14.0))
                 .with_shape(panel(mocha::SURFACE0))
                 .with_children(vec![label(
-                    "Keys: D/M/P/B/C toggle debug overlays; Esc quit.",
-                    15.0,
+                    DEBUG_HELP_TEXT,
+                    12.0,
                     mocha::SUBTEXT0,
                     HorizontalAlign::Left,
                     VerticalAlign::Center,

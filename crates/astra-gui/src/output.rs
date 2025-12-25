@@ -190,6 +190,13 @@ fn collect_clipped_shapes_with_opacity(
         }
     }
 
+    // Collect gap debug shapes between children
+    if let Some(options) = debug_options {
+        if options.show_gaps && node.gap() > 0.0 {
+            collect_gap_debug_shapes(node, effective_clip_rect, &options, out);
+        }
+    }
+
     for child in node.children() {
         collect_clipped_shapes_with_opacity(
             child,
@@ -407,6 +414,69 @@ fn collect_debug_shapes_clipped(
                 StyledRect::new(Default::default(), Color::transparent())
                     .with_stroke(Stroke::new(2.0, Color::new(1.0, 0.0, 0.0, 0.8))),
             ),
+        ));
+    }
+}
+
+fn collect_gap_debug_shapes(
+    node: &Node,
+    clip_rect: Rect,
+    _options: &crate::debug::DebugOptions,
+    out: &mut Vec<(Rect, Rect, Shape)>,
+) {
+    use crate::color::Color;
+    use crate::layout::LayoutDirection;
+    use crate::primitives::StyledRect;
+
+    let children = node.children();
+    if children.len() < 2 {
+        return; // No gaps to visualize if fewer than 2 children
+    }
+
+    let layout_direction = node.layout_direction();
+
+    // Draw gap rectangles between consecutive children
+    for i in 0..children.len() - 1 {
+        let current_child = &children[i];
+        let next_child = &children[i + 1];
+
+        // Get computed layouts for both children
+        let Some(current_layout) = current_child.computed_layout() else {
+            continue;
+        };
+        let Some(next_layout) = next_child.computed_layout() else {
+            continue;
+        };
+
+        let current_rect = current_layout.rect;
+        let next_rect = next_layout.rect;
+
+        // Calculate gap rect based on layout direction
+        let gap_rect = match layout_direction {
+            LayoutDirection::Horizontal => {
+                // Gap is between right edge of current and left edge of next
+                Rect::new(
+                    [current_rect.max[0], current_rect.min[1]],
+                    [next_rect.min[0], current_rect.max[1]],
+                )
+            }
+            LayoutDirection::Vertical => {
+                // Gap is between bottom edge of current and top edge of next
+                Rect::new(
+                    [current_rect.min[0], current_rect.max[1]],
+                    [current_rect.max[0], next_rect.min[1]],
+                )
+            }
+        };
+
+        // Draw purple semi-transparent rectangle for gap
+        out.push((
+            gap_rect,
+            clip_rect,
+            Shape::Rect(StyledRect::new(
+                Default::default(),
+                Color::new(0.5, 0.0, 0.5, 0.3), // Purple with 30% opacity
+            )),
         ));
     }
 }

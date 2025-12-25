@@ -1,7 +1,8 @@
 ///! Demonstrates the node-based layout system with nested elements
 use astra_gui::{
-    catppuccin::mocha, CornerShape, DebugOptions, FullOutput, LayoutDirection, Node, Offset, Shape,
-    Size, Spacing, Stroke, StyledRect,
+    catppuccin::mocha, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign,
+    LayoutDirection, Node, Offset, Shape, Size, Spacing, Stroke, StyledRect, TextContent,
+    VerticalAlign,
 };
 use astra_gui_wgpu::{RenderMode, Renderer};
 use std::sync::Arc;
@@ -13,11 +14,13 @@ use winit::{
 };
 
 const DEBUG_HELP_TEXT: &str = "Debug controls:
+  M - Toggle margins (red overlay)
+  P - Toggle padding (blue overlay)
+  B - Toggle borders (green outline)
+  C - Toggle content area (yellow outline)
+  R - Toggle clip rects (red outline)
+  G - Toggle gaps (purple overlay)
   D - Toggle all debug visualizations
-  M - Toggle margins (red)
-  P - Toggle padding (blue)
-  B - Toggle borders (green)
-  C - Toggle content area (yellow)
   S - Toggle render mode (SDF/Mesh)
   ESC - Exit";
 
@@ -58,6 +61,16 @@ fn handle_debug_keybinds(
         winit::keyboard::KeyCode::KeyC => {
             debug_options.show_content_area = !debug_options.show_content_area;
             println!("Content area: {}", debug_options.show_content_area);
+            true
+        }
+        winit::keyboard::KeyCode::KeyR => {
+            debug_options.show_clip_rects = !debug_options.show_clip_rects;
+            println!("Clip rects: {}", debug_options.show_clip_rects);
+            true
+        }
+        winit::keyboard::KeyCode::KeyG => {
+            debug_options.show_gaps = !debug_options.show_gaps;
+            println!("Gaps: {}", debug_options.show_gaps);
             true
         }
         winit::keyboard::KeyCode::KeyD => {
@@ -406,8 +419,30 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                 ]),
         ]);
 
+    // Create help bar at the bottom
+    let help_text = Node::new()
+        .with_height(Size::px(30.0))
+        .with_padding(Spacing::horizontal(10.0))
+        .with_shape(Shape::Rect(StyledRect::new(
+            Default::default(),
+            mocha::SURFACE0,
+        )))
+        .with_content(Content::Text(
+            TextContent::new(DEBUG_HELP_TEXT)
+                .with_font_size(12.0)
+                .with_color(mocha::TEXT)
+                .with_h_align(HorizontalAlign::Left)
+                .with_v_align(VerticalAlign::Center),
+        ));
+
+    let final_root = Node::new()
+        .with_width(Size::Fill)
+        .with_height(Size::Fill)
+        .with_layout_direction(LayoutDirection::Vertical)
+        .with_children(vec![root, help_text]);
+
     FullOutput::from_node_with_debug(
-        root,
+        final_root,
         (width, height),
         if debug_options.is_enabled() {
             Some(*debug_options)

@@ -10,8 +10,8 @@
 //! - ESC: quit
 
 use astra_gui::{
-    catppuccin::mocha, Content, FullOutput, HorizontalAlign, LayoutDirection, Node, Rect, Size,
-    Spacing, TextContent, VerticalAlign,
+    catppuccin::mocha, Content, DebugOptions, FullOutput, HorizontalAlign, LayoutDirection, Node,
+    Rect, Shape, Size, Spacing, StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_interactive::{
     button, button_clicked, toggle, toggle_clicked, ButtonStyle, ToggleStyle,
@@ -40,6 +40,7 @@ struct App {
     // Application state
     counter: i32,
     buttons_disabled: bool,
+    debug_options: DebugOptions,
 }
 
 struct GpuState {
@@ -61,6 +62,7 @@ impl App {
             interactive_state_manager: InteractiveStateManager::new(),
             counter: 0,
             buttons_disabled: false,
+            debug_options: DebugOptions::none(),
         }
     }
 
@@ -114,7 +116,11 @@ impl App {
         let output = FullOutput::from_node_with_debug_and_measurer(
             ui,
             (size.width as f32, size.height as f32),
-            None,
+            if self.debug_options.is_enabled() {
+                Some(self.debug_options)
+            } else {
+                None
+            },
             Some(&mut self.text_engine),
         );
 
@@ -296,6 +302,24 @@ impl App {
                         v_align: VerticalAlign::Center,
                     })),
             )
+            .with_child(
+                // Help bar
+                Node::new()
+                    .with_width(Size::Fill)
+                    .with_height(Size::px(30.0))
+                    .with_padding(Spacing::horizontal(10.0))
+                    .with_shape(Shape::Rect(StyledRect::new(
+                        Default::default(),
+                        mocha::SURFACE0,
+                    )))
+                    .with_content(Content::Text(TextContent {
+                        text: "M:Margins P:Padding B:Borders C:Content R:ClipRects G:Gaps D:All S:RenderMode ESC:Exit".to_string(),
+                        font_size: 12.0,
+                        color: mocha::TEXT,
+                        h_align: HorizontalAlign::Left,
+                        v_align: VerticalAlign::Center,
+                    })),
+            )
     }
 }
 
@@ -342,6 +366,39 @@ impl ApplicationHandler for App {
             } => match key_code {
                 winit::keyboard::KeyCode::Escape => {
                     event_loop.exit();
+                }
+                winit::keyboard::KeyCode::KeyM => {
+                    self.debug_options.show_margins = !self.debug_options.show_margins;
+                    println!("Margins: {}", self.debug_options.show_margins);
+                }
+                winit::keyboard::KeyCode::KeyP => {
+                    self.debug_options.show_padding = !self.debug_options.show_padding;
+                    println!("Padding: {}", self.debug_options.show_padding);
+                }
+                winit::keyboard::KeyCode::KeyB => {
+                    self.debug_options.show_borders = !self.debug_options.show_borders;
+                    println!("Borders: {}", self.debug_options.show_borders);
+                }
+                winit::keyboard::KeyCode::KeyC => {
+                    self.debug_options.show_content_area = !self.debug_options.show_content_area;
+                    println!("Content area: {}", self.debug_options.show_content_area);
+                }
+                winit::keyboard::KeyCode::KeyR => {
+                    self.debug_options.show_clip_rects = !self.debug_options.show_clip_rects;
+                    println!("Clip rects: {}", self.debug_options.show_clip_rects);
+                }
+                winit::keyboard::KeyCode::KeyG => {
+                    self.debug_options.show_gaps = !self.debug_options.show_gaps;
+                    println!("Gaps: {}", self.debug_options.show_gaps);
+                }
+                winit::keyboard::KeyCode::KeyD => {
+                    if self.debug_options.is_enabled() {
+                        self.debug_options = DebugOptions::none();
+                        println!("Debug: OFF");
+                    } else {
+                        self.debug_options = DebugOptions::all();
+                        println!("Debug: ALL ON");
+                    }
                 }
                 winit::keyboard::KeyCode::KeyS => {
                     if let Some(gpu_state) = &mut self.gpu_state {
