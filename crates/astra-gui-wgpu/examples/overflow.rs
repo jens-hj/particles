@@ -439,7 +439,7 @@ fn create_demo_ui(
                 .with_shape(panel(mocha::SURFACE0))
                 .with_children(vec![label(
                     DEBUG_HELP_TEXT,
-                    12.0,
+                    16.0,
                     mocha::SUBTEXT0,
                     HorizontalAlign::Left,
                     VerticalAlign::Center,

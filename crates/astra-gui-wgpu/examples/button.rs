@@ -312,13 +312,13 @@ impl App {
                         Default::default(),
                         mocha::SURFACE0,
                     )))
-                    .with_content(Content::Text(TextContent {
-                        text: "M:Margins P:Padding B:Borders C:Content R:ClipRects G:Gaps D:All S:RenderMode ESC:Exit".to_string(),
-                        font_size: 12.0,
-                        color: mocha::TEXT,
-                        h_align: HorizontalAlign::Left,
-                        v_align: VerticalAlign::Center,
-                    })),
+                    .with_content(Content::Text(
+                        TextContent::new(DEBUG_HELP_TEXT)
+                            .with_font_size(16.0)
+                            .with_color(mocha::TEXT)
+                            .with_h_align(HorizontalAlign::Left)
+                            .with_v_align(VerticalAlign::Center),
+                    )),
             )
     }
 }

@@ -272,8 +272,8 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
     //  - Row 2: 3 equal-width cards
     //
     // Sizes are chosen to roughly match the old shape-based showcase.
-    let corner_size = 100.0;
-    let stroke_width = 40.0;
+    let corner_size = 50.0;
+    let stroke_width = 20.0;
 
     // Create help bar at the bottom
     let help_text = Node::new()
@@ -285,7 +285,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
         )))
         .with_content(Content::Text(
             TextContent::new(DEBUG_HELP_TEXT)
-                .with_font_size(12.0)
+                .with_font_size(16.0)
                 .with_color(mocha::TEXT)
                 .with_h_align(HorizontalAlign::Left)
                 .with_v_align(VerticalAlign::Center),

@@ -429,7 +429,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
         )))
         .with_content(Content::Text(
             TextContent::new(DEBUG_HELP_TEXT)
-                .with_font_size(12.0)
+                .with_font_size(16.0)
                 .with_color(mocha::TEXT)
                 .with_h_align(HorizontalAlign::Left)
                 .with_v_align(VerticalAlign::Center),
