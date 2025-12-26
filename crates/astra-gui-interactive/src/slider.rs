@@ -237,11 +237,20 @@ pub fn slider_drag(
                 // Apply step if provided
                 if let Some(step_size) = step {
                     if step_size > 0.0 {
-                        // Round to nearest step
-                        let steps_from_start = ((new_value - range.start()) / step_size).round();
-                        new_value = range.start() + steps_from_start * step_size;
-                        // Clamp to range in case rounding pushed us out of bounds
-                        new_value = new_value.clamp(*range.start(), *range.end());
+                        // Snap to range boundaries if we're very close (within 2% of slider)
+                        // This allows reaching min/max even when they're not divisible by step
+                        if percentage < 0.02 {
+                            new_value = *range.start();
+                        } else if percentage > 0.98 {
+                            new_value = *range.end();
+                        } else {
+                            // Round to nearest step
+                            let steps_from_start =
+                                ((new_value - range.start()) / step_size).round();
+                            new_value = range.start() + steps_from_start * step_size;
+                            // Clamp to range in case rounding pushed us out of bounds
+                            new_value = new_value.clamp(*range.start(), *range.end());
+                        }
                     }
                 }
 

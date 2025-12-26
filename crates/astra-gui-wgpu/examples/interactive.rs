@@ -154,7 +154,7 @@ impl App {
             interactive_state_manager: InteractiveStateManager::new(),
             counter: 0,
             buttons_disabled: false,
-            slider_value: 15.0,
+            slider_value: 7.0,
             continuous_slider_value: 50.0,
             debug_options: DebugOptions::none(),
         }
@@ -213,7 +213,7 @@ impl App {
             &(0.0..=30.0),
             &events,
             &SliderStyle::default(),
-            Some(5.0), // Step by 5.0
+            Some(7.0), // Step by 5.0
         ) {
             println!("Stepped slider value: {:.1}", self.slider_value);
         }
