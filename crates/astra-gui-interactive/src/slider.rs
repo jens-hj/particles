@@ -192,6 +192,7 @@ pub fn slider(
 /// * `range` - The valid range of values
 /// * `events` - Slice of targeted events from this frame
 /// * `style` - The slider style (needed for track width calculation)
+/// * `step` - Optional step size. If provided, values will snap to multiples of this increment
 ///
 /// # Returns
 /// `true` if the value was changed, `false` otherwise
@@ -201,6 +202,7 @@ pub fn slider_drag(
     range: &RangeInclusive<f32>,
     events: &[TargetedEvent],
     style: &SliderStyle,
+    step: Option<f32>,
 ) -> bool {
     let container_id = format!("{}_hitbox", slider_id);
 
@@ -230,7 +232,18 @@ pub fn slider_drag(
                 };
 
                 let range_size = range.end() - range.start();
-                let new_value = range.start() + range_size * percentage;
+                let mut new_value = range.start() + range_size * percentage;
+
+                // Apply step if provided
+                if let Some(step_size) = step {
+                    if step_size > 0.0 {
+                        // Round to nearest step
+                        let steps_from_start = ((new_value - range.start()) / step_size).round();
+                        new_value = range.start() + steps_from_start * step_size;
+                        // Clamp to range in case rounding pushed us out of bounds
+                        new_value = new_value.clamp(*range.start(), *range.end());
+                    }
+                }
 
                 if (*value - new_value).abs() > f32::EPSILON {
                     *value = new_value;

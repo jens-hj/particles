@@ -131,6 +131,7 @@ struct App {
     counter: i32,
     buttons_disabled: bool,
     slider_value: f32,
+    continuous_slider_value: f32,
     debug_options: DebugOptions,
 }
 
@@ -153,7 +154,8 @@ impl App {
             interactive_state_manager: InteractiveStateManager::new(),
             counter: 0,
             buttons_disabled: false,
-            slider_value: 50.0,
+            slider_value: 15.0,
+            continuous_slider_value: 50.0,
             debug_options: DebugOptions::none(),
         }
     }
@@ -204,15 +206,31 @@ impl App {
             );
         }
 
-        // Handle slider drag
+        // Handle stepped slider drag
         if slider_drag(
-            "value_slider",
+            "stepped_slider",
             &mut self.slider_value,
+            &(0.0..=30.0),
+            &events,
+            &SliderStyle::default(),
+            Some(5.0), // Step by 5.0
+        ) {
+            println!("Stepped slider value: {:.1}", self.slider_value);
+        }
+
+        // Handle continuous slider drag
+        if slider_drag(
+            "continuous_slider",
+            &mut self.continuous_slider_value,
             &(0.0..=100.0),
             &events,
             &SliderStyle::default(),
+            None, // No stepping - continuous
         ) {
-            println!("Slider value: {:.1}", self.slider_value);
+            println!(
+                "Continuous slider value: {:.1}",
+                self.continuous_slider_value
+            );
         }
 
         // Render
@@ -387,7 +405,7 @@ impl App {
                         h_align: HorizontalAlign::Center,
                         v_align: VerticalAlign::Center,
                     })),
-                // Slider section
+                // Stepped slider section
                 Node::new()
                     .with_width(Size::Fill)
                     .with_layout_direction(Layout::Horizontal)
@@ -396,33 +414,29 @@ impl App {
                         // Spacer
                         Node::new().with_width(Size::Fill),
                     )
-                    .with_child(
+                    .with_children(vec![
                         // Label
                         Node::new()
-                            .with_width(Size::FitContent)
+                            .with_width(Size::px(150.0))
                             .with_height(Size::FitContent)
                             .with_content(Content::Text(TextContent {
-                                text: "Slider value:".to_string(),
+                                text: "Stepped (5.0):".to_string(),
                                 font_size: 20.0,
                                 color: mocha::TEXT,
-                                h_align: HorizontalAlign::Center,
+                                h_align: HorizontalAlign::Right,
                                 v_align: VerticalAlign::Center,
                             })),
-                    )
-                    .with_child(
                         // Slider
                         slider(
-                            "value_slider",
+                            "stepped_slider",
                             self.slider_value,
-                            0.0..=100.0,
+                            0.0..=30.0,
                             false,
                             &SliderStyle::default(),
                         ),
-                    )
-                    .with_child(
                         // Value display
                         Node::new()
-                            .with_width(Size::px(50.0))
+                            .with_width(Size::px(55.0))
                             .with_height(Size::FitContent)
                             .with_content(Content::Text(TextContent {
                                 text: format!("{:.0}", self.slider_value),
@@ -431,11 +445,52 @@ impl App {
                                 h_align: HorizontalAlign::Right,
                                 v_align: VerticalAlign::Center,
                             })),
-                    )
+                        // Spacer
+                        Node::new().with_width(Size::Fill),
+                    ]),
+                // Continuous slider section
+                Node::new()
+                    .with_width(Size::Fill)
+                    .with_layout_direction(Layout::Horizontal)
+                    .with_gap(16.0)
                     .with_child(
                         // Spacer
                         Node::new().with_width(Size::Fill),
-                    ),
+                    )
+                    .with_children(vec![
+                        // Label
+                        Node::new()
+                            .with_width(Size::px(150.0))
+                            .with_height(Size::FitContent)
+                            .with_content(Content::Text(TextContent {
+                                text: "Continuous:".to_string(),
+                                font_size: 20.0,
+                                color: mocha::TEXT,
+                                h_align: HorizontalAlign::Right,
+                                v_align: VerticalAlign::Center,
+                            })),
+                        // Slider
+                        slider(
+                            "continuous_slider",
+                            self.continuous_slider_value,
+                            0.0..=100.0,
+                            false,
+                            &SliderStyle::default(),
+                        ),
+                        // Value display
+                        Node::new()
+                            .with_width(Size::px(55.0))
+                            .with_height(Size::FitContent)
+                            .with_content(Content::Text(TextContent {
+                                text: format!("{:.2}", self.continuous_slider_value),
+                                font_size: 20.0,
+                                color: mocha::LAVENDER,
+                                h_align: HorizontalAlign::Right,
+                                v_align: VerticalAlign::Center,
+                            })),
+                        // Spacer
+                        Node::new().with_width(Size::Fill),
+                    ]),
                 // Spacer
                 Node::new().with_height(Size::Fill),
                 // Help bar
