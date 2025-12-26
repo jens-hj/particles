@@ -823,7 +823,7 @@ pub fn build_diagnostics_panel(
     let container = Node::new().with_padding(Spacing::all(10.0)).with_child(
         Node::new()
             .with_shape(Shape::Rect(
-                StyledRect::new(Default::default(), mocha::BASE)
+                StyledRect::new(Default::default(), mocha::BASE.with_alpha(0.99))
                     .with_corner_shape(CornerShape::Cut(20.0))
                     .with_stroke(Stroke::new(3.0, mocha::SURFACE0)),
             ))

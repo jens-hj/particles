@@ -45,9 +45,15 @@ impl Color {
         )
     }
 
-    /// with alpha builder method
-    pub fn with_alpha(mut self, alpha: u8) -> Self {
+    /// with alpha builder method taking u8
+    pub fn with_alpha_u8(mut self, alpha: u8) -> Self {
         self.a = alpha as f32 / 255.0;
+        self
+    }
+
+    /// with alpha builder method taking f32
+    pub fn with_alpha(mut self, alpha: f32) -> Self {
+        self.a = alpha;
         self
     }
 }

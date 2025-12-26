@@ -1,12 +1,11 @@
-//! Interactive button and toggle example
+//! Interactive components example
 //!
-//! Demonstrates button and toggle components with hover and click states.
-//!
-//! Click buttons to change the counter, use toggle to enable/disable.
+//! Demonstrates button, toggle, and slider components with hover and click states.
 //!
 //! Controls:
 //! - Click +/- buttons to change counter
 //! - Click toggle to enable/disable buttons
+//! - Drag slider to adjust value
 //! - ESC: quit
 
 use astra_gui::{
@@ -14,7 +13,8 @@ use astra_gui::{
     Rect, Shape, Size, Spacing, StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_interactive::{
-    button, button_clicked, toggle, toggle_clicked, ButtonStyle, ToggleStyle,
+    button, button_clicked, slider, slider_drag, toggle, toggle_clicked, ButtonStyle, SliderStyle,
+    ToggleStyle,
 };
 use astra_gui_text::Engine as TextEngine;
 use astra_gui_wgpu::{EventDispatcher, InputState, InteractiveStateManager, RenderMode, Renderer};
@@ -130,6 +130,7 @@ struct App {
     // Application state
     counter: i32,
     buttons_disabled: bool,
+    slider_value: f32,
     debug_options: DebugOptions,
 }
 
@@ -152,6 +153,7 @@ impl App {
             interactive_state_manager: InteractiveStateManager::new(),
             counter: 0,
             buttons_disabled: false,
+            slider_value: 50.0,
             debug_options: DebugOptions::none(),
         }
     }
@@ -200,6 +202,17 @@ impl App {
                     "enabled"
                 }
             );
+        }
+
+        // Handle slider drag
+        if slider_drag(
+            "value_slider",
+            &mut self.slider_value,
+            &(0.0..=100.0),
+            &events,
+            &SliderStyle::default(),
+        ) {
+            println!("Slider value: {:.1}", self.slider_value);
         }
 
         // Render
@@ -284,8 +297,9 @@ impl App {
             .with_height(Size::Fill)
             .with_layout_direction(LayoutDirection::Vertical)
             .with_gap(24.0)
-            .with_padding(Spacing::all(48.0))
-            .with_child(
+            .with_children(vec![
+                // Spacer
+                Node::new().with_height(Size::Fill),
                 // Title
                 Node::new()
                     .with_width(Size::Fill)
@@ -296,8 +310,6 @@ impl App {
                         h_align: HorizontalAlign::Center,
                         v_align: VerticalAlign::Center,
                     })),
-            )
-            .with_child(
                 // Counter display
                 Node::new()
                     .with_width(Size::Fill)
@@ -308,8 +320,6 @@ impl App {
                         h_align: HorizontalAlign::Center,
                         v_align: VerticalAlign::Center,
                     })),
-            )
-            .with_child(
                 // Centered button container
                 Node::new()
                     .with_width(Size::Fill)
@@ -319,7 +329,7 @@ impl App {
                         // Spacer
                         Node::new().with_width(Size::Fill),
                     )
-                    .with_child(
+                    .with_children(vec![
                         // Decrement Button
                         button(
                             "decrement_btn",
@@ -327,8 +337,6 @@ impl App {
                             self.buttons_disabled,
                             &ButtonStyle::default(),
                         ),
-                    )
-                    .with_child(
                         // Increment Button
                         button(
                             "increment_btn",
@@ -336,14 +344,50 @@ impl App {
                             self.buttons_disabled,
                             &ButtonStyle::default(),
                         ),
-                    )
-                    .with_child(
                         // Spacer
                         Node::new().with_width(Size::Fill),
-                    ),
-            )
-            .with_child(
+                    ]),
                 // Toggle container
+                Node::new()
+                    .with_width(Size::Fill)
+                    .with_layout_direction(LayoutDirection::Horizontal)
+                    .with_gap(16.0)
+                    .with_children(vec![
+                        // Spacer
+                        Node::new().with_width(Size::Fill),
+                        // Label
+                        Node::new()
+                            .with_width(Size::FitContent)
+                            .with_height(Size::FitContent)
+                            .with_content(Content::Text(TextContent {
+                                text: "Enable buttons:".to_string(),
+                                font_size: 20.0,
+                                color: mocha::TEXT,
+                                h_align: HorizontalAlign::Center,
+                                v_align: VerticalAlign::Center,
+                            })),
+                        // Toggle Switch
+                        toggle(
+                            "enable_toggle",
+                            !self.buttons_disabled, // Toggle is ON when buttons are enabled
+                            false,                  // Toggle itself is never disabled
+                            &ToggleStyle::default(),
+                        ),
+                        // Spacer
+                        Node::new().with_width(Size::Fill),
+                    ]),
+                // Instructions
+                Node::new()
+                    .with_width(Size::Fill)
+                    .with_content(Content::Text(TextContent {
+                        text: "Use the toggle switch to enable/disable the counter buttons!"
+                            .to_string(),
+                        font_size: 16.0,
+                        color: mocha::SUBTEXT0,
+                        h_align: HorizontalAlign::Center,
+                        v_align: VerticalAlign::Center,
+                    })),
+                // Slider section
                 Node::new()
                     .with_width(Size::Fill)
                     .with_layout_direction(LayoutDirection::Horizontal)
@@ -358,7 +402,7 @@ impl App {
                             .with_width(Size::FitContent)
                             .with_height(Size::FitContent)
                             .with_content(Content::Text(TextContent {
-                                text: "Enable buttons:".to_string(),
+                                text: "Slider value:".to_string(),
                                 font_size: 20.0,
                                 color: mocha::TEXT,
                                 h_align: HorizontalAlign::Center,
@@ -366,33 +410,34 @@ impl App {
                             })),
                     )
                     .with_child(
-                        // Toggle Switch
-                        toggle(
-                            "enable_toggle",
-                            !self.buttons_disabled, // Toggle is ON when buttons are enabled
-                            false,                  // Toggle itself is never disabled
-                            &ToggleStyle::default(),
+                        // Slider
+                        slider(
+                            "value_slider",
+                            self.slider_value,
+                            0.0..=100.0,
+                            false,
+                            &SliderStyle::default(),
                         ),
+                    )
+                    .with_child(
+                        // Value display
+                        Node::new()
+                            .with_width(Size::FitContent)
+                            .with_height(Size::FitContent)
+                            .with_content(Content::Text(TextContent {
+                                text: format!("{:.0}", self.slider_value),
+                                font_size: 20.0,
+                                color: mocha::LAVENDER,
+                                h_align: HorizontalAlign::Center,
+                                v_align: VerticalAlign::Center,
+                            })),
                     )
                     .with_child(
                         // Spacer
                         Node::new().with_width(Size::Fill),
                     ),
-            )
-            .with_child(
-                // Instructions
-                Node::new()
-                    .with_width(Size::Fill)
-                    .with_content(Content::Text(TextContent {
-                        text: "Use the toggle switch to enable/disable the counter buttons!"
-                            .to_string(),
-                        font_size: 16.0,
-                        color: mocha::SUBTEXT0,
-                        h_align: HorizontalAlign::Center,
-                        v_align: VerticalAlign::Center,
-                    })),
-            )
-            .with_child(
+                // Spacer
+                Node::new().with_height(Size::Fill),
                 // Help bar
                 Node::new()
                     .with_width(Size::Fill)
@@ -409,7 +454,7 @@ impl App {
                             .with_h_align(HorizontalAlign::Left)
                             .with_v_align(VerticalAlign::Center),
                     )),
-            )
+            ])
     }
 }
 
@@ -420,7 +465,7 @@ impl ApplicationHandler for App {
         }
 
         let window_attributes = Window::default_attributes()
-            .with_title("Interactive Button Example - Astra GUI")
+            .with_title("Interactive Components - Astra GUI")
             .with_inner_size(winit::dpi::LogicalSize::new(800, 600));
 
         let window = Arc::new(
