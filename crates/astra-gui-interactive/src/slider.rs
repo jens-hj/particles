@@ -3,7 +3,7 @@
 //! Provides a draggable slider for selecting values within a range.
 
 use astra_gui::{
-    catppuccin::mocha, Color, CornerShape, LayoutDirection, Node, NodeId, Rect, Size, Style,
+    catppuccin::mocha, Color, CornerShape, Layout, Node, NodeId, Offset, Rect, Shape, Size, Style,
     StyledRect, Transition,
 };
 use astra_gui_wgpu::{InteractionEvent, TargetedEvent};
@@ -34,13 +34,13 @@ impl Default for SliderStyle {
     fn default() -> Self {
         Self {
             track_color: mocha::SURFACE0,
-            filled_color: mocha::MAUVE,
-            thumb_color: mocha::TEXT,
-            thumb_hover_color: mocha::LAVENDER,
-            thumb_active_color: mocha::MAUVE,
+            filled_color: mocha::LAVENDER,
+            thumb_color: mocha::BASE,
+            thumb_hover_color: mocha::SURFACE0,
+            thumb_active_color: mocha::MAUVE.with_alpha(0.0),
             track_width: 200.0,
-            track_height: 8.0,
-            thumb_size: 20.0,
+            track_height: 30.0,
+            thumb_size: 26.0,
         }
     }
 }
@@ -79,29 +79,31 @@ pub fn slider(
     };
 
     // Calculate thumb position
-    let usable_width = style.track_width - style.thumb_size;
-    let thumb_offset_x = usable_width * percentage;
+    let thumb_inset = (style.track_height - style.thumb_size) / 2.0;
+    let usable_width =
+        style.track_width - style.thumb_size - (style.track_height - style.thumb_size) * 2.0;
+    let thumb_offset_x =
+        (usable_width - (style.thumb_size - style.track_height)) * percentage + thumb_inset;
 
     // Calculate filled width
-    let filled_width = style.track_width * percentage;
+    let filled_width = thumb_offset_x + style.track_height - thumb_inset;
 
-    // Track container - positions everything
+    // Create a wrapper that just handles the sizing
+    // We'll use a single interactive container that captures all events
     Node::new()
-        .with_id(NodeId::new(format!("{}_container", id_str)))
         .with_width(Size::px(style.track_width))
         .with_height(Size::px(style.thumb_size.max(style.track_height)))
-        .with_layout_direction(LayoutDirection::Horizontal)
-        // Track background (unfilled)
-        .with_child(
+        .with_layout_direction(Layout::Stack) // Stack the visual elements
+        // Track background (unfilled) - no ID so events go to container
+        .with_children(vec![
             Node::new()
-                .with_id(NodeId::new(format!("{}_track", id_str)))
                 .with_width(Size::px(style.track_width))
                 .with_height(Size::px(style.track_height))
-                .with_offset(astra_gui::Offset::new(
+                .with_offset(Offset::new(
                     0.0,
                     (style.thumb_size - style.track_height) / 2.0,
                 ))
-                .with_shape(astra_gui::Shape::Rect(StyledRect {
+                .with_shape(Shape::Rect(StyledRect {
                     rect: Rect::default(),
                     corner_shape: CornerShape::Round(style.track_height / 2.0),
                     fill: style.track_color,
@@ -117,23 +119,15 @@ pub fn slider(
                     ..Default::default()
                 })
                 .with_disabled(disabled),
-        )
-        // Filled portion of track
-        .with_child(
+            // Filled portion of track - no ID so events go to container
             Node::new()
-                .with_id(NodeId::new(format!("{}_filled", id_str)))
-                .with_width(Size::px(filled_width.max(style.track_height))) // Min width for rounded ends
+                .with_width(Size::px(filled_width))
                 .with_height(Size::px(style.track_height))
-                .with_offset(astra_gui::Offset::new(
-                    0.0,
-                    (style.thumb_size - style.track_height) / 2.0,
+                .with_offset(astra_gui::Offset::new(0.0, -thumb_inset))
+                .with_shape(astra_gui::Shape::Rect(
+                    StyledRect::new(Default::default(), style.filled_color)
+                        .with_corner_shape(CornerShape::Round(style.track_height / 2.0)),
                 ))
-                .with_shape(astra_gui::Shape::Rect(StyledRect {
-                    rect: Rect::default(),
-                    corner_shape: CornerShape::Round(style.track_height / 2.0),
-                    fill: style.filled_color,
-                    stroke: None,
-                }))
                 .with_style(Style {
                     fill_color: Some(style.filled_color),
                     corner_radius: Some(style.track_height / 2.0),
@@ -145,15 +139,15 @@ pub fn slider(
                     ..Default::default()
                 })
                 .with_disabled(disabled),
-        )
-        // Thumb (draggable circle)
-        .with_child(
+            // Thumb (visual indicator) - has ID for hover/active styles
+            // NOTE: Clicking directly on thumb doesn't work reliably with Stack layout
+            // due to coordinate transform issues. Click the track instead.
             Node::new()
                 .with_id(NodeId::new(id_str.clone()))
                 .with_width(Size::px(style.thumb_size))
                 .with_height(Size::px(style.thumb_size))
-                .with_offset(astra_gui::Offset::new(thumb_offset_x, 0.0))
-                .with_shape(astra_gui::Shape::Rect(StyledRect {
+                .with_offset(Offset::new(thumb_offset_x, 0.0))
+                .with_shape(Shape::Rect(StyledRect {
                     rect: Rect::default(),
                     corner_shape: CornerShape::Round(style.thumb_size / 2.0),
                     fill: style.thumb_color,
@@ -179,7 +173,12 @@ pub fn slider(
                 })
                 .with_disabled(disabled)
                 .with_transition(Transition::quick()),
-        )
+            // Hitbox node
+            Node::new()
+                .with_id(NodeId::new(format!("{}_hitbox", id_str)))
+                .with_width(Size::Fill)
+                .with_height(Size::Fill),
+        ])
 }
 
 /// Update slider value from drag events
@@ -203,39 +202,32 @@ pub fn slider_drag(
     events: &[TargetedEvent],
     style: &SliderStyle,
 ) -> bool {
-    let track_id = format!("{}_track", slider_id);
-    let container_id = format!("{}_container", slider_id);
-    let filled_id = format!("{}_filled", slider_id);
+    let container_id = format!("{}_hitbox", slider_id);
 
+    // Only handle events from container
+    // Stack layout causes coordinate issues with thumb events during drag
     for event in events {
-        // Check if this event targets any part of the slider
-        let is_slider_event = event.target.as_str() == slider_id
-            || event.target.as_str() == track_id
-            || event.target.as_str() == container_id
-            || event.target.as_str() == filled_id;
+        let target_str = event.target.as_str();
 
-        if !is_slider_event {
+        // Only process container events
+        if target_str != container_id {
             continue;
         }
 
         match &event.event {
-            InteractionEvent::DragMove { .. } | InteractionEvent::DragStart { .. } => {
-                // Calculate percentage based on position within track
+            InteractionEvent::Click { .. }
+            | InteractionEvent::DragStart { .. }
+            | InteractionEvent::DragMove { .. } => {
                 let local_x = event.local_position.x;
-                let percentage = (local_x / style.track_width).clamp(0.0, 1.0);
 
-                let range_size = range.end() - range.start();
-                let new_value = range.start() + range_size * percentage;
-
-                if (*value - new_value).abs() > f32::EPSILON {
-                    *value = new_value;
-                    return true;
-                }
-            }
-            InteractionEvent::Click { .. } => {
-                // Also handle click to set value directly
-                let local_x = event.local_position.x;
-                let percentage = (local_x / style.track_width).clamp(0.0, 1.0);
+                // Adjust for thumb half-width so clicking centers the thumb at cursor
+                let usable_width = style.track_width - style.thumb_size;
+                let adjusted_x = (local_x - style.thumb_size / 2.0).clamp(0.0, usable_width);
+                let percentage = if usable_width > 0.0 {
+                    (adjusted_x / usable_width).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
 
                 let range_size = range.end() - range.start();
                 let new_value = range.start() + range_size * percentage;
@@ -254,32 +246,22 @@ pub fn slider_drag(
 
 /// Check if a slider with the given ID is currently being hovered
 pub fn slider_hovered(slider_id: &str, events: &[TargetedEvent]) -> bool {
-    let track_id = format!("{}_track", slider_id);
     let container_id = format!("{}_container", slider_id);
-    let filled_id = format!("{}_filled", slider_id);
 
     events.iter().any(|e| {
         matches!(e.event, InteractionEvent::Hover { .. })
-            && (e.target.as_str() == slider_id
-                || e.target.as_str() == track_id
-                || e.target.as_str() == container_id
-                || e.target.as_str() == filled_id)
+            && (e.target.as_str() == slider_id || e.target.as_str() == container_id)
     })
 }
 
 /// Check if a slider with the given ID is currently being dragged
 pub fn slider_dragging(slider_id: &str, events: &[TargetedEvent]) -> bool {
-    let track_id = format!("{}_track", slider_id);
     let container_id = format!("{}_container", slider_id);
-    let filled_id = format!("{}_filled", slider_id);
 
     events.iter().any(|e| {
         matches!(
             e.event,
             InteractionEvent::DragStart { .. } | InteractionEvent::DragMove { .. }
-        ) && (e.target.as_str() == slider_id
-            || e.target.as_str() == track_id
-            || e.target.as_str() == container_id
-            || e.target.as_str() == filled_id)
+        ) && (e.target.as_str() == slider_id || e.target.as_str() == container_id)
     })
 }

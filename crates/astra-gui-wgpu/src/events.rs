@@ -174,16 +174,21 @@ impl EventDispatcher {
                     y: cursor_pos.y - drag.last_pos.y,
                 };
 
+                // Hit-test to get local position relative to the drag target
+                let local_pos = hits
+                    .iter()
+                    .rev()
+                    .find(|hit| hit.node_id.as_ref() == Some(&drag.target))
+                    .map(|hit| hit.local_pos)
+                    .unwrap_or(Point { x: 0.0, y: 0.0 });
+
                 events.push(TargetedEvent {
                     event: InteractionEvent::DragMove {
                         position: cursor_pos,
                         delta,
                     },
                     target: drag.target.clone(),
-                    local_position: Point {
-                        x: cursor_pos.x - drag.start_pos.x,
-                        y: cursor_pos.y - drag.start_pos.y,
-                    },
+                    local_position: local_pos,
                 });
 
                 drag.last_pos = cursor_pos;

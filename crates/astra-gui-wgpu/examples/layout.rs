@@ -1,8 +1,7 @@
 ///! Demonstrates the node-based layout system with nested elements
 use astra_gui::{
-    catppuccin::mocha, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign,
-    LayoutDirection, Node, Offset, Shape, Size, Spacing, Stroke, StyledRect, TextContent,
-    VerticalAlign,
+    catppuccin::mocha, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign, Layout,
+    Node, Offset, Shape, Size, Spacing, Stroke, StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_wgpu::{RenderMode, Renderer};
 use std::sync::Arc;
@@ -268,11 +267,11 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
     let root = Node::new()
         .with_padding(Spacing::all(20.0))
         .with_gap(25.0)
-        .with_layout_direction(LayoutDirection::Vertical)
+        .with_layout_direction(Layout::Vertical)
         .with_children(vec![
             // Header
             Node::new()
-                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_layout_direction(Layout::Horizontal)
                 .with_gap(10.0)
                 .with_height(Size::fraction(0.15))
                 .with_shape(Shape::Rect(
@@ -291,7 +290,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                         )),
                     Node::new()
                         .with_width(Size::Fill)
-                        .with_layout_direction(LayoutDirection::Vertical)
+                        .with_layout_direction(Layout::Vertical)
                         .with_gap(10.0)
                         .with_children(vec![
                             Node::new()
@@ -314,7 +313,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
             Node::new()
                 .with_height(Size::fraction(0.75))
                 .with_gap(25.0)
-                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_layout_direction(Layout::Horizontal)
                 .with_children(vec![
                     // Left sidebar - 25% width
                     Node::new()
@@ -326,7 +325,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                                 .with_corner_shape(CornerShape::Round(50.0))
                                 .with_stroke(Stroke::new(3.0, mocha::MAUVE)),
                         ))
-                        .with_layout_direction(LayoutDirection::Vertical)
+                        .with_layout_direction(Layout::Vertical)
                         .with_children(vec![
                             // Sidebar items
                             child(),
@@ -350,7 +349,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                                 .with_corner_shape(CornerShape::Round(50.0))
                                 .with_stroke(Stroke::new(3.0, mocha::PEACH)),
                         ))
-                        .with_layout_direction(LayoutDirection::Vertical)
+                        .with_layout_direction(Layout::Vertical)
                         .with_children(vec![
                             // Content cards in vertical layout
                             Node::new()
@@ -364,7 +363,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                             Node::new()
                                 .with_height(Size::fraction(0.3))
                                 .with_gap(20.0)
-                                .with_layout_direction(LayoutDirection::Horizontal)
+                                .with_layout_direction(Layout::Horizontal)
                                 .with_children(vec![
                                     Node::new().with_width(Size::fraction(0.5)).with_shape(
                                         Shape::Rect(
@@ -396,7 +395,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                 .with_offset(Offset::new(0.0, 0.0))
                 .with_padding(Spacing::all(20.0))
                 .with_gap(20.0)
-                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_layout_direction(Layout::Horizontal)
                 .with_shape(Shape::Rect(
                     StyledRect::new(Default::default(), mocha::SURFACE0)
                         .with_corner_shape(CornerShape::Round(50.0))
@@ -440,7 +439,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
     let final_root = Node::new()
         .with_width(Size::Fill)
         .with_height(Size::Fill)
-        .with_layout_direction(LayoutDirection::Vertical)
+        .with_layout_direction(Layout::Vertical)
         .with_children(vec![root, help_text]);
 
     FullOutput::from_node_with_debug(

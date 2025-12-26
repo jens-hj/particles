@@ -9,8 +9,8 @@
 //! - ESC: quit
 
 use astra_gui::{
-    catppuccin::mocha, Content, DebugOptions, FullOutput, HorizontalAlign, LayoutDirection, Node,
-    Rect, Shape, Size, Spacing, StyledRect, TextContent, VerticalAlign,
+    catppuccin::mocha, Content, DebugOptions, FullOutput, HorizontalAlign, Layout, Node, Rect,
+    Shape, Size, Spacing, StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_interactive::{
     button, button_clicked, slider, slider_drag, toggle, toggle_clicked, ButtonStyle, SliderStyle,
@@ -295,7 +295,7 @@ impl App {
         Node::new()
             .with_width(Size::Fill)
             .with_height(Size::Fill)
-            .with_layout_direction(LayoutDirection::Vertical)
+            .with_layout_direction(Layout::Vertical)
             .with_gap(24.0)
             .with_children(vec![
                 // Spacer
@@ -323,7 +323,7 @@ impl App {
                 // Centered button container
                 Node::new()
                     .with_width(Size::Fill)
-                    .with_layout_direction(LayoutDirection::Horizontal)
+                    .with_layout_direction(Layout::Horizontal)
                     .with_gap(16.0)
                     .with_child(
                         // Spacer
@@ -350,7 +350,7 @@ impl App {
                 // Toggle container
                 Node::new()
                     .with_width(Size::Fill)
-                    .with_layout_direction(LayoutDirection::Horizontal)
+                    .with_layout_direction(Layout::Horizontal)
                     .with_gap(16.0)
                     .with_children(vec![
                         // Spacer
@@ -390,7 +390,7 @@ impl App {
                 // Slider section
                 Node::new()
                     .with_width(Size::Fill)
-                    .with_layout_direction(LayoutDirection::Horizontal)
+                    .with_layout_direction(Layout::Horizontal)
                     .with_gap(16.0)
                     .with_child(
                         // Spacer
@@ -422,13 +422,13 @@ impl App {
                     .with_child(
                         // Value display
                         Node::new()
-                            .with_width(Size::FitContent)
+                            .with_width(Size::px(50.0))
                             .with_height(Size::FitContent)
                             .with_content(Content::Text(TextContent {
                                 text: format!("{:.0}", self.slider_value),
                                 font_size: 20.0,
                                 color: mocha::LAVENDER,
-                                h_align: HorizontalAlign::Center,
+                                h_align: HorizontalAlign::Right,
                                 v_align: VerticalAlign::Center,
                             })),
                     )

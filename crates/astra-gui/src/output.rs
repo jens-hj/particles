@@ -425,7 +425,7 @@ fn collect_gap_debug_shapes(
     out: &mut Vec<(Rect, Rect, Shape)>,
 ) {
     use crate::color::Color;
-    use crate::layout::LayoutDirection;
+    use crate::layout::Layout;
     use crate::primitives::StyledRect;
 
     let children = node.children();
@@ -453,19 +453,23 @@ fn collect_gap_debug_shapes(
 
         // Calculate gap rect based on layout direction
         let gap_rect = match layout_direction {
-            LayoutDirection::Horizontal => {
+            Layout::Horizontal => {
                 // Gap is between right edge of current and left edge of next
                 Rect::new(
                     [current_rect.max[0], current_rect.min[1]],
                     [next_rect.min[0], current_rect.max[1]],
                 )
             }
-            LayoutDirection::Vertical => {
+            Layout::Vertical => {
                 // Gap is between bottom edge of current and top edge of next
                 Rect::new(
                     [current_rect.min[0], current_rect.max[1]],
                     [current_rect.max[0], next_rect.min[1]],
                 )
+            }
+            Layout::Stack => {
+                // No gaps in Stack layout (children overlap)
+                continue;
             }
         };
 

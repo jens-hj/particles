@@ -18,8 +18,8 @@
 
 use astra_gui::{
     catppuccin::mocha, Color, Content, ContentMeasurer, CornerShape, DebugOptions, FullOutput,
-    HorizontalAlign, LayoutDirection, Node, Overflow, Rect, Shape, Size, Spacing, Stroke,
-    StyledRect, TextContent, VerticalAlign,
+    HorizontalAlign, Layout, Node, Overflow, Rect, Shape, Size, Spacing, Stroke, StyledRect,
+    TextContent, VerticalAlign,
 };
 use astra_gui_text::Engine as TextEngine;
 use astra_gui_wgpu::{RenderMode, Renderer};
@@ -320,14 +320,14 @@ fn demo_box(title: &str, overflow_mode: Overflow, color: Color) -> Node {
         .with_height(Size::Fill)
         .with_padding(Spacing::all(16.0))
         .with_gap(14.0)
-        .with_layout_direction(LayoutDirection::Vertical)
+        .with_layout_direction(Layout::Vertical)
         .with_overflow(overflow_mode)
         .with_shape(panel(color))
         .with_children(vec![
             // Title row
             Node::new()
                 .with_height(Size::px(40.0))
-                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_layout_direction(Layout::Horizontal)
                 .with_children(vec![label(
                     title,
                     22.0,
@@ -343,7 +343,7 @@ fn demo_box(title: &str, overflow_mode: Overflow, color: Color) -> Node {
                 .with_width(Size::Fill)
                 .with_padding(Spacing::all(14.0))
                 .with_shape(panel(mocha::SURFACE0))
-                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_layout_direction(Layout::Horizontal)
                 .with_overflow(overflow_mode) // Propagate overflow mode
                 .with_children(vec![Node::new()
                     .with_overflow(overflow_mode)
@@ -371,7 +371,7 @@ fn create_demo_ui(
         .with_overflow(Overflow::Visible)
         .with_padding(Spacing::all(24.0))
         .with_gap(18.0)
-        .with_layout_direction(LayoutDirection::Vertical)
+        .with_layout_direction(Layout::Vertical)
         .with_width(Size::Fill)
         .with_height(Size::Fill)
         .with_children(vec![
@@ -404,7 +404,7 @@ fn create_demo_ui(
                 .with_width(Size::Fill)
                 .with_height(Size::Fill)
                 .with_gap(18.0)
-                .with_layout_direction(LayoutDirection::Vertical)
+                .with_layout_direction(Layout::Vertical)
                 .with_overflow(Overflow::Visible) // Allow children to overflow
                 .with_children(vec![
                     Node::new()

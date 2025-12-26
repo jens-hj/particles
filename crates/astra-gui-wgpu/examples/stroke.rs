@@ -2,8 +2,7 @@
 
 use astra_gui::{
     catppuccin::mocha, Color, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign,
-    LayoutDirection, Node, Overflow, Shape, Size, Spacing, Stroke, StyledRect, TextContent,
-    VerticalAlign,
+    Layout, Node, Overflow, Shape, Size, Spacing, Stroke, StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_wgpu::{RenderMode, Renderer};
 use std::sync::Arc;
@@ -317,7 +316,7 @@ fn create_stroke_test_ui(width: f32, height: f32, debug_options: &DebugOptions) 
             Node::new()
                 .with_height(Size::px(120.0))
                 .with_gap(60.0)
-                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_layout_direction(Layout::Horizontal)
                 .with_children(cells),
         );
     }
@@ -343,14 +342,14 @@ fn create_stroke_test_ui(width: f32, height: f32, debug_options: &DebugOptions) 
         .with_gap(60.0)
         .with_width(Size::Fill)
         .with_height(Size::Fill)
-        .with_layout_direction(LayoutDirection::Vertical)
+        .with_layout_direction(Layout::Vertical)
         .with_overflow(Overflow::Visible)
         .with_children(rows);
 
     let root = Node::new()
         .with_width(Size::Fill)
         .with_height(Size::Fill)
-        .with_layout_direction(LayoutDirection::Vertical)
+        .with_layout_direction(Layout::Vertical)
         .with_children(vec![content, help_text]);
 
     FullOutput::from_node_with_debug(root, (width, height), Some(*debug_options))

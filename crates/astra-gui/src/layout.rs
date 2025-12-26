@@ -95,16 +95,18 @@ impl Default for Overflow {
     }
 }
 
-/// Layout direction for arranging children
+/// Layout mode for arranging children
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LayoutDirection {
+pub enum Layout {
     /// Children are arranged horizontally (left to right)
     Horizontal,
     /// Children are arranged vertically (top to bottom)
     Vertical,
+    /// Children are stacked in the Z direction (overlapping)
+    Stack,
 }
 
-impl Default for LayoutDirection {
+impl Default for Layout {
     fn default() -> Self {
         Self::Vertical
     }

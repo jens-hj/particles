@@ -5,8 +5,7 @@
 
 use astra_gui::{
     catppuccin::mocha, Color, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign,
-    LayoutDirection, Node, Overflow, Shape, Size, Spacing, Stroke, StyledRect, TextContent,
-    VerticalAlign,
+    Layout, Node, Overflow, Shape, Size, Spacing, Stroke, StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_wgpu::{RenderMode, Renderer};
 use std::sync::Arc;
@@ -298,12 +297,12 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
         .with_gap(40.0)
         .with_width(Size::Fill)
         .with_height(Size::Fill)
-        .with_layout_direction(LayoutDirection::Vertical)
+        .with_layout_direction(Layout::Vertical)
         .with_children(vec![
             Node::new()
                 .with_height(Size::Fill)
                 .with_gap(40.0)
-                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_layout_direction(Layout::Horizontal)
                 .with_overflow(Overflow::Visible)
                 .with_children(vec![
                     // None
@@ -333,7 +332,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
             Node::new()
                 .with_height(Size::Fill)
                 .with_gap(40.0)
-                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_layout_direction(Layout::Horizontal)
                 .with_overflow(Overflow::Visible)
                 .with_children(vec![
                     // InverseRound
@@ -375,7 +374,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
     let root = Node::new()
         .with_width(Size::Fill)
         .with_height(Size::Fill)
-        .with_layout_direction(LayoutDirection::Vertical)
+        .with_layout_direction(Layout::Vertical)
         .with_children(vec![content, help_text]);
 
     FullOutput::from_node_with_debug(

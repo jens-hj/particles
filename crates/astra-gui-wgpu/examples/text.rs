@@ -5,8 +5,8 @@
 
 use astra_gui::{
     catppuccin::mocha, Color, Content, CornerShape, DebugOptions, FullOutput, HorizontalAlign,
-    LayoutDirection, Node, Offset, Overflow, Rect, Shape, Size, Spacing, Stroke, StyledRect,
-    TextContent, VerticalAlign,
+    Layout, Node, Offset, Overflow, Rect, Shape, Size, Spacing, Stroke, StyledRect, TextContent,
+    VerticalAlign,
 };
 use astra_gui_wgpu::{RenderMode, Renderer};
 use std::sync::Arc;
@@ -292,7 +292,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
     let root = Node::new()
         .with_padding(Spacing::all(24.0))
         .with_gap(18.0)
-        .with_layout_direction(LayoutDirection::Vertical)
+        .with_layout_direction(Layout::Vertical)
         .with_shape(Shape::Rect(
             StyledRect::new(Default::default(), Color::transparent())
                 .with_corner_shape(CornerShape::Round(24.0))
@@ -328,7 +328,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
             Node::new()
                 .with_height(Size::Fill)
                 .with_gap(18.0)
-                .with_layout_direction(LayoutDirection::Horizontal)
+                .with_layout_direction(Layout::Horizontal)
                 .with_children(vec![
                     // Left: alignment grid
                     Node::new()
@@ -336,7 +336,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                         .with_padding(Spacing::all(16.0))
                         .with_gap(12.0)
                         .with_shape(panel(mocha::MANTLE))
-                        .with_layout_direction(LayoutDirection::Vertical)
+                        .with_layout_direction(Layout::Vertical)
                         .with_children(vec![
                             label(
                                 "Alignment grid (L/C/R × T/C/B)",
@@ -349,7 +349,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                             Node::new()
                                 .with_height(Size::Fill)
                                 .with_gap(12.0)
-                                .with_layout_direction(LayoutDirection::Vertical)
+                                .with_layout_direction(Layout::Vertical)
                                 .with_children(vec![
                                     alignment_row("Top", VerticalAlign::Top),
                                     alignment_row("Center", VerticalAlign::Center),
@@ -362,7 +362,7 @@ fn create_demo_ui(width: f32, height: f32, debug_options: &DebugOptions) -> Full
                         .with_padding(Spacing::all(16.0))
                         .with_gap(14.0)
                         .with_shape(panel(mocha::MANTLE))
-                        .with_layout_direction(LayoutDirection::Vertical)
+                        .with_layout_direction(Layout::Vertical)
                         .with_children(vec![
                             label(
                                 "Font sizes + padding behavior",
@@ -474,7 +474,7 @@ fn alignment_row(v_name: &'static str, v: VerticalAlign) -> Node {
     Node::new()
         .with_height(Size::Fill)
         .with_gap(12.0)
-        .with_layout_direction(LayoutDirection::Horizontal)
+        .with_layout_direction(Layout::Horizontal)
         .with_children(vec![
             alignment_cell(
                 HorizontalAlign::Left,

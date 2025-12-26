@@ -1,5 +1,5 @@
 use crate::content::Content;
-use crate::layout::{ComputedLayout, LayoutDirection, Offset, Overflow, Size, Spacing};
+use crate::layout::{ComputedLayout, Layout, Offset, Overflow, Size, Spacing};
 use crate::measure::{ContentMeasurer, IntrinsicSize, MeasureTextRequest};
 use crate::primitives::{Rect, Shape};
 use crate::style::Style;
@@ -56,8 +56,8 @@ pub struct Node {
     margin: Spacing,
     /// Gap between children in the layout direction
     gap: f32,
-    /// Layout direction for children
-    layout_direction: LayoutDirection,
+    /// Layout mode for children
+    layout_direction: Layout,
     /// How overflow of content/children is handled.
     ///
     /// Default: `Overflow::Hidden`.
@@ -99,7 +99,7 @@ impl Node {
             padding: Spacing::default(),
             margin: Spacing::default(),
             gap: 0.0,
-            layout_direction: LayoutDirection::default(),
+            layout_direction: Layout::default(),
             overflow: Overflow::default(),
             opacity: 1.0,
             shape: None,
@@ -173,8 +173,8 @@ impl Node {
         self
     }
 
-    /// Set the layout direction
-    pub fn with_layout_direction(mut self, direction: LayoutDirection) -> Self {
+    /// Set the layout mode
+    pub fn with_layout_direction(mut self, direction: Layout) -> Self {
         self.layout_direction = direction;
         self
     }
@@ -330,8 +330,8 @@ impl Node {
         self.gap
     }
 
-    /// Get the layout direction
-    pub(crate) fn layout_direction(&self) -> LayoutDirection {
+    /// Get the layout mode
+    pub(crate) fn layout_direction(&self) -> Layout {
         self.layout_direction
     }
 
@@ -458,7 +458,7 @@ impl Node {
 
         // Calculate spacing using the same collapsing rules as layout
         let (total_horizontal_spacing, total_vertical_spacing) = match self.layout_direction {
-            LayoutDirection::Horizontal => {
+            Layout::Horizontal => {
                 let mut total = 0.0f32;
                 for (i, child) in self.children.iter().enumerate() {
                     if i == 0 {
@@ -475,7 +475,7 @@ impl Node {
                 }
                 (total, 0.0)
             }
-            LayoutDirection::Vertical => {
+            Layout::Vertical => {
                 let mut total = 0.0f32;
                 for (i, child) in self.children.iter().enumerate() {
                     if i == 0 {
@@ -492,12 +492,16 @@ impl Node {
                 }
                 (0.0, total)
             }
+            Layout::Stack => {
+                // In Stack layout, children don't take up space linearly, so no spacing
+                (0.0, 0.0)
+            }
         };
 
         // Compute intrinsic size based on layout direction
         // OPTIMIZATION: Measure and aggregate in a single pass to avoid Vec allocation
         match self.layout_direction {
-            LayoutDirection::Horizontal => {
+            Layout::Horizontal => {
                 // Width: sum of child widths + spacing (main axis)
                 // Height: max of child heights (cross axis)
                 let mut total_width = 0.0f32;
@@ -511,7 +515,7 @@ impl Node {
 
                 IntrinsicSize::new(total_width + total_horizontal_spacing, max_height)
             }
-            LayoutDirection::Vertical => {
+            Layout::Vertical => {
                 // Height: sum of child heights + spacing (main axis)
                 // Width: max of child widths (cross axis)
                 let mut total_height = 0.0f32;
@@ -524,6 +528,19 @@ impl Node {
                 }
 
                 IntrinsicSize::new(max_width, total_height + total_vertical_spacing)
+            }
+            Layout::Stack => {
+                // Stack: max of all child sizes (children overlap in Z)
+                let mut max_width = 0.0f32;
+                let mut max_height = 0.0f32;
+
+                for child in &self.children {
+                    let size = child.measure_node(measurer);
+                    max_width = max_width.max(size.width);
+                    max_height = max_height.max(size.height);
+                }
+
+                IntrinsicSize::new(max_width, max_height)
             }
         }
     }
@@ -637,7 +654,7 @@ impl Node {
 
         // Calculate total spacing in the layout direction (margins + gaps)
         let (total_horizontal_spacing, total_vertical_spacing) = match self.layout_direction {
-            LayoutDirection::Horizontal => {
+            Layout::Horizontal => {
                 let mut total = 0.0f32;
                 for (i, child) in self.children.iter().enumerate() {
                     if i == 0 {
@@ -654,7 +671,7 @@ impl Node {
                 }
                 (total, 0.0)
             }
-            LayoutDirection::Vertical => {
+            Layout::Vertical => {
                 let mut total = 0.0f32;
                 for (i, child) in self.children.iter().enumerate() {
                     if i == 0 {
@@ -671,6 +688,10 @@ impl Node {
                 }
                 (0.0, total)
             }
+            Layout::Stack => {
+                // In Stack layout, children don't take up space linearly, so no spacing
+                (0.0, 0.0)
+            }
         };
 
         // Space available for children after subtracting spacing (margins + gaps)
@@ -679,7 +700,7 @@ impl Node {
 
         // Calculate remaining space for Fill children
         let (fill_size_width, fill_size_height) = match self.layout_direction {
-            LayoutDirection::Horizontal => {
+            Layout::Horizontal => {
                 let mut fill_count = 0;
                 let mut used_width = 0.0;
 
@@ -703,7 +724,7 @@ impl Node {
 
                 (fill_width, available_height)
             }
-            LayoutDirection::Vertical => {
+            Layout::Vertical => {
                 let mut fill_count = 0;
                 let mut used_height = 0.0;
 
@@ -727,30 +748,44 @@ impl Node {
 
                 (available_width, fill_height)
             }
+            Layout::Stack => {
+                // In Stack layout, all children get full available space
+                (available_width, available_height)
+            }
         };
 
         let num_children = self.children.len();
         for i in 0..num_children {
             if i == 0 {
                 match self.layout_direction {
-                    LayoutDirection::Horizontal => {
+                    Layout::Horizontal => {
                         current_x += self.children[i].margin.left;
                     }
-                    LayoutDirection::Vertical => {
+                    Layout::Vertical => {
                         current_y += self.children[i].margin.top;
+                    }
+                    Layout::Stack => {
+                        // In Stack layout, don't advance position for first child
                     }
                 }
             }
 
             let child_available_rect = match self.layout_direction {
-                LayoutDirection::Horizontal => Rect::new(
+                Layout::Horizontal => Rect::new(
                     [current_x, current_y],
                     [content_x + content_width, content_y + content_height],
                 ),
-                LayoutDirection::Vertical => Rect::new(
+                Layout::Vertical => Rect::new(
                     [current_x, current_y],
                     [content_x + content_width, content_y + content_height],
                 ),
+                Layout::Stack => {
+                    // In Stack layout, all children start at content origin
+                    Rect::new(
+                        [content_x, content_y],
+                        [content_x + content_width, content_y + content_height],
+                    )
+                }
             };
 
             let child_parent_width = if self.children[i].width.is_fill() {
@@ -777,7 +812,7 @@ impl Node {
 
                 if i + 1 < num_children {
                     match self.layout_direction {
-                        LayoutDirection::Horizontal => {
+                        Layout::Horizontal => {
                             let collapsed_margin = self.children[i]
                                 .margin
                                 .right
@@ -785,13 +820,16 @@ impl Node {
                             let spacing = self.gap.max(collapsed_margin);
                             current_x = child_rect.max[0] + spacing;
                         }
-                        LayoutDirection::Vertical => {
+                        Layout::Vertical => {
                             let collapsed_margin = self.children[i]
                                 .margin
                                 .bottom
                                 .max(self.children[i + 1].margin.top);
                             let spacing = self.gap.max(collapsed_margin);
                             current_y = child_rect.max[1] + spacing;
+                        }
+                        Layout::Stack => {
+                            // In Stack layout, don't advance position (children overlap)
                         }
                     }
                 }
@@ -845,7 +883,7 @@ impl Node {
 
         // Calculate total spacing in the layout direction (margins + gaps)
         let (total_horizontal_spacing, total_vertical_spacing) = match self.layout_direction {
-            LayoutDirection::Horizontal => {
+            Layout::Horizontal => {
                 let mut total = 0.0f32;
                 for (i, child) in self.children.iter().enumerate() {
                     if i == 0 {
@@ -867,7 +905,7 @@ impl Node {
                 }
                 (total, 0.0)
             }
-            LayoutDirection::Vertical => {
+            Layout::Vertical => {
                 let mut total = 0.0f32;
                 for (i, child) in self.children.iter().enumerate() {
                     if i == 0 {
@@ -889,6 +927,10 @@ impl Node {
                 }
                 (0.0, total)
             }
+            Layout::Stack => {
+                // In Stack layout, children don't take up space linearly, so no spacing
+                (0.0, 0.0)
+            }
         };
 
         // Space available for children after subtracting spacing (margins + gaps)
@@ -897,7 +939,7 @@ impl Node {
 
         // Calculate remaining space for Fill children
         let (fill_size_width, fill_size_height) = match self.layout_direction {
-            LayoutDirection::Horizontal => {
+            Layout::Horizontal => {
                 // Count Fill children and calculate space used by non-Fill children
                 let mut fill_count = 0;
                 let mut used_width = 0.0;
@@ -924,7 +966,7 @@ impl Node {
 
                 (fill_width, available_height)
             }
-            LayoutDirection::Vertical => {
+            Layout::Vertical => {
                 // Count Fill children and calculate space used by non-Fill children
                 let mut fill_count = 0;
                 let mut used_height = 0.0;
@@ -951,6 +993,10 @@ impl Node {
 
                 (available_width, fill_height)
             }
+            Layout::Stack => {
+                // In Stack layout, all children get full available space
+                (available_width, available_height)
+            }
         };
 
         let num_children = self.children.len();
@@ -958,27 +1004,37 @@ impl Node {
             // Apply leading margin for first child or collapsed margin was already added for subsequent children
             if i == 0 {
                 match self.layout_direction {
-                    LayoutDirection::Horizontal => {
+                    Layout::Horizontal => {
                         current_x += self.children[i].margin.left;
                     }
-                    LayoutDirection::Vertical => {
+                    Layout::Vertical => {
                         current_y += self.children[i].margin.top;
+                    }
+                    Layout::Stack => {
+                        // In Stack layout, don't advance position for first child
                     }
                 }
             }
 
             let child_available_rect = match self.layout_direction {
-                LayoutDirection::Horizontal => {
+                Layout::Horizontal => {
                     // In horizontal layout, each child gets remaining width and full height
                     Rect::new(
                         [current_x, current_y],
                         [content_x + content_width, content_y + content_height],
                     )
                 }
-                LayoutDirection::Vertical => {
+                Layout::Vertical => {
                     // In vertical layout, each child gets full width and remaining height
                     Rect::new(
                         [current_x, current_y],
+                        [content_x + content_width, content_y + content_height],
+                    )
+                }
+                Layout::Stack => {
+                    // In Stack layout, all children start at content origin
+                    Rect::new(
+                        [content_x, content_y],
                         [content_x + content_width, content_y + content_height],
                     )
                 }
@@ -1009,7 +1065,7 @@ impl Node {
 
                 if i + 1 < num_children {
                     match self.layout_direction {
-                        LayoutDirection::Horizontal => {
+                        Layout::Horizontal => {
                             // Move to end of current child, then add collapsed spacing
                             let collapsed_margin = self.children[i]
                                 .margin
@@ -1019,7 +1075,7 @@ impl Node {
                             let spacing = self.gap.max(collapsed_margin);
                             current_x = child_rect.max[0] + spacing;
                         }
-                        LayoutDirection::Vertical => {
+                        Layout::Vertical => {
                             // Move to end of current child, then add collapsed spacing
                             let collapsed_margin = self.children[i]
                                 .margin
@@ -1028,6 +1084,9 @@ impl Node {
                             // Collapse gap with margin - use the larger value
                             let spacing = self.gap.max(collapsed_margin);
                             current_y = child_rect.max[1] + spacing;
+                        }
+                        Layout::Stack => {
+                            // In Stack layout, don't advance position (children overlap)
                         }
                     }
                 }

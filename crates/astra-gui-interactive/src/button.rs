@@ -73,9 +73,9 @@ pub struct ButtonStyle {
 impl Default for ButtonStyle {
     fn default() -> Self {
         Self {
-            idle_color: mocha::OVERLAY0,
-            hover_color: mocha::MAUVE,
-            pressed_color: mocha::SURFACE2,
+            idle_color: mocha::LAVENDER,
+            hover_color: mocha::LAVENDER.with_alpha(0.8),
+            pressed_color: mocha::MAUVE,
             disabled_color: mocha::SURFACE0,
             text_color: mocha::BASE,
             disabled_text_color: mocha::OVERLAY0,
