@@ -138,6 +138,7 @@ struct App {
     continuous_slider_value: f32,
     text_input_value: String,
     text_input_cursor: usize,
+    text_input_selection: Option<(usize, usize)>,
     debug_options: DebugOptions,
     last_frame_time: std::time::Instant,
 }
@@ -165,6 +166,7 @@ impl App {
             continuous_slider_value: 50.0,
             text_input_value: String::new(),
             text_input_cursor: 0,
+            text_input_selection: None,
             debug_options: DebugOptions::none(),
             last_frame_time: std::time::Instant::now(),
         }
@@ -204,6 +206,7 @@ impl App {
             "text_input",
             &mut self.text_input_value,
             &mut self.text_input_cursor,
+            &mut self.text_input_selection,
             &events,
             &self.input_state,
             &mut self.event_dispatcher,
@@ -462,6 +465,7 @@ impl App {
                                 ..TextInputStyle::default()
                             },
                             self.text_input_cursor,
+                            self.text_input_selection,
                             &mut self.text_engine,
                             &mut self.event_dispatcher,
                         ),

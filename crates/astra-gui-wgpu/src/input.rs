@@ -28,6 +28,10 @@ pub struct InputState {
     pub keys_just_pressed: Vec<Key>,
     /// Keys released this frame
     pub keys_just_released: Vec<Key>,
+    /// Whether Shift is currently held down
+    pub shift_held: bool,
+    /// Whether Ctrl (or Cmd on macOS) is currently held down
+    pub ctrl_held: bool,
 }
 
 impl InputState {
@@ -41,6 +45,8 @@ impl InputState {
             characters_typed: Vec::new(),
             keys_just_pressed: Vec::new(),
             keys_just_released: Vec::new(),
+            shift_held: false,
+            ctrl_held: false,
         }
     }
 
@@ -81,15 +87,29 @@ impl InputState {
                 }
             },
             WindowEvent::KeyboardInput { event, .. } => {
+                // Track modifier keys
+                use winit::keyboard::NamedKey;
+                match &event.logical_key {
+                    Key::Named(NamedKey::Shift) => {
+                        self.shift_held = event.state == ElementState::Pressed;
+                    }
+                    Key::Named(NamedKey::Control) | Key::Named(NamedKey::Super) => {
+                        self.ctrl_held = event.state == ElementState::Pressed;
+                    }
+                    _ => {}
+                }
+
                 match event.state {
                     ElementState::Pressed => {
                         if !event.repeat {
                             self.keys_just_pressed.push(event.logical_key.clone());
                         }
-                        // Handle text input from key events
-                        if let Key::Character(ref text) = event.logical_key {
-                            for ch in text.chars() {
-                                self.characters_typed.push(ch);
+                        // Handle text input from key events (but not when ctrl is held)
+                        if !self.ctrl_held {
+                            if let Key::Character(ref text) = event.logical_key {
+                                for ch in text.chars() {
+                                    self.characters_typed.push(ch);
+                                }
                             }
                         }
                     }

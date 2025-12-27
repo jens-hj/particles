@@ -96,6 +96,7 @@ impl Default for TextInputStyle {
 /// * `disabled` - Whether the text input is disabled
 /// * `style` - Visual styling configuration
 /// * `cursor_position` - Character index where the cursor should be positioned
+/// * `selection_range` - Optional (start, end) byte positions for text selection
 /// * `measurer` - ContentMeasurer for calculating text width
 /// * `event_dispatcher` - EventDispatcher for managing cursor blink state
 ///
@@ -109,6 +110,7 @@ pub fn text_input(
     disabled: bool,
     style: &TextInputStyle,
     cursor_position: usize,
+    selection_range: Option<(usize, usize)>,
     measurer: &mut impl astra_gui::ContentMeasurer,
     event_dispatcher: &mut astra_gui_wgpu::EventDispatcher,
 ) -> Node {
@@ -156,8 +158,63 @@ pub fn text_input(
         0.0
     };
 
-    let mut children = vec![
-        // Text content
+    let mut children = vec![];
+
+    // Add selection highlight if there is a selection range
+    if let Some((start, end)) = selection_range {
+        if start < end && !value_str.is_empty() {
+            // Calculate selection start position
+            let text_before_selection = value_str.chars().take(start).collect::<String>();
+            let selection_x_offset = if !text_before_selection.is_empty() {
+                let text_width = measurer.measure_text(astra_gui::MeasureTextRequest {
+                    text: &text_before_selection,
+                    font_size: style.font_size,
+                    h_align: HorizontalAlign::Left,
+                    v_align: VerticalAlign::Center,
+                    family: None,
+                });
+                text_width.width
+            } else {
+                0.0
+            };
+
+            // Calculate selection width
+            let selected_text = value_str
+                .chars()
+                .skip(start)
+                .take(end - start)
+                .collect::<String>();
+            let selection_width = if !selected_text.is_empty() {
+                let text_width = measurer.measure_text(astra_gui::MeasureTextRequest {
+                    text: &selected_text,
+                    font_size: style.font_size,
+                    h_align: HorizontalAlign::Left,
+                    v_align: VerticalAlign::Center,
+                    family: None,
+                });
+                text_width.width
+            } else {
+                0.0
+            };
+
+            // Add selection rectangle
+            children.push(
+                Node::new()
+                    .with_width(Size::px(selection_width))
+                    .with_height(Size::px(style.font_size))
+                    .with_offset(Offset::x(selection_x_offset))
+                    .with_shape(Shape::Rect(StyledRect {
+                        rect: Rect::default(),
+                        corner_shape: CornerShape::Round(2.0), // Slightly rounded
+                        fill: mocha::BLUE.with_alpha(0.3),     // Semi-transparent blue
+                        stroke: None,
+                    })),
+            );
+        }
+    }
+
+    // Text content
+    children.push(
         Node::new()
             .with_width(Size::Fill)
             .with_height(Size::Fill)
@@ -178,7 +235,7 @@ pub fn text_input(
             })
             .with_disabled(disabled)
             .with_transition(Transition::quick()),
-    ];
+    );
 
     // Add cursor if focused and visible
     if focused && cursor_visible && !disabled {
@@ -255,11 +312,13 @@ pub fn text_input(
 /// - Clicking outside or pressing ESC to unfocus it
 /// - Keyboard input when focused
 /// - Cursor blink state management
+/// - Text selection with Shift+arrows and Ctrl/Cmd+A
 ///
 /// # Arguments
 /// * `input_id` - The ID of the text input
 /// * `value` - Current text value (will be modified if keys are pressed)
 /// * `cursor_pos` - Current cursor position (byte offset, will be modified)
+/// * `selection_range` - Optional selection range (start, end) - will be modified for keyboard selection
 /// * `events` - Slice of targeted events from this frame
 /// * `input_state` - Current input state (for keyboard and mouse input)
 /// * `event_dispatcher` - EventDispatcher for managing focus and cursor blink
@@ -270,6 +329,7 @@ pub fn text_input_update(
     input_id: &str,
     value: &mut String,
     cursor_pos: &mut usize,
+    selection_range: &mut Option<(usize, usize)>,
     events: &[TargetedEvent],
     input_state: &astra_gui_wgpu::InputState,
     event_dispatcher: &mut astra_gui_wgpu::EventDispatcher,
@@ -313,8 +373,34 @@ pub fn text_input_update(
         return false;
     }
 
+    // Check if shift is held for selection
+    let shift_held = input_state.shift_held;
+    let ctrl_held = input_state.ctrl_held;
+
+    // Track selection anchor point (where selection started)
+    let selection_anchor = if let Some((start, end)) = *selection_range {
+        // If cursor is at end, anchor is start; if cursor is at start, anchor is end
+        if *cursor_pos == end {
+            Some(start)
+        } else {
+            Some(end)
+        }
+    } else {
+        None
+    };
+
     // Process typed characters
     for ch in &input_state.characters_typed {
+        // Delete selection if exists before inserting
+        if let Some((start, end)) = *selection_range {
+            if start < end {
+                value.replace_range(start..end, "");
+                *cursor_pos = start;
+                *selection_range = None;
+                changed = true;
+            }
+        }
+
         // Insert character at cursor position
         if *cursor_pos <= value.len() {
             value.insert(*cursor_pos, *ch);
@@ -327,8 +413,25 @@ pub fn text_input_update(
     // Process special keys
     for key in &input_state.keys_just_pressed {
         match key {
+            // Ctrl/Cmd+A: Select all
+            Key::Character(ref ch) if ch == "a" && ctrl_held => {
+                if !value.is_empty() {
+                    *selection_range = Some((0, value.len()));
+                    *cursor_pos = value.len();
+                    event_dispatcher.reset_cursor_blink(&node_id);
+                }
+            }
             Key::Named(NamedKey::Backspace) => {
-                if *cursor_pos > 0 && !value.is_empty() {
+                // Delete selection if exists
+                if let Some((start, end)) = *selection_range {
+                    if start < end {
+                        value.replace_range(start..end, "");
+                        *cursor_pos = start;
+                        *selection_range = None;
+                        changed = true;
+                        event_dispatcher.reset_cursor_blink(&node_id);
+                    }
+                } else if *cursor_pos > 0 && !value.is_empty() {
                     // Find the previous character boundary
                     let mut new_pos = *cursor_pos - 1;
                     while new_pos > 0 && !value.is_char_boundary(new_pos) {
@@ -341,7 +444,16 @@ pub fn text_input_update(
                 }
             }
             Key::Named(NamedKey::Delete) => {
-                if *cursor_pos < value.len() {
+                // Delete selection if exists
+                if let Some((start, end)) = *selection_range {
+                    if start < end {
+                        value.replace_range(start..end, "");
+                        *cursor_pos = start;
+                        *selection_range = None;
+                        changed = true;
+                        event_dispatcher.reset_cursor_blink(&node_id);
+                    }
+                } else if *cursor_pos < value.len() {
                     value.remove(*cursor_pos);
                     changed = true;
                     event_dispatcher.reset_cursor_blink(&node_id);
@@ -349,28 +461,92 @@ pub fn text_input_update(
             }
             Key::Named(NamedKey::ArrowLeft) => {
                 if *cursor_pos > 0 {
+                    let old_pos = *cursor_pos;
                     *cursor_pos -= 1;
                     while *cursor_pos > 0 && !value.is_char_boundary(*cursor_pos) {
                         *cursor_pos -= 1;
                     }
+
+                    if shift_held {
+                        // Extend or create selection
+                        if let Some(anchor) = selection_anchor {
+                            *selection_range = Some(if *cursor_pos < anchor {
+                                (*cursor_pos, anchor)
+                            } else {
+                                (anchor, *cursor_pos)
+                            });
+                        } else {
+                            *selection_range = Some((*cursor_pos, old_pos));
+                        }
+                    } else {
+                        // Clear selection if not holding shift
+                        *selection_range = None;
+                    }
+
                     event_dispatcher.reset_cursor_blink(&node_id);
                 }
             }
             Key::Named(NamedKey::ArrowRight) => {
                 if *cursor_pos < value.len() {
+                    let old_pos = *cursor_pos;
                     *cursor_pos += 1;
                     while *cursor_pos < value.len() && !value.is_char_boundary(*cursor_pos) {
                         *cursor_pos += 1;
                     }
+
+                    if shift_held {
+                        // Extend or create selection
+                        if let Some(anchor) = selection_anchor {
+                            *selection_range = Some(if *cursor_pos < anchor {
+                                (*cursor_pos, anchor)
+                            } else {
+                                (anchor, *cursor_pos)
+                            });
+                        } else {
+                            *selection_range = Some((old_pos, *cursor_pos));
+                        }
+                    } else {
+                        // Clear selection if not holding shift
+                        *selection_range = None;
+                    }
+
                     event_dispatcher.reset_cursor_blink(&node_id);
                 }
             }
             Key::Named(NamedKey::Home) => {
+                let old_pos = *cursor_pos;
                 *cursor_pos = 0;
+
+                if shift_held {
+                    if let Some(anchor) = selection_anchor {
+                        *selection_range = Some((0, anchor));
+                    } else {
+                        *selection_range = Some((0, old_pos));
+                    }
+                } else {
+                    *selection_range = None;
+                }
+
                 event_dispatcher.reset_cursor_blink(&node_id);
             }
             Key::Named(NamedKey::End) => {
+                let old_pos = *cursor_pos;
                 *cursor_pos = value.len();
+
+                if shift_held {
+                    if let Some(anchor) = selection_anchor {
+                        *selection_range = Some(if value.len() > anchor {
+                            (anchor, value.len())
+                        } else {
+                            (value.len(), anchor)
+                        });
+                    } else {
+                        *selection_range = Some((old_pos, value.len()));
+                    }
+                } else {
+                    *selection_range = None;
+                }
+
                 event_dispatcher.reset_cursor_blink(&node_id);
             }
             _ => {}
