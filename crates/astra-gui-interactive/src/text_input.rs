@@ -252,21 +252,51 @@ pub fn text_input(
                     .with_shape(Shape::Rect(StyledRect::new(Rect::default(), cursor_color)))
             }
             CursorShape::Underline => {
-                // Underline cursor
+                // Underline cursor - measure character width at cursor
+                let cursor_width = if cursor_position == 0 || cursor_position == value_str.len() {
+                    style.font_size * 0.6
+                } else {
+                    let char_at_cursor = value_str.chars().nth(cursor_position).unwrap_or(' ');
+                    let char_width = measurer
+                        .measure_text(astra_gui::MeasureTextRequest {
+                            text: &char_at_cursor.to_string(),
+                            font_size: style.font_size,
+                            h_align: HorizontalAlign::Left,
+                            v_align: VerticalAlign::Center,
+                            family: None,
+                        })
+                        .width;
+                    char_width
+                };
+
                 Node::new()
-                    .with_width(Size::px(style.font_size * 0.6))
+                    .with_width(Size::px(cursor_width))
                     .with_height(Size::px(style.cursor_style.thickness))
                     .with_offset(Offset::new(cursor_x_offset, style.font_size))
                     .with_shape(Shape::Rect(StyledRect::new(Rect::default(), cursor_color)))
             }
             CursorShape::Block => {
-                // Block cursor
+                // Block cursor - measure character width at cursor
+                let cursor_width = if cursor_position == 0 {
+                    style.font_size * 0.6
+                } else {
+                    let char_at_cursor = value_str.chars().nth(cursor_position - 1).unwrap_or(' ');
+                    let char_width = measurer
+                        .measure_text(astra_gui::MeasureTextRequest {
+                            text: &char_at_cursor.to_string(),
+                            font_size: style.font_size,
+                            h_align: HorizontalAlign::Left,
+                            v_align: VerticalAlign::Center,
+                            family: None,
+                        })
+                        .width;
+                    char_width
+                };
+
                 Node::new()
-                    .with_width(Size::px(style.font_size * 0.6))
+                    .with_width(Size::px(cursor_width))
                     .with_height(Size::px(style.font_size))
-                    .with_offset(Offset::x(
-                        (cursor_x_offset - style.font_size * 0.6).max(0.0),
-                    ))
+                    .with_offset(Offset::x((cursor_x_offset - cursor_width).max(0.0)))
                     .with_shape(Shape::Rect(StyledRect::new(
                         Rect::default(),
                         cursor_color.with_alpha(0.3), // Semi-transparent
