@@ -306,6 +306,15 @@ pub fn text_input(
         children.push(cursor_node);
     }
 
+    // Add hitbox node to capture all clicks (including on text)
+    children.push(
+        Node::new()
+            .with_id(astra_gui::NodeId::new(format!("{}_hitbox", id_string)))
+            .with_width(Size::Fill)
+            .with_height(Size::Fill)
+            .with_disabled(disabled),
+    );
+
     Node::new()
         .with_id(node_id)
         .with_width(Size::px(300.0))
@@ -695,9 +704,11 @@ pub fn text_input_update(
 /// # Returns
 /// `true` if the text input was clicked, `false` otherwise
 pub fn text_input_clicked(input_id: &str, events: &[TargetedEvent]) -> bool {
-    events
-        .iter()
-        .any(|e| matches!(e.event, InteractionEvent::Click { .. }) && e.target.as_str() == input_id)
+    let hitbox_id = format!("{}_hitbox", input_id);
+    events.iter().any(|e| {
+        matches!(e.event, InteractionEvent::Click { .. })
+            && (e.target.as_str() == input_id || e.target.as_str() == hitbox_id)
+    })
 }
 
 /// Check if a text input with the given ID received focus this frame
