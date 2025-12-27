@@ -32,6 +32,10 @@ pub enum InteractionEvent {
         button: MouseButton,
         position: Point,
     },
+    /// Node gained focus
+    Focus,
+    /// Node lost focus
+    Blur,
 }
 
 /// An interaction event targeted at a specific node
@@ -63,6 +67,8 @@ pub struct EventDispatcher {
     hovered_nodes: Vec<NodeId>,
     /// Current drag state, if dragging
     drag_state: Option<DragState>,
+    /// Currently focused node ID, if any
+    focused_node: Option<NodeId>,
 }
 
 impl EventDispatcher {
@@ -71,7 +77,45 @@ impl EventDispatcher {
         Self {
             hovered_nodes: Vec::new(),
             drag_state: None,
+            focused_node: None,
         }
+    }
+
+    /// Get the currently focused node ID
+    pub fn focused_node(&self) -> Option<&NodeId> {
+        self.focused_node.as_ref()
+    }
+
+    /// Set focus to a specific node, generating Focus/Blur events as needed
+    ///
+    /// Returns events for the focus change (Blur for old focus, Focus for new focus)
+    pub fn set_focus(&mut self, node_id: Option<NodeId>) -> Vec<TargetedEvent> {
+        let mut events = Vec::new();
+
+        // Generate Blur event for previously focused node
+        if let Some(old_focus) = &self.focused_node {
+            if Some(old_focus) != node_id.as_ref() {
+                events.push(TargetedEvent {
+                    event: InteractionEvent::Blur,
+                    target: old_focus.clone(),
+                    local_position: Point { x: 0.0, y: 0.0 },
+                });
+            }
+        }
+
+        // Generate Focus event for newly focused node
+        if let Some(new_focus) = &node_id {
+            if Some(new_focus) != self.focused_node.as_ref() {
+                events.push(TargetedEvent {
+                    event: InteractionEvent::Focus,
+                    target: new_focus.clone(),
+                    local_position: Point { x: 0.0, y: 0.0 },
+                });
+            }
+        }
+
+        self.focused_node = node_id;
+        events
     }
 
     /// Process input state and generate interaction events

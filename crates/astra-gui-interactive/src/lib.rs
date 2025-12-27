@@ -7,8 +7,10 @@
 
 mod button;
 mod slider;
+mod text_input;
 mod toggle;
 
 pub use button::*;
 pub use slider::*;
+pub use text_input::*;
 pub use toggle::*;

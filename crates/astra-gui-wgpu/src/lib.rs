@@ -16,6 +16,9 @@ pub use events::*;
 pub use input::*;
 pub use interactive_state::*;
 
+// Re-export keyboard types for use in interactive components
+pub use winit::keyboard::{Key, NamedKey};
+
 use astra_gui::{FullOutput, Shape, Tessellator};
 use instance::RectInstance;
 use vertex::WgpuVertex;

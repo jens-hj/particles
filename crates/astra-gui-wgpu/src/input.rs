@@ -6,6 +6,7 @@
 use astra_gui::Point;
 use std::collections::HashSet;
 use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::keyboard::Key;
 
 /// Tracks the current state of mouse and keyboard input
 ///
@@ -21,6 +22,12 @@ pub struct InputState {
     pub buttons_just_pressed: HashSet<MouseButton>,
     /// Set of mouse buttons that were released this frame
     pub buttons_just_released: HashSet<MouseButton>,
+    /// Characters typed this frame (for text input)
+    pub characters_typed: Vec<char>,
+    /// Keys pressed this frame
+    pub keys_just_pressed: Vec<Key>,
+    /// Keys released this frame
+    pub keys_just_released: Vec<Key>,
 }
 
 impl InputState {
@@ -31,6 +38,9 @@ impl InputState {
             buttons_pressed: HashSet::new(),
             buttons_just_pressed: HashSet::new(),
             buttons_just_released: HashSet::new(),
+            characters_typed: Vec::new(),
+            keys_just_pressed: Vec::new(),
+            keys_just_released: Vec::new(),
         }
     }
 
@@ -41,12 +51,14 @@ impl InputState {
     pub fn begin_frame(&mut self) {
         self.buttons_just_pressed.clear();
         self.buttons_just_released.clear();
+        self.characters_typed.clear();
+        self.keys_just_pressed.clear();
+        self.keys_just_released.clear();
     }
 
     /// Process a winit WindowEvent and update internal state
     ///
     /// This should be called for each WindowEvent received from winit.
-    /// Only mouse-related events are processed; other events are ignored.
     pub fn handle_event(&mut self, event: &WindowEvent) {
         match event {
             WindowEvent::CursorMoved { position, .. } => {
@@ -68,8 +80,26 @@ impl InputState {
                     self.buttons_just_released.insert(*button);
                 }
             },
+            WindowEvent::KeyboardInput { event, .. } => {
+                match event.state {
+                    ElementState::Pressed => {
+                        if !event.repeat {
+                            self.keys_just_pressed.push(event.logical_key.clone());
+                        }
+                        // Handle text input from key events
+                        if let Key::Character(ref text) = event.logical_key {
+                            for ch in text.chars() {
+                                self.characters_typed.push(ch);
+                            }
+                        }
+                    }
+                    ElementState::Released => {
+                        self.keys_just_released.push(event.logical_key.clone());
+                    }
+                }
+            }
             _ => {
-                // Ignore other events (keyboard, etc.)
+                // Ignore other events
             }
         }
     }

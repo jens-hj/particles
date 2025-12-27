@@ -13,8 +13,8 @@ use astra_gui::{
     Shape, Size, Spacing, StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_interactive::{
-    button, button_clicked, slider, slider_drag, toggle, toggle_clicked, ButtonStyle, SliderStyle,
-    ToggleStyle,
+    button, button_clicked, slider, slider_drag, text_input, text_input_clicked, text_input_update,
+    toggle, toggle_clicked, ButtonStyle, SliderStyle, TextInputStyle, ToggleStyle,
 };
 use astra_gui_text::Engine as TextEngine;
 use astra_gui_wgpu::{EventDispatcher, InputState, InteractiveStateManager, RenderMode, Renderer};
@@ -132,6 +132,8 @@ struct App {
     nodes_disabled: bool,
     slider_value: f32,
     continuous_slider_value: f32,
+    text_input_value: String,
+    text_input_cursor: usize,
     debug_options: DebugOptions,
 }
 
@@ -156,6 +158,8 @@ impl App {
             nodes_disabled: false,
             slider_value: 7.0,
             continuous_slider_value: 50.0,
+            text_input_value: String::new(),
+            text_input_cursor: 0,
             debug_options: DebugOptions::none(),
         }
     }
@@ -184,6 +188,32 @@ impl App {
         // Apply interactive styles with transitions
         self.interactive_state_manager
             .apply_styles(&mut ui, &interaction_states);
+
+        // Handle text input focus
+        if text_input_clicked("text_input", &events) {
+            let _focus_events = self.event_dispatcher.set_focus(Some("text_input".into()));
+            // Note: focus events would need to be processed in next frame
+            // For now we just track focus manually
+            println!("Text input focused");
+        }
+
+        // Update text input value from keyboard
+        let focused = self
+            .event_dispatcher
+            .focused_node()
+            .map(|id| id.as_str() == "text_input")
+            .unwrap_or(false);
+
+        if text_input_update(
+            "text_input",
+            &mut self.text_input_value,
+            &mut self.text_input_cursor,
+            &events,
+            &self.input_state,
+            focused,
+        ) {
+            println!("Text input value: {}", self.text_input_value);
+        }
 
         // Handle button clicks
         if button_clicked("increment_btn", &events) {
@@ -407,6 +437,29 @@ impl App {
                         h_align: HorizontalAlign::Center,
                         v_align: VerticalAlign::Center,
                     })),
+                // Text input section
+                Node::new()
+                    .with_width(Size::Fill)
+                    .with_layout_direction(Layout::Horizontal)
+                    .with_gap(16.0)
+                    .with_children(vec![
+                        // Spacer
+                        Node::new().with_width(Size::Fill),
+                        // Text Input
+                        text_input(
+                            "text_input",
+                            &self.text_input_value,
+                            "Type something...",
+                            self.event_dispatcher
+                                .focused_node()
+                                .map(|id| id.as_str() == "text_input")
+                                .unwrap_or(false),
+                            self.nodes_disabled,
+                            &TextInputStyle::default(),
+                        ),
+                        // Spacer
+                        Node::new().with_width(Size::Fill),
+                    ]),
                 // Stepped slider section
                 Node::new()
                     .with_width(Size::Fill)
