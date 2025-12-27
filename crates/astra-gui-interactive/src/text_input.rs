@@ -59,6 +59,8 @@ pub struct TextInputStyle {
     pub placeholder_color: Color,
     /// Disabled text color
     pub disabled_text_color: Color,
+    /// Selection highlight color
+    pub selection_color: Color,
     /// Internal padding
     pub padding: Spacing,
     /// Corner radius for rounded corners
@@ -78,6 +80,7 @@ impl Default for TextInputStyle {
             text_color: mocha::TEXT,
             placeholder_color: mocha::SUBTEXT0,
             disabled_text_color: mocha::SUBTEXT0,
+            selection_color: mocha::BLUE.with_alpha(0.3),
             padding: Spacing::symmetric(16.0, 12.0),
             border_radius: 8.0,
             font_size: 24.0,
@@ -206,7 +209,7 @@ pub fn text_input(
                     .with_shape(Shape::Rect(StyledRect {
                         rect: Rect::default(),
                         corner_shape: CornerShape::Round(2.0), // Slightly rounded
-                        fill: mocha::BLUE.with_alpha(0.3),     // Semi-transparent blue
+                        fill: style.selection_color,
                         stroke: None,
                     })),
             );
@@ -303,6 +306,73 @@ pub fn text_input(
         .with_transition(Transition::quick())
         .with_disabled(disabled)
         .with_children(children)
+}
+
+/// Find the next word boundary to the left (backward)
+fn find_prev_word_boundary(text: &str, pos: usize) -> usize {
+    if pos == 0 {
+        return 0;
+    }
+
+    let mut new_pos = pos;
+
+    // Move back one character first
+    new_pos -= 1;
+    while new_pos > 0 && !text.is_char_boundary(new_pos) {
+        new_pos -= 1;
+    }
+
+    // Skip whitespace
+    while new_pos > 0
+        && text[..new_pos]
+            .chars()
+            .last()
+            .map_or(false, |c| c.is_whitespace())
+    {
+        new_pos -= 1;
+        while new_pos > 0 && !text.is_char_boundary(new_pos) {
+            new_pos -= 1;
+        }
+    }
+
+    // Skip non-whitespace (the word itself)
+    while new_pos > 0 {
+        let prev_char = text[..new_pos].chars().last();
+        if prev_char.map_or(false, |c| c.is_whitespace()) {
+            break;
+        }
+        new_pos -= 1;
+        while new_pos > 0 && !text.is_char_boundary(new_pos) {
+            new_pos -= 1;
+        }
+    }
+
+    new_pos
+}
+
+/// Find the next word boundary to the right (forward)
+fn find_next_word_boundary(text: &str, pos: usize) -> usize {
+    if pos >= text.len() {
+        return text.len();
+    }
+
+    let mut new_pos = pos;
+    let chars: Vec<char> = text.chars().collect();
+    let mut char_idx = text[..pos].chars().count();
+
+    // Skip current word (non-whitespace)
+    while char_idx < chars.len() && !chars[char_idx].is_whitespace() {
+        new_pos += chars[char_idx].len_utf8();
+        char_idx += 1;
+    }
+
+    // Skip whitespace
+    while char_idx < chars.len() && chars[char_idx].is_whitespace() {
+        new_pos += chars[char_idx].len_utf8();
+        char_idx += 1;
+    }
+
+    new_pos
 }
 
 /// Handle text input keyboard events, focus/unfocus, and update the value
@@ -462,9 +532,16 @@ pub fn text_input_update(
             Key::Named(NamedKey::ArrowLeft) => {
                 if *cursor_pos > 0 {
                     let old_pos = *cursor_pos;
-                    *cursor_pos -= 1;
-                    while *cursor_pos > 0 && !value.is_char_boundary(*cursor_pos) {
+
+                    if ctrl_held {
+                        // Jump to previous word boundary
+                        *cursor_pos = find_prev_word_boundary(value, *cursor_pos);
+                    } else {
+                        // Move one character left
                         *cursor_pos -= 1;
+                        while *cursor_pos > 0 && !value.is_char_boundary(*cursor_pos) {
+                            *cursor_pos -= 1;
+                        }
                     }
 
                     if shift_held {
@@ -489,9 +566,16 @@ pub fn text_input_update(
             Key::Named(NamedKey::ArrowRight) => {
                 if *cursor_pos < value.len() {
                     let old_pos = *cursor_pos;
-                    *cursor_pos += 1;
-                    while *cursor_pos < value.len() && !value.is_char_boundary(*cursor_pos) {
+
+                    if ctrl_held {
+                        // Jump to next word boundary
+                        *cursor_pos = find_next_word_boundary(value, *cursor_pos);
+                    } else {
+                        // Move one character right
                         *cursor_pos += 1;
+                        while *cursor_pos < value.len() && !value.is_char_boundary(*cursor_pos) {
+                            *cursor_pos += 1;
+                        }
                     }
 
                     if shift_held {
