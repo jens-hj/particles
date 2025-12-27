@@ -127,6 +127,14 @@ impl Offset {
     pub const fn zero() -> Self {
         Self { x: 0.0, y: 0.0 }
     }
+
+    pub const fn x(x: f32) -> Self {
+        Self { x, y: 0.0 }
+    }
+
+    pub const fn y(y: f32) -> Self {
+        Self { x: 0.0, y }
+    }
 }
 
 /// Computed layout information after tree traversal
@@ -257,5 +265,13 @@ impl Spacing {
             bottom: 0.0,
             left,
         }
+    }
+
+    pub const fn get_vertical(&self) -> f32 {
+        self.top + self.bottom
+    }
+
+    pub const fn get_horizontal(&self) -> f32 {
+        self.right + self.left
     }
 }

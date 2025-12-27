@@ -27,6 +27,9 @@ pub struct Style {
     /// Text color (for text content)
     pub text_color: Option<Color>,
 
+    /// Cursor/caret color (for text input cursors, falls back to text_color if not set)
+    pub cursor_color: Option<Color>,
+
     /// Horizontal offset from default position
     pub offset_x: Option<f32>,
 
@@ -76,6 +79,7 @@ impl Style {
             corner_radius: other.corner_radius.or(self.corner_radius),
             opacity: other.opacity.or(self.opacity),
             text_color: other.text_color.or(self.text_color),
+            cursor_color: other.cursor_color.or(self.cursor_color),
             offset_x: other.offset_x.or(self.offset_x),
             offset_y: other.offset_y.or(self.offset_y),
         }

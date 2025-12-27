@@ -14,7 +14,8 @@ use astra_gui::{
 };
 use astra_gui_interactive::{
     button, button_clicked, slider, slider_drag, text_input, text_input_clicked, text_input_update,
-    toggle, toggle_clicked, ButtonStyle, SliderStyle, TextInputStyle, ToggleStyle,
+    toggle, toggle_clicked, ButtonStyle, CursorBlinkState, SliderStyle, TextInputStyle,
+    ToggleStyle,
 };
 use astra_gui_text::Engine as TextEngine;
 use astra_gui_wgpu::{EventDispatcher, InputState, InteractiveStateManager, RenderMode, Renderer};
@@ -134,7 +135,9 @@ struct App {
     continuous_slider_value: f32,
     text_input_value: String,
     text_input_cursor: usize,
+    text_input_cursor_blink: CursorBlinkState,
     debug_options: DebugOptions,
+    last_frame_time: std::time::Instant,
 }
 
 struct GpuState {
@@ -160,14 +163,17 @@ impl App {
             continuous_slider_value: 50.0,
             text_input_value: String::new(),
             text_input_cursor: 0,
+            text_input_cursor_blink: CursorBlinkState::new(),
             debug_options: DebugOptions::none(),
+            last_frame_time: std::time::Instant::now(),
         }
     }
 
     fn render(&mut self) {
-        let Some(ref window) = self.window else {
-            return;
-        };
+        // Calculate delta time
+        let now = std::time::Instant::now();
+        let _delta_time = now.duration_since(self.last_frame_time);
+        self.last_frame_time = now;
 
         // Update frame time for transitions
         self.interactive_state_manager.begin_frame();
@@ -175,8 +181,11 @@ impl App {
         // Build UI
         let mut ui = self.build_ui();
 
-        // Compute layout
-        let size = window.inner_size();
+        // Get window size
+        let size = match &self.window {
+            Some(window) => window.inner_size(),
+            None => return,
+        };
         let window_rect = Rect::from_min_size([0.0, 0.0], [size.width as f32, size.height as f32]);
         ui.compute_layout_with_measurer(window_rect, &mut self.text_engine);
 
@@ -211,8 +220,15 @@ impl App {
             &events,
             &self.input_state,
             focused,
+            &mut self.text_input_cursor_blink,
         ) {
             println!("Text input value: {}", self.text_input_value);
+        }
+
+        // Update cursor blink animation if focused
+        if focused {
+            self.text_input_cursor_blink
+                .update(std::time::Duration::from_millis(530));
         }
 
         // Handle button clicks
@@ -334,14 +350,16 @@ impl App {
 
         // Request redraw if there are active transitions
         if self.interactive_state_manager.has_active_transitions() {
-            window.request_redraw();
+            if let Some(ref window) = self.window {
+                window.request_redraw();
+            }
         }
 
         // Clear frame-specific input state for next frame
         self.input_state.begin_frame();
     }
 
-    fn build_ui(&self) -> Node {
+    fn build_ui(&mut self) -> Node {
         Node::new()
             .with_width(Size::Fill)
             .with_height(Size::Fill)
@@ -456,6 +474,9 @@ impl App {
                                 .unwrap_or(false),
                             self.nodes_disabled,
                             &TextInputStyle::default(),
+                            self.text_input_cursor,
+                            self.text_input_cursor_blink.is_visible(),
+                            &mut self.text_engine,
                         ),
                         // Spacer
                         Node::new().with_width(Size::Fill),
