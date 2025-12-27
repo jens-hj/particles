@@ -89,41 +89,61 @@ pub fn text_input(
         .with_width(Size::px(300.0))
         .with_height(Size::FitContent)
         .with_padding(style.padding)
-        .with_shape(astra_gui::Shape::Rect(StyledRect {
-            rect: astra_gui::Rect::default(),
-            corner_shape: CornerShape::Round(style.border_radius),
-            fill: if focused {
-                style.focused_color
-            } else {
-                style.idle_color
-            },
-            stroke: None,
-        }))
-        .with_content(Content::Text(TextContent {
-            text: display_text,
-            font_size: style.font_size,
-            color: text_color,
-            h_align: HorizontalAlign::Left,
-            v_align: VerticalAlign::Center,
-        }))
-        .with_style(Style {
-            fill_color: Some(if focused {
-                style.focused_color
-            } else {
-                style.idle_color
-            }),
-            text_color: Some(text_color),
-            corner_radius: Some(style.border_radius),
-            ..Default::default()
-        })
-        .with_disabled_style(Style {
-            fill_color: Some(style.disabled_color),
-            text_color: Some(style.disabled_text_color),
-            corner_radius: Some(style.border_radius),
-            ..Default::default()
-        })
+        .with_layout_direction(astra_gui::Layout::Stack)
         .with_disabled(disabled)
-        .with_transition(Transition::quick())
+        .with_children(vec![
+            // Background
+            Node::new()
+                .with_width(Size::Fill)
+                .with_height(Size::Fill)
+                .with_shape(astra_gui::Shape::Rect(StyledRect {
+                    rect: astra_gui::Rect::default(),
+                    corner_shape: CornerShape::Round(style.border_radius),
+                    fill: if focused {
+                        style.focused_color
+                    } else {
+                        style.idle_color
+                    },
+                    stroke: None,
+                }))
+                .with_style(Style {
+                    fill_color: Some(if focused {
+                        style.focused_color
+                    } else {
+                        style.idle_color
+                    }),
+                    corner_radius: Some(style.border_radius),
+                    ..Default::default()
+                })
+                .with_disabled_style(Style {
+                    fill_color: Some(style.disabled_color),
+                    corner_radius: Some(style.border_radius),
+                    ..Default::default()
+                })
+                .with_disabled(disabled)
+                .with_transition(Transition::quick()),
+            // Text content
+            Node::new()
+                .with_width(Size::Fill)
+                .with_height(Size::Fill)
+                .with_content(Content::Text(TextContent {
+                    text: display_text,
+                    font_size: style.font_size,
+                    color: text_color,
+                    h_align: HorizontalAlign::Left,
+                    v_align: VerticalAlign::Center,
+                }))
+                .with_style(Style {
+                    text_color: Some(text_color),
+                    ..Default::default()
+                })
+                .with_disabled_style(Style {
+                    text_color: Some(style.disabled_text_color),
+                    ..Default::default()
+                })
+                .with_disabled(disabled)
+                .with_transition(Transition::quick()),
+        ])
 }
 
 /// Handle text input keyboard events and update the value

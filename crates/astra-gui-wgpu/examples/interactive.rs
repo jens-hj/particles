@@ -609,9 +609,18 @@ impl ApplicationHandler for App {
             } => event_loop.exit(),
 
             WindowEvent::KeyboardInput { .. } => {
-                // Debug controls (D/M/P/B/C/R/G/S).
-                let renderer = self.gpu_state.as_mut().map(|s| &mut s.renderer);
-                let _handled = handle_debug_keybinds(&event, &mut self.debug_options, renderer);
+                // First, pass keyboard events to input state
+                self.input_state.handle_event(&event);
+
+                // Only handle debug shortcuts if no element has focus
+                if self.event_dispatcher.focused_node().is_none() {
+                    let renderer = self.gpu_state.as_mut().map(|s| &mut s.renderer);
+                    let _handled = handle_debug_keybinds(&event, &mut self.debug_options, renderer);
+                }
+
+                if let Some(ref window) = self.window {
+                    window.request_redraw();
+                }
             }
             WindowEvent::CursorMoved { .. } | WindowEvent::MouseInput { .. } => {
                 self.input_state.handle_event(&event);
