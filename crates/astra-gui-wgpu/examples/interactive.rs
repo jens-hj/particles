@@ -487,7 +487,7 @@ impl App {
                             .with_width(Size::px(150.0))
                             .with_height(Size::FitContent)
                             .with_content(Content::Text(TextContent {
-                                text: "Stepped (5.0):".to_string(),
+                                text: "Stepped (7):".to_string(),
                                 font_size: 20.0,
                                 color: mocha::TEXT,
                                 h_align: HorizontalAlign::Right,
