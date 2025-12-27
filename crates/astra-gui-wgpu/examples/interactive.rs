@@ -458,7 +458,7 @@ impl App {
                             self.nodes_disabled,
                             &TextInputStyle {
                                 cursor_style: CursorStyle {
-                                    shape: CursorShape::Line,
+                                    shape: CursorShape::Block,
                                     thickness: 3.0,
                                     ..CursorStyle::default()
                                 },

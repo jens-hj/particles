@@ -80,7 +80,7 @@ impl Default for TextInputStyle {
             text_color: mocha::TEXT,
             placeholder_color: mocha::SUBTEXT0,
             disabled_text_color: mocha::SUBTEXT0,
-            selection_color: mocha::BLUE.with_alpha(0.3),
+            selection_color: mocha::LAVENDER.with_alpha(0.3),
             padding: Spacing::symmetric(16.0, 12.0),
             border_radius: 8.0,
             font_size: 24.0,
@@ -264,7 +264,9 @@ pub fn text_input(
                 Node::new()
                     .with_width(Size::px(style.font_size * 0.6))
                     .with_height(Size::px(style.font_size))
-                    .with_offset(Offset::x(cursor_x_offset))
+                    .with_offset(Offset::x(
+                        (cursor_x_offset - style.font_size * 0.6).max(0.0),
+                    ))
                     .with_shape(Shape::Rect(StyledRect::new(
                         Rect::default(),
                         cursor_color.with_alpha(0.3), // Semi-transparent
@@ -502,13 +504,20 @@ pub fn text_input_update(
                         event_dispatcher.reset_cursor_blink(&node_id);
                     }
                 } else if *cursor_pos > 0 && !value.is_empty() {
-                    // Find the previous character boundary
-                    let mut new_pos = *cursor_pos - 1;
-                    while new_pos > 0 && !value.is_char_boundary(new_pos) {
-                        new_pos -= 1;
+                    if ctrl_held {
+                        // Delete from cursor to previous word boundary
+                        let new_pos = find_prev_word_boundary(value, *cursor_pos);
+                        value.replace_range(new_pos..*cursor_pos, "");
+                        *cursor_pos = new_pos;
+                    } else {
+                        // Delete one character backward
+                        let mut new_pos = *cursor_pos - 1;
+                        while new_pos > 0 && !value.is_char_boundary(new_pos) {
+                            new_pos -= 1;
+                        }
+                        value.remove(new_pos);
+                        *cursor_pos = new_pos;
                     }
-                    value.remove(new_pos);
-                    *cursor_pos = new_pos;
                     changed = true;
                     event_dispatcher.reset_cursor_blink(&node_id);
                 }
@@ -524,7 +533,14 @@ pub fn text_input_update(
                         event_dispatcher.reset_cursor_blink(&node_id);
                     }
                 } else if *cursor_pos < value.len() {
-                    value.remove(*cursor_pos);
+                    if ctrl_held {
+                        // Delete from cursor to next word boundary
+                        let new_pos = find_next_word_boundary(value, *cursor_pos);
+                        value.replace_range(*cursor_pos..new_pos, "");
+                    } else {
+                        // Delete one character forward
+                        value.remove(*cursor_pos);
+                    }
                     changed = true;
                     event_dispatcher.reset_cursor_blink(&node_id);
                 }
