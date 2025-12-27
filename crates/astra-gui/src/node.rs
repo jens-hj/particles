@@ -131,6 +131,14 @@ impl Node {
         self.id.as_ref()
     }
 
+    /// Set an auto-generated ID (internal use only, for interactive styles)
+    #[doc(hidden)]
+    pub fn set_auto_id(&mut self, id: NodeId) {
+        if self.id.is_none() {
+            self.id = Some(id);
+        }
+    }
+
     /// Set the width
     pub fn with_width(mut self, width: Size) -> Self {
         self.width = width;

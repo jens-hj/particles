@@ -73,6 +73,42 @@ impl InteractiveStateManager {
         self.current_time = Instant::now();
     }
 
+    /// Assign auto-generated IDs to nodes that need them for interactivity
+    ///
+    /// This must be called BEFORE event dispatch so that hit-testing can find
+    /// nodes with hover/active styles. Call this after building the UI tree
+    /// but before calling dispatch() on the event dispatcher.
+    pub fn assign_auto_ids(node: &mut Node) {
+        Self::assign_auto_ids_recursive(node, &mut vec![]);
+    }
+
+    /// Internal recursive helper for assign_auto_ids
+    fn assign_auto_ids_recursive(node: &mut Node, path: &mut Vec<usize>) {
+        // Check if node needs an auto-ID for interactivity
+        let needs_auto_id = node.id().is_none()
+            && (node.hover_style().is_some()
+                || node.active_style().is_some()
+                || node.disabled_style().is_some());
+
+        if needs_auto_id {
+            // Generate a stable auto-ID based on tree path
+            let path_str = path
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join("_");
+            let auto_id = NodeId::new(format!("__auto_path_{}", path_str));
+            node.set_auto_id(auto_id);
+        }
+
+        // Recursively process children with updated path
+        for (idx, child) in node.children_mut().iter_mut().enumerate() {
+            path.push(idx);
+            Self::assign_auto_ids_recursive(child, path);
+            path.pop();
+        }
+    }
+
     /// Update interaction state for a node and return the computed style
     ///
     /// This is called for each interactive node during rendering to compute
@@ -190,14 +226,14 @@ impl InteractiveStateManager {
 
     /// Apply interactive styles to a node tree
     ///
-    /// This traverses the tree and applies computed styles to nodes with IDs
-    /// that have interaction states.
+    /// This traverses the tree and applies computed styles to nodes with IDs.
+    /// Auto-IDs should have been assigned via `assign_auto_ids()` before calling this.
     pub fn apply_styles(
         &mut self,
         node: &mut Node,
         interaction_states: &HashMap<NodeId, InteractionState>,
     ) {
-        // Check if this node has an ID and styles configured
+        // Apply styles if node has an ID and base style
         if let Some(node_id) = node.id() {
             if let Some(base_style) = node.base_style() {
                 // Check if node is disabled - if so, force Disabled state

@@ -129,7 +129,7 @@ struct App {
 
     // Application state
     counter: i32,
-    buttons_disabled: bool,
+    nodes_disabled: bool,
     slider_value: f32,
     continuous_slider_value: f32,
     debug_options: DebugOptions,
@@ -153,7 +153,7 @@ impl App {
             event_dispatcher: EventDispatcher::new(),
             interactive_state_manager: InteractiveStateManager::new(),
             counter: 0,
-            buttons_disabled: false,
+            nodes_disabled: false,
             slider_value: 7.0,
             continuous_slider_value: 50.0,
             debug_options: DebugOptions::none(),
@@ -177,7 +177,9 @@ impl App {
         ui.compute_layout_with_measurer(window_rect, &mut self.text_engine);
 
         // Generate events and interaction states from input
-        let (events, interaction_states) = self.event_dispatcher.dispatch(&self.input_state, &ui);
+        // (auto-IDs are assigned automatically inside dispatch)
+        let (events, interaction_states) =
+            self.event_dispatcher.dispatch(&self.input_state, &mut ui);
 
         // Apply interactive styles with transitions
         self.interactive_state_manager
@@ -195,10 +197,10 @@ impl App {
         }
 
         if toggle_clicked("enable_toggle", &events) {
-            self.buttons_disabled = !self.buttons_disabled;
+            self.nodes_disabled = !self.nodes_disabled;
             println!(
                 "Toggle clicked! Buttons are now {}",
-                if self.buttons_disabled {
+                if self.nodes_disabled {
                     "disabled"
                 } else {
                     "enabled"
@@ -352,14 +354,14 @@ impl App {
                         button(
                             "decrement_btn",
                             "-",
-                            self.buttons_disabled,
+                            self.nodes_disabled,
                             &ButtonStyle::default(),
                         ),
                         // Increment Button
                         button(
                             "increment_btn",
                             "+",
-                            self.buttons_disabled,
+                            self.nodes_disabled,
                             &ButtonStyle::default(),
                         ),
                         // Spacer
@@ -387,8 +389,8 @@ impl App {
                         // Toggle Switch
                         toggle(
                             "enable_toggle",
-                            !self.buttons_disabled, // Toggle is ON when buttons are enabled
-                            false,                  // Toggle itself is never disabled
+                            !self.nodes_disabled, // Toggle is ON when buttons are enabled
+                            false,                // Toggle itself is never disabled
                             &ToggleStyle::default(),
                         ),
                         // Spacer
@@ -431,7 +433,7 @@ impl App {
                             "stepped_slider",
                             self.slider_value,
                             0.0..=30.0,
-                            false,
+                            self.nodes_disabled,
                             &SliderStyle::default(),
                         ),
                         // Value display
@@ -474,7 +476,7 @@ impl App {
                             "continuous_slider",
                             self.continuous_slider_value,
                             0.0..=100.0,
-                            false,
+                            self.nodes_disabled,
                             &SliderStyle::default(),
                         ),
                         // Value display

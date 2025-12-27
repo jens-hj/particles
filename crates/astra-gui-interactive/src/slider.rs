@@ -111,15 +111,11 @@ pub fn slider(
                 }))
                 .with_style(Style {
                     fill_color: Some(style.track_color),
-                    corner_radius: Some(style.track_height / 2.0),
                     ..Default::default()
                 })
-                .with_disabled_style(Style {
-                    opacity: Some(0.5),
-                    ..Default::default()
-                })
-                .with_disabled(disabled),
-            // Filled portion of track - no ID so events go to container
+                .with_disabled(disabled)
+                .with_transition(Transition::quick()),
+            // Filled portion of track
             Node::new()
                 .with_width(Size::px(filled_width))
                 .with_height(Size::px(style.track_height))
@@ -130,20 +126,15 @@ pub fn slider(
                 ))
                 .with_style(Style {
                     fill_color: Some(style.filled_color),
-                    corner_radius: Some(style.track_height / 2.0),
                     ..Default::default()
                 })
                 .with_disabled_style(Style {
                     fill_color: Some(mocha::SURFACE1),
-                    opacity: Some(0.5),
                     ..Default::default()
                 })
-                .with_disabled(disabled),
-            // Thumb (visual indicator) - has ID for hover/active styles
-            // NOTE: Clicking directly on thumb doesn't work reliably with Stack layout
-            // due to coordinate transform issues. Click the track instead.
+                .with_disabled(disabled)
+                .with_transition(Transition::quick()),
             Node::new()
-                .with_id(NodeId::new(id_str.clone()))
                 .with_width(Size::px(style.thumb_size))
                 .with_height(Size::px(style.thumb_size))
                 .with_offset(Offset::new(thumb_offset_x, 0.0))
@@ -155,7 +146,7 @@ pub fn slider(
                 }))
                 .with_style(Style {
                     fill_color: Some(style.thumb_color),
-                    corner_radius: Some(style.thumb_size / 2.0),
+                    opacity: Some(1.0),
                     ..Default::default()
                 })
                 .with_hover_style(Style {
@@ -167,8 +158,7 @@ pub fn slider(
                     ..Default::default()
                 })
                 .with_disabled_style(Style {
-                    fill_color: Some(mocha::SURFACE1),
-                    opacity: Some(0.5),
+                    opacity: Some(0.0),
                     ..Default::default()
                 })
                 .with_disabled(disabled)
@@ -177,7 +167,8 @@ pub fn slider(
             Node::new()
                 .with_id(NodeId::new(format!("{}_hitbox", id_str)))
                 .with_width(Size::Fill)
-                .with_height(Size::Fill),
+                .with_height(Size::Fill)
+                .with_disabled(disabled),
         ])
 }
 

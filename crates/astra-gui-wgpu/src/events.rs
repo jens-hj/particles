@@ -77,7 +77,9 @@ impl EventDispatcher {
     /// Process input state and generate interaction events
     ///
     /// This performs hit-testing against the UI tree and generates events
-    /// based on what the input state contains.
+    /// based on what the input state contains. Auto-IDs are automatically assigned
+    /// to nodes with interactive styles to enable hover/active states without
+    /// requiring manual IDs.
     ///
     /// # Arguments
     /// * `input` - Current input state (mouse position, buttons)
@@ -90,8 +92,11 @@ impl EventDispatcher {
     pub fn dispatch(
         &mut self,
         input: &InputState,
-        root: &Node,
+        root: &mut Node,
     ) -> (Vec<TargetedEvent>, HashMap<NodeId, InteractionState>) {
+        // Automatically assign IDs to nodes with interactive styles
+        // This allows hover/active/disabled styles to work without manual IDs
+        crate::interactive_state::InteractiveStateManager::assign_auto_ids(root);
         let mut events = Vec::new();
         let mut interaction_states = HashMap::new();
 
