@@ -28,7 +28,7 @@ pub struct CursorStyle {
     /// Cursor color (if None, uses text color)
     pub color: Option<Color>,
     /// Cursor width (for Line shape)
-    pub width: f32,
+    pub thickness: f32,
     /// Blink interval (time between blinks)
     pub blink_interval: Duration,
 }
@@ -38,7 +38,7 @@ impl Default for CursorStyle {
         Self {
             shape: CursorShape::Line,
             color: None, // Use text color
-            width: 2.0,
+            thickness: 2.0,
             blink_interval: Duration::from_millis(530), // Standard blink rate
         }
     }
@@ -96,8 +96,8 @@ impl Default for TextInputStyle {
 /// * `disabled` - Whether the text input is disabled
 /// * `style` - Visual styling configuration
 /// * `cursor_position` - Character index where the cursor should be positioned
-/// * `cursor_visible` - Whether the cursor should be visible (for blink animation)
 /// * `measurer` - ContentMeasurer for calculating text width
+/// * `event_dispatcher` - EventDispatcher for managing cursor blink state
 ///
 /// # Returns
 /// A configured `Node` representing the text input
@@ -109,9 +109,11 @@ pub fn text_input(
     disabled: bool,
     style: &TextInputStyle,
     cursor_position: usize,
-    cursor_visible: bool,
     measurer: &mut impl astra_gui::ContentMeasurer,
+    event_dispatcher: &mut astra_gui_wgpu::EventDispatcher,
 ) -> Node {
+    let id_string = id.into();
+    let node_id = astra_gui::NodeId::new(&id_string);
     let value_str = value.into();
     let placeholder_str = placeholder.into();
 
@@ -131,6 +133,13 @@ pub fn text_input(
 
     // Determine cursor color (falls back to text color)
     let cursor_color = style.cursor_style.color.unwrap_or(style.text_color);
+
+    // Update cursor blink state if focused
+    let cursor_visible = if focused {
+        event_dispatcher.update_cursor_blink(&node_id, style.cursor_style.blink_interval)
+    } else {
+        false
+    };
 
     // Calculate cursor x position by measuring text up to cursor position
     let text_before_cursor = value_str.chars().take(cursor_position).collect::<String>();
@@ -177,7 +186,7 @@ pub fn text_input(
             CursorShape::Line => {
                 // Vertical line cursor
                 Node::new()
-                    .with_width(Size::px(style.cursor_style.width))
+                    .with_width(Size::px(style.cursor_style.thickness))
                     .with_height(Size::px(style.font_size))
                     .with_offset(Offset::x(cursor_x_offset))
                     .with_shape(Shape::Rect(StyledRect::new(Rect::default(), cursor_color)))
@@ -186,11 +195,8 @@ pub fn text_input(
                 // Underline cursor
                 Node::new()
                     .with_width(Size::px(style.font_size * 0.6))
-                    .with_height(Size::px(style.cursor_style.width))
-                    .with_offset(Offset::new(
-                        cursor_x_offset,
-                        style.padding.top + style.font_size * 0.8,
-                    ))
+                    .with_height(Size::px(style.cursor_style.thickness))
+                    .with_offset(Offset::new(cursor_x_offset, style.font_size))
                     .with_shape(Shape::Rect(StyledRect::new(Rect::default(), cursor_color)))
             }
             CursorShape::Block => {
@@ -209,7 +215,7 @@ pub fn text_input(
     }
 
     Node::new()
-        .with_id(NodeId::new(id))
+        .with_id(node_id)
         .with_width(Size::px(300.0))
         .with_height(Size::px(style.font_size + style.padding.get_vertical()))
         .with_padding(style.padding)
@@ -242,57 +248,6 @@ pub fn text_input(
         .with_children(children)
 }
 
-/// Cursor blink state tracker
-///
-/// Maintains the blink animation state for a text input cursor.
-/// Should be stored in your application state and updated each frame.
-#[derive(Debug, Clone)]
-pub struct CursorBlinkState {
-    last_blink: Instant,
-    visible: bool,
-}
-
-impl CursorBlinkState {
-    /// Create a new cursor blink state (starts visible)
-    pub fn new() -> Self {
-        Self {
-            last_blink: Instant::now(),
-            visible: true,
-        }
-    }
-
-    /// Update the blink state based on time and return whether cursor should be visible
-    ///
-    /// Call this each frame when the text input is focused.
-    pub fn update(&mut self, blink_interval: Duration) -> bool {
-        let now = Instant::now();
-        if now.duration_since(self.last_blink) >= blink_interval {
-            self.visible = !self.visible;
-            self.last_blink = now;
-        }
-        self.visible
-    }
-
-    /// Reset the blink state (makes cursor visible and restarts blink timer)
-    ///
-    /// Call this when the user types or moves the cursor to ensure visibility.
-    pub fn reset(&mut self) {
-        self.visible = true;
-        self.last_blink = Instant::now();
-    }
-
-    /// Get the current visibility state without updating
-    pub fn is_visible(&self) -> bool {
-        self.visible
-    }
-}
-
-impl Default for CursorBlinkState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Handle text input keyboard events and update the value
 ///
 /// Call this each frame with the events and input state to update the text input value
@@ -310,14 +265,15 @@ impl Default for CursorBlinkState {
 /// # Returns
 /// `true` if the value was changed, `false` otherwise
 pub fn text_input_update(
-    _input_id: &str,
+    input_id: &str,
     value: &mut String,
     cursor_pos: &mut usize,
     _events: &[TargetedEvent],
     input_state: &astra_gui_wgpu::InputState,
     focused: bool,
-    cursor_blink: &mut CursorBlinkState,
+    event_dispatcher: &mut astra_gui_wgpu::EventDispatcher,
 ) -> bool {
+    let node_id = astra_gui::NodeId::new(input_id);
     let mut changed = false;
 
     // Only process keyboard input if focused
@@ -332,7 +288,7 @@ pub fn text_input_update(
             value.insert(*cursor_pos, *ch);
             *cursor_pos += ch.len_utf8();
             changed = true;
-            cursor_blink.reset(); // Reset cursor blink on edit
+            event_dispatcher.reset_cursor_blink(&node_id); // Reset cursor blink on edit
         }
     }
 
@@ -349,14 +305,14 @@ pub fn text_input_update(
                     value.remove(new_pos);
                     *cursor_pos = new_pos;
                     changed = true;
-                    cursor_blink.reset();
+                    event_dispatcher.reset_cursor_blink(&node_id);
                 }
             }
             Key::Named(NamedKey::Delete) => {
                 if *cursor_pos < value.len() {
                     value.remove(*cursor_pos);
                     changed = true;
-                    cursor_blink.reset();
+                    event_dispatcher.reset_cursor_blink(&node_id);
                 }
             }
             Key::Named(NamedKey::ArrowLeft) => {
@@ -365,7 +321,7 @@ pub fn text_input_update(
                     while *cursor_pos > 0 && !value.is_char_boundary(*cursor_pos) {
                         *cursor_pos -= 1;
                     }
-                    cursor_blink.reset();
+                    event_dispatcher.reset_cursor_blink(&node_id);
                 }
             }
             Key::Named(NamedKey::ArrowRight) => {
@@ -374,16 +330,16 @@ pub fn text_input_update(
                     while *cursor_pos < value.len() && !value.is_char_boundary(*cursor_pos) {
                         *cursor_pos += 1;
                     }
-                    cursor_blink.reset();
+                    event_dispatcher.reset_cursor_blink(&node_id);
                 }
             }
             Key::Named(NamedKey::Home) => {
                 *cursor_pos = 0;
-                cursor_blink.reset();
+                event_dispatcher.reset_cursor_blink(&node_id);
             }
             Key::Named(NamedKey::End) => {
                 *cursor_pos = value.len();
-                cursor_blink.reset();
+                event_dispatcher.reset_cursor_blink(&node_id);
             }
             _ => {}
         }

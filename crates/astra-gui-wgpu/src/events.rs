@@ -69,6 +69,15 @@ pub struct EventDispatcher {
     drag_state: Option<DragState>,
     /// Currently focused node ID, if any
     focused_node: Option<NodeId>,
+    /// Cursor blink states for focused text inputs (node_id -> blink_state)
+    cursor_blink_states: HashMap<NodeId, CursorBlinkState>,
+}
+
+/// Cursor blink state tracker (internal to EventDispatcher)
+#[derive(Debug, Clone)]
+struct CursorBlinkState {
+    last_blink: std::time::Instant,
+    visible: bool,
 }
 
 impl EventDispatcher {
@@ -78,6 +87,7 @@ impl EventDispatcher {
             hovered_nodes: Vec::new(),
             drag_state: None,
             focused_node: None,
+            cursor_blink_states: HashMap::new(),
         }
     }
 
@@ -116,6 +126,49 @@ impl EventDispatcher {
 
         self.focused_node = node_id;
         events
+    }
+
+    /// Update cursor blink state for a specific node and return whether cursor should be visible
+    ///
+    /// Call this each frame for text inputs that need a blinking cursor.
+    /// The blink state is automatically managed per node ID.
+    pub fn update_cursor_blink(
+        &mut self,
+        node_id: &NodeId,
+        blink_interval: std::time::Duration,
+    ) -> bool {
+        let state = self
+            .cursor_blink_states
+            .entry(node_id.clone())
+            .or_insert(CursorBlinkState {
+                last_blink: std::time::Instant::now(),
+                visible: true,
+            });
+
+        let now = std::time::Instant::now();
+        if now.duration_since(state.last_blink) >= blink_interval {
+            state.visible = !state.visible;
+            state.last_blink = now;
+        }
+        state.visible
+    }
+
+    /// Reset cursor blink state for a node (makes cursor visible and restarts timer)
+    ///
+    /// Call this when the user types or moves the cursor to ensure visibility.
+    pub fn reset_cursor_blink(&mut self, node_id: &NodeId) {
+        if let Some(state) = self.cursor_blink_states.get_mut(node_id) {
+            state.visible = true;
+            state.last_blink = std::time::Instant::now();
+        }
+    }
+
+    /// Get current cursor visibility for a node without updating
+    pub fn is_cursor_visible(&self, node_id: &NodeId) -> bool {
+        self.cursor_blink_states
+            .get(node_id)
+            .map(|state| state.visible)
+            .unwrap_or(true) // Default to visible if no state exists
     }
 
     /// Process input state and generate interaction events

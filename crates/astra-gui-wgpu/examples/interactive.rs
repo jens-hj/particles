@@ -9,12 +9,12 @@
 //! - ESC: quit
 
 use astra_gui::{
-    catppuccin::mocha, Content, DebugOptions, FullOutput, HorizontalAlign, Layout, Node, Rect,
-    Shape, Size, Spacing, StyledRect, TextContent, VerticalAlign,
+    catppuccin::mocha, Color, Content, DebugOptions, FullOutput, HorizontalAlign, Layout, Node,
+    Rect, Shape, Size, Spacing, StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_interactive::{
     button, button_clicked, slider, slider_drag, text_input, text_input_clicked, text_input_update,
-    toggle, toggle_clicked, ButtonStyle, CursorBlinkState, SliderStyle, TextInputStyle,
+    toggle, toggle_clicked, ButtonStyle, CursorShape, CursorStyle, SliderStyle, TextInputStyle,
     ToggleStyle,
 };
 use astra_gui_text::Engine as TextEngine;
@@ -109,7 +109,7 @@ fn handle_debug_keybinds(
     }
 }
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use wgpu::Trace;
 use winit::{
     application::ApplicationHandler,
@@ -135,7 +135,6 @@ struct App {
     continuous_slider_value: f32,
     text_input_value: String,
     text_input_cursor: usize,
-    text_input_cursor_blink: CursorBlinkState,
     debug_options: DebugOptions,
     last_frame_time: std::time::Instant,
 }
@@ -163,7 +162,6 @@ impl App {
             continuous_slider_value: 50.0,
             text_input_value: String::new(),
             text_input_cursor: 0,
-            text_input_cursor_blink: CursorBlinkState::new(),
             debug_options: DebugOptions::none(),
             last_frame_time: std::time::Instant::now(),
         }
@@ -220,15 +218,9 @@ impl App {
             &events,
             &self.input_state,
             focused,
-            &mut self.text_input_cursor_blink,
+            &mut self.event_dispatcher,
         ) {
             println!("Text input value: {}", self.text_input_value);
-        }
-
-        // Update cursor blink animation if focused
-        if focused {
-            self.text_input_cursor_blink
-                .update(std::time::Duration::from_millis(530));
         }
 
         // Handle button clicks
@@ -473,10 +465,17 @@ impl App {
                                 .map(|id| id.as_str() == "text_input")
                                 .unwrap_or(false),
                             self.nodes_disabled,
-                            &TextInputStyle::default(),
+                            &TextInputStyle {
+                                cursor_style: CursorStyle {
+                                    shape: CursorShape::Line,
+                                    thickness: 3.0,
+                                    ..CursorStyle::default()
+                                },
+                                ..TextInputStyle::default()
+                            },
                             self.text_input_cursor,
-                            self.text_input_cursor_blink.is_visible(),
                             &mut self.text_engine,
+                            &mut self.event_dispatcher,
                         ),
                         // Spacer
                         Node::new().with_width(Size::Fill),
