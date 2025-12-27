@@ -9,16 +9,18 @@
 //! - ESC: quit
 
 use astra_gui::{
-    catppuccin::mocha, Color, Content, DebugOptions, FullOutput, HorizontalAlign, Layout, Node,
-    Rect, Shape, Size, Spacing, StyledRect, TextContent, VerticalAlign,
+    catppuccin::mocha, Content, DebugOptions, FullOutput, HorizontalAlign, Layout, Node, Rect,
+    Shape, Size, Spacing, StyledRect, TextContent, VerticalAlign,
 };
 use astra_gui_interactive::{
-    button, button_clicked, slider, slider_drag, text_input, text_input_clicked, text_input_update,
-    toggle, toggle_clicked, ButtonStyle, CursorShape, CursorStyle, SliderStyle, TextInputStyle,
+    button, button_clicked, slider, slider_drag, text_input, text_input_update, toggle,
+    toggle_clicked, ButtonStyle, CursorShape, CursorStyle, SliderStyle, TextInputStyle,
     ToggleStyle,
 };
 use astra_gui_text::Engine as TextEngine;
-use astra_gui_wgpu::{EventDispatcher, InputState, InteractiveStateManager, RenderMode, Renderer};
+use astra_gui_wgpu::{
+    EventDispatcher, InputState, InteractiveStateManager, Key, NamedKey, RenderMode, Renderer,
+};
 
 const DEBUG_HELP_TEXT: &str = "Debug controls:
   M - Toggle margins (red overlay)
@@ -109,7 +111,8 @@ fn handle_debug_keybinds(
     }
 }
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+
 use wgpu::Trace;
 use winit::{
     application::ApplicationHandler,
@@ -196,28 +199,13 @@ impl App {
         self.interactive_state_manager
             .apply_styles(&mut ui, &interaction_states);
 
-        // Handle text input focus
-        if text_input_clicked("text_input", &events) {
-            let _focus_events = self.event_dispatcher.set_focus(Some("text_input".into()));
-            // Note: focus events would need to be processed in next frame
-            // For now we just track focus manually
-            println!("Text input focused");
-        }
-
-        // Update text input value from keyboard
-        let focused = self
-            .event_dispatcher
-            .focused_node()
-            .map(|id| id.as_str() == "text_input")
-            .unwrap_or(false);
-
+        // Update text input (handles focus, unfocus, and keyboard input automatically)
         if text_input_update(
             "text_input",
             &mut self.text_input_value,
             &mut self.text_input_cursor,
             &events,
             &self.input_state,
-            focused,
             &mut self.event_dispatcher,
         ) {
             println!("Text input value: {}", self.text_input_value);
@@ -617,23 +605,52 @@ impl ApplicationHandler for App {
         event: WindowEvent,
     ) {
         match event {
-            WindowEvent::CloseRequested
-            | WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key:
-                            winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape),
-                        ..
-                    },
-                ..
-            } => event_loop.exit(),
+            WindowEvent::CloseRequested => event_loop.exit(),
 
-            WindowEvent::KeyboardInput { .. } => {
+            WindowEvent::KeyboardInput {
+                event: ref key_event,
+                ..
+            } if matches!(
+                key_event.physical_key,
+                winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape)
+            ) && key_event.state == ElementState::Pressed =>
+            {
+                // Only exit on ESC if nothing is focused
+                if self.event_dispatcher.focused_node().is_none() {
+                    event_loop.exit();
+                } else {
+                    // Pass to keyboard handler to unfocus
+                    self.input_state.handle_event(&event);
+                    if let Some(ref window) = self.window {
+                        window.request_redraw();
+                    }
+                }
+            }
+
+            WindowEvent::KeyboardInput {
+                event: ref key_event,
+                ..
+            } if !matches!(
+                key_event.physical_key,
+                winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape)
+            ) =>
+            {
                 // First, pass keyboard events to input state
                 self.input_state.handle_event(&event);
 
-                // Only handle debug shortcuts if no element has focus
-                if self.event_dispatcher.focused_node().is_none() {
+                // Check if ESC was just pressed to unfocus
+                let escape_pressed = self
+                    .input_state
+                    .keys_just_pressed
+                    .iter()
+                    .any(|key| matches!(key, Key::Named(NamedKey::Escape)));
+
+                // Only handle debug shortcuts if something is focused and ESC was pressed
+                // In that case, ESC should unfocus instead of closing the app
+                let has_focus = self.event_dispatcher.focused_node().is_some();
+                let should_handle_debug = !(has_focus && escape_pressed);
+
+                if should_handle_debug {
                     let renderer = self.gpu_state.as_mut().map(|s| &mut s.renderer);
                     let _handled = handle_debug_keybinds(&event, &mut self.debug_options, renderer);
                 }

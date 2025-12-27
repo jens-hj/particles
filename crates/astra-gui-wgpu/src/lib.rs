@@ -16,7 +16,8 @@ pub use events::*;
 pub use input::*;
 pub use interactive_state::*;
 
-// Re-export keyboard types for use in interactive components
+// Re-export keyboard and mouse types for use in interactive components
+pub use winit::event::MouseButton;
 pub use winit::keyboard::{Key, NamedKey};
 
 use astra_gui::{FullOutput, Shape, Tessellator};

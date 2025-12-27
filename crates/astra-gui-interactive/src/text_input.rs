@@ -3,11 +3,11 @@
 //! Provides an editable text input field with cursor, selection, and keyboard support.
 
 use astra_gui::{
-    catppuccin::mocha, Color, Content, CornerShape, HorizontalAlign, Layout, Node, NodeId, Offset,
-    Rect, Shape, Size, Spacing, Style, StyledRect, TextContent, Transition, VerticalAlign,
+    catppuccin::mocha, Color, Content, CornerShape, HorizontalAlign, Layout, Node, Offset, Rect,
+    Shape, Size, Spacing, Style, StyledRect, TextContent, Transition, VerticalAlign,
 };
 use astra_gui_wgpu::{InteractionEvent, Key, NamedKey, TargetedEvent};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Cursor shape for text input
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -248,19 +248,21 @@ pub fn text_input(
         .with_children(children)
 }
 
-/// Handle text input keyboard events and update the value
+/// Handle text input keyboard events, focus/unfocus, and update the value
 ///
-/// Call this each frame with the events and input state to update the text input value
-/// based on keyboard input.
+/// Call this each frame with the events and input state. This function handles:
+/// - Clicking on the text input to focus it
+/// - Clicking outside or pressing ESC to unfocus it
+/// - Keyboard input when focused
+/// - Cursor blink state management
 ///
 /// # Arguments
 /// * `input_id` - The ID of the text input
 /// * `value` - Current text value (will be modified if keys are pressed)
 /// * `cursor_pos` - Current cursor position (byte offset, will be modified)
 /// * `events` - Slice of targeted events from this frame
-/// * `input_state` - Current input state (for keyboard input)
-/// * `focused` - Whether this input is currently focused
-/// * `cursor_blink` - Cursor blink state (will be reset on any edit)
+/// * `input_state` - Current input state (for keyboard and mouse input)
+/// * `event_dispatcher` - EventDispatcher for managing focus and cursor blink
 ///
 /// # Returns
 /// `true` if the value was changed, `false` otherwise
@@ -268,13 +270,43 @@ pub fn text_input_update(
     input_id: &str,
     value: &mut String,
     cursor_pos: &mut usize,
-    _events: &[TargetedEvent],
+    events: &[TargetedEvent],
     input_state: &astra_gui_wgpu::InputState,
-    focused: bool,
     event_dispatcher: &mut astra_gui_wgpu::EventDispatcher,
 ) -> bool {
     let node_id = astra_gui::NodeId::new(input_id);
     let mut changed = false;
+
+    // Handle focus on click
+    if text_input_clicked(input_id, events) {
+        event_dispatcher.set_focus(Some(node_id.clone()));
+    }
+
+    // Handle unfocus: clicking outside or pressing ESC
+    use astra_gui_wgpu::MouseButton;
+    let mouse_clicked_outside = input_state.is_button_just_pressed(MouseButton::Left)
+        && !text_input_clicked(input_id, events);
+
+    let escape_pressed = input_state.keys_just_pressed.iter().any(|key| {
+        matches!(
+            key,
+            astra_gui_wgpu::Key::Named(astra_gui_wgpu::NamedKey::Escape)
+        )
+    });
+
+    let currently_focused = event_dispatcher
+        .focused_node()
+        .map(|id| id == &node_id)
+        .unwrap_or(false);
+
+    if (mouse_clicked_outside || escape_pressed) && currently_focused {
+        event_dispatcher.set_focus(None);
+    }
+
+    let focused = event_dispatcher
+        .focused_node()
+        .map(|id| id == &node_id)
+        .unwrap_or(false);
 
     // Only process keyboard input if focused
     if !focused {
