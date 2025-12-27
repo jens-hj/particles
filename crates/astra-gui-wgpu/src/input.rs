@@ -104,13 +104,24 @@ impl InputState {
                         if !event.repeat {
                             self.keys_just_pressed.push(event.logical_key.clone());
                         }
-                        // Handle text input from key events (but not when ctrl is held)
-                        if !self.ctrl_held {
-                            if let Key::Character(ref text) = event.logical_key {
-                                for ch in text.chars() {
-                                    self.characters_typed.push(ch);
+                        // Handle text input from key events
+                        match &event.logical_key {
+                            Key::Character(ref text) => {
+                                // Only skip if it's a ctrl+key shortcut (ctrl+letter, but not space)
+                                let is_shortcut = self.ctrl_held
+                                    && text.len() == 1
+                                    && text.chars().next().unwrap().is_alphabetic();
+                                if !is_shortcut {
+                                    for ch in text.chars() {
+                                        self.characters_typed.push(ch);
+                                    }
                                 }
                             }
+                            Key::Named(NamedKey::Space) => {
+                                // Always allow space, even with modifiers
+                                self.characters_typed.push(' ');
+                            }
+                            _ => {}
                         }
                     }
                     ElementState::Released => {
