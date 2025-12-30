@@ -3,11 +3,6 @@ members = [
     "crates/particle-physics",
     "crates/particle-simulation",
     "crates/particle-renderer",
-    "crates/astra-gui",
-    "crates/astra-gui-fonts",
-    "crates/astra-gui-text",
-    "crates/astra-gui-wgpu",
-    "crates/astra-gui-interactive",
 ]
 resolver = "2"
 
@@ -40,11 +35,8 @@ egui = "0.33"
 egui-wgpu = "0.33"
 egui-winit = "0.33"
 # Astra GUI
-astra-gui = { path = "crates/astra-gui" }
-astra-gui-fonts = { path = "crates/astra-gui-fonts" }
-astra-gui-text = { path = "crates/astra-gui-text" }
-astra-gui-wgpu = { path = "crates/astra-gui-wgpu" }
-astra-gui-interactive = { path = "crates/astra-gui-interactive" }
+astra-gui = { git = "https://github.com/jens-hj/astra-gui.git" }
+astra-gui-wgpu = { git = "https://github.com/jens-hj/astra-gui.git" }
 
 [package]
 name = "particles"
@@ -69,8 +61,6 @@ egui.workspace = true
 egui-wgpu.workspace = true
 egui-winit.workspace = true
 astra-gui.workspace = true
-astra-gui-fonts.workspace = true
-astra-gui-text.workspace = true
 astra-gui-wgpu.workspace = true
 
 [profile.dev]

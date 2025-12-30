@@ -182,26 +182,20 @@ dependencies = [
 [[package]]
 name = "astra-gui"
 version = "0.1.0"
+source = "git+https://github.com/jens-hj/astra-gui.git#93c6347f9c31eb6c4de3bb721cf8cd20f7558073"
 dependencies = [
- "bytemuck",
  "glam",
 ]
 
 [[package]]
 name = "astra-gui-fonts"
 version = "0.1.0"
-
-[[package]]
-name = "astra-gui-interactive"
-version = "0.1.0"
-dependencies = [
- "astra-gui",
- "astra-gui-wgpu",
-]
+source = "git+https://github.com/jens-hj/astra-gui.git#93c6347f9c31eb6c4de3bb721cf8cd20f7558073"
 
 [[package]]
 name = "astra-gui-text"
 version = "0.1.0"
+source = "git+https://github.com/jens-hj/astra-gui.git#93c6347f9c31eb6c4de3bb721cf8cd20f7558073"
 dependencies = [
  "astra-gui",
  "astra-gui-fonts",
@@ -212,15 +206,12 @@ dependencies = [
 [[package]]
 name = "astra-gui-wgpu"
 version = "0.1.0"
+source = "git+https://github.com/jens-hj/astra-gui.git#93c6347f9c31eb6c4de3bb721cf8cd20f7558073"
 dependencies = [
  "astra-gui",
- "astra-gui-interactive",
  "astra-gui-text",
  "bytemuck",
  "cosmic-text",
- "env_logger",
- "log",
- "pollster",
  "wgpu",
  "winit",
 ]
@@ -1915,8 +1906,6 @@ name = "particles"
 version = "0.3.2"
 dependencies = [
  "astra-gui",
- "astra-gui-fonts",
- "astra-gui-text",
  "astra-gui-wgpu",
  "bytemuck",
  "egui",

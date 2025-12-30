@@ -4,7 +4,7 @@
 
 mod gui;
 
-use astra_gui::{ClippedShape, Color, CornerShape, FullOutput, Rect, Shape, Stroke, StyledRect};
+use astra_gui::DebugOptions;
 use astra_gui_wgpu::Renderer as AstraRenderer;
 use glam::Vec3;
 use gui::{Gui, UiState};
@@ -502,7 +502,11 @@ impl GpuState {
         }
     }
 
-    fn render(&mut self, window: &Window) -> Result<(f32, f32), wgpu::SurfaceError> {
+    fn render(
+        &mut self,
+        window: &Window,
+        astra_debug_options: &DebugOptions,
+    ) -> Result<(f32, f32), wgpu::SurfaceError> {
         // Track frame time
         let now = Instant::now();
         let frame_time = (now - self.last_frame_time).as_secs_f32() * 1000.0;
@@ -831,7 +835,7 @@ impl GpuState {
             self.queue.submit(std::iter::once(encoder.finish()));
         }
 
-        // Render Astra GUI (test container)
+        // Render Astra GUI diagnostics panel
         {
             let mut encoder = self
                 .device
@@ -839,28 +843,18 @@ impl GpuState {
                     label: Some("Astra GUI Encoder"),
                 });
 
-            let astra_output = FullOutput::with_shapes(vec![ClippedShape::new(
-                Rect::new(
-                    [0.0, 0.0],
-                    [self.config.width as f32, self.config.height as f32],
-                ),
-                Shape::Rect(
-                    StyledRect::new(
-                        Rect::new([100.0, 100.0], [300.0, 250.0]),
-                        Color::new(0.2, 0.4, 0.8, 0.9),
-                    )
-                    .with_corner_shape(CornerShape::Round(10.0))
-                    .with_stroke(Stroke::new(2.0, Color::new(1.0, 1.0, 1.0, 1.0))),
-                ),
-            )]);
+            let size = window.inner_size();
+            let window_size = [size.width as f32, size.height as f32];
+            let astra_output =
+                gui::build_diagnostics_panel(&self.ui_state, window_size, astra_debug_options);
 
             self.astra_renderer.render(
                 &self.device,
                 &self.queue,
                 &mut encoder,
                 &view,
-                self.config.width as f32,
-                self.config.height as f32,
+                window_size[0],
+                window_size[1],
                 &astra_output,
             );
 
@@ -881,6 +875,9 @@ struct App {
     // Picking
     left_mouse_pressed: bool,
     last_cursor_pos: Option<(f64, f64)>,
+
+    // Astra GUI debug options
+    astra_debug_options: DebugOptions,
 }
 
 impl ApplicationHandler for App {
@@ -1232,9 +1229,104 @@ impl ApplicationHandler for App {
                 }
             }
 
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(key_code),
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                ..
+            } => {
+                // Handle astra-gui debug keybindings (matching corner_shapes.rs example)
+                let handled = match key_code {
+                    KeyCode::KeyM => {
+                        self.astra_debug_options.show_margins =
+                            !self.astra_debug_options.show_margins;
+                        println!(
+                            "Astra GUI Margins: {}",
+                            self.astra_debug_options.show_margins
+                        );
+                        true
+                    }
+                    KeyCode::KeyP => {
+                        self.astra_debug_options.show_padding =
+                            !self.astra_debug_options.show_padding;
+                        println!(
+                            "Astra GUI Padding: {}",
+                            self.astra_debug_options.show_padding
+                        );
+                        true
+                    }
+                    KeyCode::KeyB => {
+                        self.astra_debug_options.show_borders =
+                            !self.astra_debug_options.show_borders;
+                        println!(
+                            "Astra GUI Borders: {}",
+                            self.astra_debug_options.show_borders
+                        );
+                        true
+                    }
+                    KeyCode::KeyC => {
+                        self.astra_debug_options.show_content_area =
+                            !self.astra_debug_options.show_content_area;
+                        println!(
+                            "Astra GUI Content area: {}",
+                            self.astra_debug_options.show_content_area
+                        );
+                        true
+                    }
+                    KeyCode::KeyR => {
+                        self.astra_debug_options.show_clip_rects =
+                            !self.astra_debug_options.show_clip_rects;
+                        println!(
+                            "Astra GUI Clip rects: {}",
+                            self.astra_debug_options.show_clip_rects
+                        );
+                        true
+                    }
+                    KeyCode::KeyG => {
+                        self.astra_debug_options.show_gaps = !self.astra_debug_options.show_gaps;
+                        println!("Astra GUI Gaps: {}", self.astra_debug_options.show_gaps);
+                        true
+                    }
+                    KeyCode::KeyD => {
+                        if self.astra_debug_options.is_enabled() {
+                            self.astra_debug_options = DebugOptions::none();
+                            println!("Astra GUI Debug: OFF");
+                        } else {
+                            self.astra_debug_options = DebugOptions::all();
+                            println!("Astra GUI Debug: ALL ON");
+                        }
+                        true
+                    }
+                    KeyCode::KeyS => {
+                        if let Some(gpu_state) = &mut self.gpu_state {
+                            let new_mode = match gpu_state.astra_renderer.render_mode() {
+                                astra_gui_wgpu::RenderMode::Sdf
+                                | astra_gui_wgpu::RenderMode::Auto => {
+                                    astra_gui_wgpu::RenderMode::Mesh
+                                }
+                                astra_gui_wgpu::RenderMode::Mesh => astra_gui_wgpu::RenderMode::Sdf,
+                            };
+                            gpu_state.astra_renderer.set_render_mode(new_mode);
+                            println!("Astra GUI Render mode: {:?}", new_mode);
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    _ => false,
+                };
+
+                if !handled {
+                    // Fall through to other keyboard handlers
+                }
+            }
+
             WindowEvent::RedrawRequested => {
                 if let (Some(window), Some(gpu_state)) = (&self.window, &mut self.gpu_state) {
-                    match gpu_state.render(window) {
+                    match gpu_state.render(window, &self.astra_debug_options) {
                         Ok((fps, frame_time)) => {
                             window.set_title(&format!(
                                 "Particle Physics - {:.0} FPS ({:.2}ms) - {} particles",
@@ -1274,6 +1366,8 @@ fn main() {
 
         left_mouse_pressed: false,
         last_cursor_pos: None,
+
+        astra_debug_options: DebugOptions::none(),
     };
 
     event_loop.run_app(&mut app).unwrap();

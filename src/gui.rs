@@ -1,3 +1,7 @@
+use astra_gui::{
+    catppuccin::mocha, Content, CornerShape, DebugOptions, FullOutput as AstraFullOutput, Node,
+    Shape, Size, Spacing, Stroke, StyledRect, TextContent, VerticalAlign,
+};
 use egui::Context;
 use egui_wgpu::Renderer;
 use egui_winit::State;
@@ -214,16 +218,6 @@ impl Gui {
             state.step_one_frame = true;
             state.steps_remaining -= 1;
         }
-
-        // Diagnostics Panel (Top Left)
-        egui::Window::new("Diagnostics")
-            .anchor(egui::Align2::LEFT_TOP, [10.0, 10.0])
-            .resizable(false)
-            .collapsible(true)
-            .show(ctx, |ui| {
-                ui.label(format!("FPS: {:.1}", state.fps));
-                ui.label(format!("Frame Time: {:.2} ms", state.frame_time));
-            });
 
         // Statistics Panel (Top Right)
         egui::Window::new("Statistics")
@@ -817,4 +811,66 @@ fn get_element_name(z: u32) -> &'static str {
 
 fn get_element_symbol(z: u32) -> &'static str {
     ELEMENT_SYMBOLS.get(z as usize).copied().unwrap_or("?")
+}
+
+/// Build diagnostics panel using astra-gui
+pub fn build_diagnostics_panel(
+    ui_state: &UiState,
+    window_size: [f32; 2],
+    debug_options: &DebugOptions,
+) -> AstraFullOutput {
+    // Container with padding and background
+    let container = Node::new().with_padding(Spacing::all(10.0)).with_child(
+        Node::new()
+            .with_shape(Shape::Rect(
+                StyledRect::new(Default::default(), mocha::BASE.with_alpha(0.99))
+                    .with_corner_shape(CornerShape::Cut(20.0))
+                    .with_stroke(Stroke::new(3.0, mocha::SURFACE0)),
+            ))
+            .with_padding(Spacing::all(20.0))
+            .with_height(Size::px(120.0))
+            .with_width(Size::px(200.0))
+            .with_children(vec![
+                // Title
+                Node::new()
+                    .with_content(Content::Text(
+                        TextContent::new("Diagnostics")
+                            .with_font_size(24.0)
+                            .with_color(mocha::TEXT)
+                            .with_v_align(VerticalAlign::Top),
+                    ))
+                    .with_width(Size::FitContent)
+                    .with_height(Size::fraction(0.4)),
+                // FPS label
+                Node::new()
+                    .with_content(Content::Text(
+                        TextContent::new(format!("FPS: {:.1}", ui_state.fps))
+                            .with_font_size(16.0)
+                            .with_color(mocha::TEXT)
+                            .with_v_align(VerticalAlign::Bottom),
+                    ))
+                    .with_width(Size::FitContent)
+                    .with_height(Size::Fill),
+                // Frame time label
+                Node::new()
+                    .with_content(Content::Text(
+                        TextContent::new(format!("Frame Time: {:.2} ms", ui_state.frame_time))
+                            .with_font_size(16.0)
+                            .with_color(mocha::TEXT)
+                            .with_v_align(VerticalAlign::Bottom),
+                    ))
+                    .with_width(Size::FitContent)
+                    .with_height(Size::Fill),
+            ]),
+    );
+
+    AstraFullOutput::from_node_with_debug(
+        container,
+        (window_size[0], window_size[1]),
+        if debug_options.is_enabled() {
+            Some(*debug_options)
+        } else {
+            None
+        },
+    )
 }
