@@ -76,7 +76,7 @@ impl HadronRenderer {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Hadron Pipeline Layout"),
             bind_group_layouts: &[&bind_group_layout], // We include camera in this layout for simplicity
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
 
         // --- SHELL PIPELINE (Instanced Quads) ---
@@ -116,7 +116,7 @@ impl HadronRenderer {
                 bias: wgpu::DepthBiasState::default(),
             }),
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -157,7 +157,7 @@ impl HadronRenderer {
                 bias: wgpu::DepthBiasState::default(),
             }),
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 

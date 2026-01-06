@@ -1,352 +1,209 @@
-# Project context / working state
-
-This file tracks the current working state so you (or another AI) can pick up the work quickly.
-
-## Current focus
-
-1) ✅ Backend-agnostic text rendering with intrinsic measurement
-2) ✅ Core layout ergonomics with `Size::FitContent` and `Overflow` policy
-3) ✅ Performance optimizations and API consistency improvements (Dec 2025)
-4) ✅ Interactive components system with declarative styles and smooth transitions (Dec 2025)
-5) ✅ Analytic anti-aliasing with SDF rendering - ALL PHASES COMPLETE (Dec 2025)
-   - ✅ Phase 1: Foundation (None, Round corners)
-   - ✅ Phase 2: Cut & InverseRound corners
-   - ✅ Phase 3: Squircle corners
-   - ✅ Phase 4: Stroke support (all corner types)
-6) Next: Text AA improvements (Phase 5) or other features
-
----
-
-## What exists right now
-
-### `astra-gui` (core)
-
-Text-related core types:
-- `Content::Text(TextContent)` in `crates/astra-gui/src/content.rs`
-- `TextShape` and `Shape::Text(TextShape)` in `crates/astra-gui/src/primitives.rs`
-
-Node tree emits text shapes:
-- `Node::collect_shapes()` pushes `Shape::Text(TextShape::new(content_rect, text_content))` when `node.content` is `Content::Text(...)`.
-- `content_rect` is computed from the node rect minus padding.
-
-#### ✅ NEW: Intrinsic sizing + overflow policy (core)
-
-- Added `Size::FitContent` in `crates/astra-gui/src/layout.rs`.
-  - Represents "minimum size that fits content (text metrics or children), plus padding".
-  - **Now fully functional**: resolves to measured intrinsic size via `ContentMeasurer` trait.
-
-- Added `Overflow` in `crates/astra-gui/src/layout.rs`:
-  - `Overflow::Visible`
-  - `Overflow::Hidden` (**default**)
-  - `Overflow::Scroll` (not implemented yet; treated like `Hidden` for clipping purposes)
-
-- Added `Node.overflow` and `Node::with_overflow(...)` in `crates/astra-gui/src/node.rs` (default: `Overflow::Hidden`).
-
-#### ✅ NEW: ContentMeasurer trait (backend-agnostic measurement)
-
-Added `crates/astra-gui/src/measure.rs`:
-- `ContentMeasurer` trait: backend-agnostic content measurement interface
-- `MeasureTextRequest`: request structure for measuring text intrinsic size
-- `IntrinsicSize`: measured width/height result
-
-Layout implementation:
-- `Node::measure_node()`: recursively measures intrinsic size (content + padding)
-- `Node::measure_children()`: aggregates child measurements with margin/gap collapsing
-- `Node::compute_layout_with_measurer()`: layout entry point that uses measurer for `FitContent`
-- `compute_layout_with_parent_size_and_measurer()`: internal layout that resolves `FitContent` to measured sizes
-
-The measurement algorithm mirrors the layout spacing rules exactly:
-- Same margin/gap collapsing behavior
-- Respects layout direction (horizontal/vertical)
-- Returns border-box size (content + padding, excluding margins)
-
-#### Clip rects derive from overflow policy
-
-`FullOutput::from_node_with_debug_and_measurer()` builds `ClippedShape`s by walking the node tree:
-- Computes `clip_rect` from ancestor overflow chain
-- If any ancestor is `Hidden` (or `Scroll`), `clip_rect` is intersection of those ancestor rects
-- `Visible` does not restrict the inherited clip rect
-- Nodes fully clipped out are skipped early
-
-Tessellation remains geometry-only:
-- `Shape::Rect` gets tessellated into triangles
-- `Shape::Text` is intentionally skipped (backend-rendered)
-
-### `astra-gui-text` (text backend)
-
-✅ **NEW: Implements `ContentMeasurer` trait**
-
-- `Engine` and `CosmicEngine` both implement `ContentMeasurer`
-- `measure_text()`: uses existing `shape_line()` with dummy rect to get metrics
-- Returns `IntrinsicSize { width, height }` from `LineMetrics`
-
-This keeps measurement backend-agnostic:
-- Core layout depends only on `ContentMeasurer` trait
-- Specific text engine (cosmic-text) lives in `astra-gui-text`
-- Measurement reuses existing shaping infrastructure
-
-### `astra-gui-wgpu` (backend)
-
-- ✅ **NEW: SDF rendering pipeline** (`src/shaders/ui_sdf.wgsl`) with analytic anti-aliasing:
-  - Signed Distance Field (SDF) based rendering for pixel-perfect AA at any scale
-  - Instanced rendering: single unit quad (4 vertices) shared across all rectangles
-  - Instance data: 48 bytes per rectangle with shape parameters
-  - Fragment shader computes SDF and coverage per-pixel using `fwidth()` + `smoothstep()`
-  - Currently supports: None (sharp), Round (circular arcs) corner types
-  - Ready for: Cut (chamfer), InverseRound (concave), Squircle (superellipse) - shader code exists
-  - 89% vertex reduction: 36+ vertices per rounded rect → 4 shared vertices
-  - Resolution-independent: perfect AA at any DPI/zoom level
-
-- Geometry pipeline exists (`src/shaders/ui.wgsl`) - kept for fallback/compatibility
-- Text pipeline exists and is wired:
-  - `src/shaders/text.wgsl` samples an `R8Unorm` atlas and tints by vertex color
-  - CPU side generates per-glyph quads and uploads `R8` glyph bitmap into atlas
-
-Architecture:
-- `instance.rs`: `RectInstance` struct with bytemuck traits for GPU upload
-- `lib.rs`: Dual pipeline setup - SDF for all rectangles, tessellation available as fallback
-- All rectangles currently use SDF rendering with dramatic performance improvement
-
-Clipping behavior:
-- Text draws with **per-shape scissor** using `ClippedShape::clip_rect`:
-  - indices for each text shape are recorded as `(start..end)` ranges
-  - `draw_indexed` is issued per-range with the correct scissor rect
-
-Important limitation:
-- Geometry rendering is still a single batched draw and does **not** currently honor per-shape `clip_rect`. If we want overflow clipping for rects as well, the geometry path will need per-clip batching similar to the text path.
-
-Examples:
-- `crates/astra-gui-wgpu/examples/overflow.rs` showcases `Overflow::{Hidden, Visible, Scroll}` behaviors
-  - ✅ **Updated to use `TextEngine` as `ContentMeasurer`** for proper `FitContent` sizing
-  - Demo focuses on TEXT overflow because text respects scissor clipping
-  - `Overflow::Scroll` is a placeholder (clips only; no scroll offsets implemented yet)
-
----
-
-## Recent progress
-
-### ✅ Completed: Intrinsic measurement for `Size::FitContent`
-
-Implemented a complete measurement system:
-
-1. **Core trait in `astra-gui`** (`src/measure.rs`):
-   - `ContentMeasurer` trait for backend-agnostic content measurement
-   - Measurement functions in `Node` that mirror layout spacing rules exactly
-   - Layout functions that use measurer to resolve `FitContent`
-
-2. **Implementation in `astra-gui-text`**:
-   - `ContentMeasurer` implemented for `Engine` and `CosmicEngine`
-   - Measurement reuses existing shaping/metrics infrastructure
-
-3. **Integration in examples**:
-   - Updated `overflow.rs` to create `TextEngine` and pass as measurer
-   - `FitContent` now resolves to actual text metrics instead of falling back to parent size
-
-The system is:
-- **Backend-agnostic**: core doesn't depend on cosmic-text
-- **Consistent**: measurement uses same spacing rules as layout
-- **Recursive**: handles nested `FitContent` containers correctly
-- **Short-circuits**: only measures when needed (Fixed/Relative/Fill skip measurement)
-
-### ✅ Completed: Performance optimizations and API improvements (Dec 2025)
-
-Implemented immediate and short-term optimizations from the improvement plan:
-
-#### Core (`astra-gui`) optimizations:
-1. **Measurement caching** (`node.rs`): Cache `measure_node()` result when both width and height are `FitContent` to avoid duplicate measurements
-2. **Vec allocation elimination** (`node.rs`): Refactored `measure_children()` to compute size in single pass without allocating intermediate Vec
-3. **API improvements** (`layout.rs`): 
-   - Replaced `new()` with `trbl()` for clarity
-   - Replaced `horizontal_vertical()` with `symmetric()` for CSS-style familiarity
-   - Removed duplicate methods
-
-#### Backend (`astra-gui-wgpu`) optimizations:
-1. **Buffer pre-allocation** (`lib.rs`): Track previous frame vertex/index counts and pre-allocate buffers to reduce allocations
-   - Geometry buffers: `last_frame_vertex_count`, `last_frame_index_count`
-   - Text buffers: `last_frame_text_vertex_count`, `last_frame_text_index_count`
-2. **Code cleanup** (`text/`): Removed vestigial `cosmic/mod.rs` module (actual integration is via `astra-gui-text` crate)
-
-Performance impact:
-- Reduced allocations per frame (especially for UIs with consistent size)
-- Eliminated redundant measurement passes
-- Cleaner, more maintainable API
-
-#### Short-term optimizations (Dec 2025):
-1. **Node fields privacy** (`node.rs`): Made all fields private, enforcing consistent builder pattern API
-2. **Vertex color compression** (`vertex.rs`): Changed from `[f32; 4]` (16 bytes) to `[u8; 4]` (4 bytes) using Unorm8x4
-   - 50% reduction in vertex buffer bandwidth
-3. **Draw call batching** (`lib.rs`): Batch consecutive draws with same scissor rect
-   - Reduces GPU overhead for clipped UIs
-4. **Opacity optimization** (`output.rs`): Skip color mutations when opacity is 1.0
-   - Avoids unnecessary work in common case
-
-#### ✅ Medium-term optimizations (Dec 2025):
-1. **Size::resolve() semantics fix** (`layout.rs`): 
-   - Changed `resolve()` to panic on Fill/FitContent instead of misleading fallbacks
-   - Added `try_resolve()` as non-panicking alternative that returns `Option<f32>`
-   - Updated all callsites in `node.rs` to use `try_resolve()` with appropriate fallbacks
-   - Enforces clearer semantics: resolve() only for Fixed/Relative, try_resolve() for all cases
-
-### ✅ Completed: Interactive components system with disabled state and toggle (Dec 2025)
-
-Implemented a complete declarative styling system for interactive components:
-
-1. **Style System** (`style.rs`, `transition.rs`):
-   - `Style` struct with optional visual properties (fill_color, text_color, opacity, offset, etc.)
-   - Style merging for layered states (base → hover → active → disabled)
-   - Easing functions (linear, ease-in, ease-out, ease-in-out, cubic variants)
-   - `Transition` configuration with duration and easing
-   - Style interpolation with `lerp_style()` for smooth animations
-   - **Offset animation support**: offset_x and offset_y can be animated for smooth position transitions
-
-2. **Node Integration** (`node.rs`):
-   - Added `base_style`, `hover_style`, `active_style`, `disabled_style` fields
-   - Added `disabled` boolean field
-   - Builder methods: `with_style()`, `with_hover_style()`, `with_active_style()`, `with_disabled_style()`, `with_disabled()`
-   - Getter methods for accessing styles and disabled state
-
-3. **Interactive State Management** (`interactive_state.rs`):
-   - `InteractionState` enum: Idle, Hovered, Active, Disabled
-   - `InteractiveStateManager` tracks transition state per node ID across frames
-   - Automatic style interpolation with configurable transitions
-   - `apply_styles()` recursively applies computed styles to node tree
-   - Disabled nodes always use disabled_style (or fallback with reduced opacity)
-
-4. **Hit Testing** (`hit_test.rs`):
-   - Modified `hit_test_recursive()` to skip disabled nodes
-   - Disabled nodes don't receive interaction events
-   - Children of disabled nodes can still be interactive (if not disabled themselves)
-
-5. **Button Component** (`button.rs`):
-   - Updated to accept `disabled` parameter
-   - Automatically applies disabled_style when disabled
-   - Uses declarative style system - no manual state tracking needed
-
-6. **Toggle Component** (`toggle.rs`):
-   - iOS-style toggle switch with smooth sliding knob animation
-   - Knob position animates smoothly using offset_x/offset_y style properties
-   - Background color smoothly transitions between on/off states
-   - Visual feedback for hover and active states
-   - Supports disabled state
-   - Customizable styling with `ToggleStyle`
-
-7. **Example** (`button.rs` example):
-   - Demonstrates increment/decrement buttons with counter
-   - Toggle switch to enable/disable counter buttons
-   - Shows smooth transitions between all states including disabled
-   - Label + toggle component demonstrates layout composition
-
-Features:
-- Declarative styling with automatic state transitions
-- Smooth animations using easing functions
-- No manual state tracking required
-- Disabled state prevents all interaction
-- Works with multiple interactive components independently
-- Toggle component with iOS-style design
-
-Remaining optimizations from plan (deferred to future):
-- GPU compute tessellation (high effort, very high impact)
-- Layout caching with dirty tracking (high effort, very high impact)
-
-### ✅ Completed: Analytic Anti-Aliasing with SDF Rendering (Phase 1: Foundation - Dec 2025)
-
-Implemented GPU-based analytic anti-aliasing using Signed Distance Fields (SDF) for all GUI rectangles:
-
-1. **SDF Shader Implementation** (`ui_sdf.wgsl`):
-   - Complete SDF functions for all 5 corner types:
-     - `sd_box()`: Sharp 90° corners (trivial)
-     - `sd_rounded_box()`: Circular arc corners (Inigo Quilez formula)
-     - `sd_chamfer_box()`: 45° diagonal cut corners (medium complexity)
-     - `sd_inverse_round_box()`: Concave circular corners (box minus circles)
-     - `sd_squircle_box()`: Superellipse corners with power distance approximation
-   - Fragment shader computes distance and applies `fwidth()` + `smoothstep()` for AA
-   - Vertex shader transforms unit quad to screen-space rectangle per instance
-
-2. **Instance Data Structure** (`instance.rs`):
-   - `RectInstance`: 48-byte structure with shape parameters
-   - Packs: center, half_size, colors (u8x4), stroke_width, corner_type, parameters
-   - Implements `From<&StyledRect>` for easy conversion
-   - Uses bytemuck traits for GPU upload
-
-3. **Rendering Pipeline** (`lib.rs`):
-   - Created SDF pipeline alongside existing tessellation pipeline
-   - Unit quad buffers: 4 vertices, 6 indices (shared across all rectangles)
-   - Instance buffer with dynamic resizing
-   - All rectangles currently use SDF rendering (tessellation kept for future fallback)
-
-Performance improvements:
-- **89% vertex reduction**: 36+ vertices → 4 shared vertices per rounded rect
-- **Memory savings**: 432 bytes → 80 bytes per rounded rect
-- **Resolution-independent**: Perfect AA at any DPI/zoom level
-- **Expected speedup**: 2-5x faster for typical UIs (vertex-bound workload)
-
-### ✅ Completed: All Phases of Analytic Anti-Aliasing (Phase 1-4 - Dec 2025)
-
-**Phase 1-3: All Corner Types** ✅
-- ✅ None (sharp 90° corners)
-- ✅ Round (circular arc corners)
-- ✅ Cut (45° chamfered corners)
-- ✅ InverseRound (concave circular corners)
-- ✅ Squircle (superellipse corners)
-
-**Phase 4: Stroke Support** ✅
-- ✅ Analytic stroke rendering using SDF ring calculation (`abs(dist)` approach)
-- ✅ Works for ALL corner types (no tessellation fallback needed)
-- ✅ Consistent stroke-over-fill blending using `mix()`
-- ✅ Perfect AA at all stroke widths (0.5px to 20px+)
-- ✅ Comprehensive test examples: `stroke_test.rs`, `stroke_simple.rs`
-
-Performance achieved:
-- **89% vertex reduction**: 36+ vertices → 4 shared vertices per rounded rect
-- **Memory savings**: 432 bytes → 80 bytes per rounded rect
-- **Resolution-independent AA**: Perfect quality at any DPI/zoom
-
-Next potential work (Phase 5):
-- Text AA improvements (bilinear filtering, optional MSDF)
-- Or move to other features
-
----
-
-## What's missing / next work items
-
-### 1) Overflow policy completeness across renderers
-
-- Text: already respects `ClippedShape::clip_rect` via scissor ✅
-- Geometry: needs per-clip batching/scissor (or separate clipped render pass per clip group) to fully respect `Overflow::Hidden`
-
-### 2) Scroll (roadmap)
-
-`Overflow::Scroll` is defined but not implemented:
-- For now it behaves like `Hidden` (clip only)
-- Future: add scroll offset state and adapt clip rect + transform
-
-### 3) Text vertical placement refinement (if needed)
-
-Next steps if issues arise:
-- Confirm consistent coordinate convention between:
-  - cosmic-text physical glyph output
-  - swash placement + cache key integer offsets
-  - renderer quad placement formula
-
-### 4) Multi-line text / wrapping (future)
-
-Current implementation:
-- Single-line text only
-- `FitContent` measures single line width/height
-
-Future extensions:
-- Multi-line shaping with word wrapping
-- Measurement with max-width constraints
-
----
-
-## Constraints / project rules to follow
-
-- Use conventional commits when committing
-- Run:
-  - `cargo fmt` ✅
-  - `cargo check` ✅
-  - `cargo run` (so the result can be inspected) ✅
-- Avoid warnings ✅
-- Keep `astra-gui` minimal / backend-only rendering logic remains in backend crates ✅
-- Update this `plan/context.md` regularly while implementing ✅
+# Working Context — particles: astra-gui migration
+
+## Update (auto IDs + slider_with_value policy)
+- All sliders will be migrated to `slider_with_value` (not plain `slider`).
+- astra-gui **does** have automatic ID assignment, but it is **only** for nodes that have interactive styles (hover/active/disabled styles) and **only** when an explicit ID is not provided.
+  - The auto IDs are generated from the node tree path (stable as long as the UI tree structure ordering is stable).
+  - Important limitation: most interactive component update helpers in `astra-gui-interactive` (e.g. `slider_with_value_update`, `toggle_clicked`, `button_clicked`, `collapsible_clicked`) are written to take **string IDs**. For those, we still need stable identifiers we can reference.
+  - Conclusion: auto IDs help hover/active styling “just work” without manually assigning IDs everywhere, but they do **not** remove the need for explicit IDs for the interactive widgets we need to update/handle.
+
+## Goal
+Replace the current egui UI in `particles` with `astra-gui` + `astra-gui-wgpu`, so the project can upgrade to `wgpu 0.28` and stop depending on `egui`, `egui-winit`, `egui-wgpu`.
+
+This migration must use **existing astra-gui primitives and components** (no invented APIs, no unnecessary custom widgets):
+- Layout: `Layout::{Horizontal, Vertical, Stack}`
+- Alignment: `HorizontalAlign::{Left, Center, Right}`, `VerticalAlign::{Top, Center, Bottom}`
+- Interactive components: `astra-gui-interactive` (`button`, `toggle`, `slider`, `drag_value`, `slider_with_value`, `collapsible`, `text_input` + their `*_clicked`/`*_update` helpers)
+- Event system: `astra_gui_wgpu::{InputState, EventDispatcher, InteractiveStateManager}` (dispatch uses hit test and returns `TargetedEvent`s)
+
+## Current State (as of now)
+### UI is split across two systems
+1. **egui**: full UI (panels + controls) lives in `particles/src/gui.rs` as `Gui` (egui wrapper).
+2. **astra-gui**: only a small diagnostics panel exists via `gui::build_diagnostics_panel(...)` using `astra_gui::Node` and `astra_gui_wgpu::Renderer`.
+
+### Where UI is wired in
+- `particles/src/main.rs`
+  - `App::window_event` calls `gpu_state.gui.handle_event(window, &event)` and returns early if egui consumed the event.
+  - The egui `Gui` is rendered each frame via `gpu_state.gui.render(...)`.
+  - Astra diagnostics are rendered by building `FullOutput` from `build_diagnostics_panel(...)` and calling `astra_renderer.render(...)`.
+
+## UI Inventory to Migrate (from egui `Gui::ui`)
+### Global / common behavior
+- Keyboard shortcuts:
+  - `Space`: toggle pause
+  - When paused: `Ctrl+Right` or `Ctrl+D` adds `steps_to_play` to `steps_remaining`
+- Stepping driver:
+  - If `steps_remaining > 0` → `step_one_frame = true`, then decrement `steps_remaining`
+
+### Panels (4)
+1. **Statistics** (Top Right, collapsible, default open)
+   - Particle counts:
+     - `particle_count`
+   - Hadron counts:
+     - `hadron_count`, `proton_count`, `neutron_count`, `other_hadron_count`
+   - Rendering toggles:
+     - `show_shells`, `show_bonds`, `show_nuclei`
+   - LOD sliders (all with invariants end >= start):
+     - `lod_shell_fade_start` (5..=200 step 5)
+     - `lod_shell_fade_end` (5..=200 step 5)
+     - `lod_bound_hadron_fade_start` (10..=300 step 10)
+     - `lod_bound_hadron_fade_end` (10..=300 step 10)
+     - `lod_bond_fade_start` (5..=200 step 5)
+     - `lod_bond_fade_end` (5..=200 step 5)
+     - `lod_quark_fade_start` (5..=200 step 5)
+     - `lod_quark_fade_end` (5..=200 step 5)
+     - `lod_nucleus_fade_start` (10..=300 step 10)
+     - `lod_nucleus_fade_end` (10..=300 step 10)
+
+2. **Physics Controls** (Bottom Left, collapsible, default closed)
+   - Sliders update `physics_params_dirty = true` when changed.
+   - Sections:
+     - Forces:
+       - `physics_params.constants[0]` Gravity (egui logarithmic) range `0..=1e-9`
+       - `physics_params.constants[1]` Electric range `0..=20`
+     - Strong Force:
+       - `strong_force[0]` Short Range `0..=5` step 0.1
+       - `strong_force[1]` Confinement `0..=5` step 0.1
+       - `strong_force[2]` Range Cutoff `0..=10` step 0.1
+     - Repulsion:
+       - `repulsion[0]` Core Strength `0..=500`
+       - `repulsion[1]` Core Radius `0..=1`
+       - `repulsion[2]` Softening `0.001..=0.1`
+       - `repulsion[3]` Max Force `10..=200`
+     - Integration:
+       - `integration[0]` Time Step (dt) (egui logarithmic) `0.0001..=0.01`
+       - `integration[1]` Damping `0.9..=1.0`
+     - Nucleon Physics:
+       - `nucleon[0]` Binding Strength `0..=200`
+       - `nucleon[1]` Binding Range `0.1..=10`
+       - `nucleon[2]` Exclusion Strength `0..=300`
+       - `nucleon[3]` Exclusion Radius (x Hadron R) `0.5..=3`
+       - `integration[3]` Nucleon Damping `0..=100`
+     - Electron Physics:
+       - `electron[0]` Attraction Strength `0..=200`
+       - `electron[1]` Attraction Range `0.1..=10`
+       - `electron[2]` Exclusion Strength `0..=300`
+       - `electron[3]` Exclusion Radius `0.5..=3`
+     - Hadron Formation (has invariant breakup >= binding):
+       - `hadron[0]` Binding Distance `0.1..=3.0` step 0.05
+       - `hadron[1]` Breakup Distance `0.1..=5.0` step 0.05
+       - `hadron[2]` Confinement Range Mult `0.1..=5.0` step 0.1
+       - `hadron[3]` Confinement Strength Mult `0.1..=5.0` step 0.1
+
+3. **Time Controls** (Bottom Right, collapsible, default open)
+   - Pause/resume button (label depends on `is_paused`)
+   - dt quick slider:
+     - `physics_params.integration[0]` `0.0001..=0.01` step 0.0001, sets `physics_params_dirty`
+   - When paused:
+     - `steps_to_play` `1..=1000` using DragValue
+     - Step button adds `steps_to_play` to `steps_remaining`
+
+4. **Atom Card** (Center Top, non-collapsible, conditional)
+   - Only shown when `selected_nucleus_atomic_number.is_some()`
+   - Displays element name/symbol and the stored nucleus counts:
+     - `selected_nucleus_atomic_number` (Z)
+     - `selected_nucleus_proton_count`
+     - `selected_nucleus_neutron_count`
+     - `selected_nucleus_nucleon_count` (A)
+
+## Migration Strategy (high-level)
+1. Remove egui wrapper (`Gui`) and event consumption model.
+2. Introduce a new astra-based UI system for the *entire* UI.
+3. Keep `UiState` as the single source of truth for simulation-visible values.
+4. Add additional UI-only state for:
+   - collapsible expanded bools
+   - per-widget state needed by `slider_with_value` / `drag_value` (text buffers, cursor, selection, focused, drag accumulator)
+
+## Planned UI Implementation Details (grounded in astra examples)
+### Frame pipeline (match astra-gui-wgpu examples)
+- `InteractiveStateManager::begin_frame()` at start
+- Build `Node` UI tree
+- `inject_dimension_overrides(&mut ui)` before layout
+- Layout: `compute_layout_with_measurer(window_rect, &mut text_engine)`
+- Dispatch: `EventDispatcher::dispatch(&input_state, &mut ui)` → `(events, interaction_states)`
+- Update transitions: `update_transitions(&mut ui, &interaction_states)`
+- Handle `events` to mutate `UiState` + UI-only state
+- Convert to output and render with `astra_gui_wgpu::Renderer`
+- Clear input at end of frame: `input_state.begin_frame()` (as in examples)
+
+### Panel positioning (no absolute positioning)
+Root overlay is `Layout::Stack` filling the window.
+Each panel is a child aligned with:
+- Stats: `Top + Right`
+- Physics: `Bottom + Left`
+- Time: `Bottom + Right`
+- Atom card: `Top + Center`
+Insets via `margin` and internal spacing via `padding`.
+
+### Control choices
+- **All sliders**: use `slider_with_value` + `slider_with_value_update` (egui-like value field on the right, no tooltip needed).
+- Toggles: `toggle` + `toggle_clicked`
+- Collapsible container: `collapsible` + `collapsible_clicked`
+- Buttons: `button` + `button_clicked`
+- For stepped sliders, use `step: Some(f32)` in the update helper.
+- For logarithmic behavior (Gravity/dt): handle mapping in event logic (astra slider itself is linear).
+
+## Input blocking / camera interaction
+Current egui model:
+- `Gui::handle_event` returns `consumed`, and the app returns early to avoid camera/picking input.
+
+New astra model:
+- We must explicitly guard camera/picking input when the cursor is on UI.
+- Plan:
+  - Always feed winit events into astra `InputState` (in addition to any camera handling).
+  - Before doing camera drag, scroll zoom, or click picking, detect whether the cursor is currently over UI by hit testing the laid-out UI tree at the cursor position.
+  - If UI is hit, do not process camera/picking for that event/frame.
+
+## Invariants to preserve
+- LOD ranges: always enforce `*_end >= *_start`
+- Hadron formation: enforce `hadron[1] >= hadron[0]` and mark dirty if clamped
+- Simulation stepping:
+  - `steps_remaining` decremented each frame while stepping
+  - `step_one_frame` asserted for each step
+- While editing numeric fields, global shortcuts should not fire (policy: suppress space/ctrl-step when a text input is focused).
+
+## TODO (actionable)
+### Inventory & mapping
+- [ ] Create an ID scheme for all interactive widgets (stable strings).
+  - Note: astra-gui can auto-assign IDs for nodes with interactive styles, but `astra-gui-interactive` update helpers require explicit string IDs, so we still need stable IDs for every interactive widget we want to handle/update.
+- [x] Decide which controls use `slider_with_value` vs plain `slider` (all sliders will be `slider_with_value`).
+
+### Implement astra UI system
+- [ ] New UI struct in `particles/src/gui.rs` (or a new module) containing:
+  - `InputState`, `EventDispatcher`, `InteractiveStateManager`, `TextEngine`
+  - UI-only state: collapsible expanded flags, per-slider-with-value state
+- [ ] Replace old egui `Gui` integration in `particles/src/main.rs`:
+  - Stop early-return consumption.
+  - Wire `InputState::handle_event(&WindowEvent)` from the winit loop.
+  - Render astra output each frame via existing `astra_renderer`.
+
+### Build UI tree
+- [ ] Root overlay: `Layout::Stack`, Fill x/y
+- [ ] Top-right Statistics panel (collapsible)
+- [ ] Bottom-left Physics panel (collapsible, default collapsed)
+- [ ] Bottom-right Time panel (collapsible, default expanded)
+- [ ] Top-center Atom card (conditional)
+
+### Event handling
+- [ ] Implement handlers:
+  - [ ] `Space` toggles pause (unless text input focused)
+  - [ ] When paused, ctrl-step adds to `steps_remaining` (unless text input focused)
+  - [ ] Buttons/toggles/sliders update appropriate `UiState` fields
+  - [ ] Set `physics_params_dirty` on any physics parameter changes
+  - [ ] Enforce invariants after updates
+
+### Input blocking
+- [ ] Add “is cursor over UI?” gating for:
+  - camera rotate (RMB drag)
+  - zoom (wheel)
+  - picking click (LMB)
+
+### Cleanup
+- [ ] Delete egui dependencies and `Gui` wrapper once astra UI is complete
+- [ ] Ensure `wgpu` is upgraded to `0.28` across workspace
+- [ ] Run: `cargo fmt`, `cargo check`, `cargo test`, `cargo run`
+
+## Notes / constraints
+- No new assets should be added as part of this plan.
+- Keep UI performant (target: high FPS).
+- Debug visualizations (astra-gui): padding (blue), margin (red), border (green), gap (purple), clip rect (red), content-area (yellow).

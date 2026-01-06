@@ -22,7 +22,7 @@ A real-time, GPU-accelerated physics simulation of fundamental particles (quarks
 *   **3D Rendering:** Instanced rendering for high-performance particle visualization.
 *   **Hadron Shells:** Semi-transparent shells visualize the bounds of formed protons and neutrons.
 *   **Internal Bonds:** Dynamic lines show the strong force connections between quarks.
-*   **Real-time UI:** Built with `egui` for interactive control.
+*   **Real-time UI:** Built with `astra-gui` for interactive control.
 
 ## 🎮 Controls
 
@@ -61,5 +61,5 @@ cargo run --release
 ## 🛠️ Tech Stack
 *   **Language:** Rust
 *   **Graphics API:** wgpu (WebGPU)
-*   **UI:** egui
+*   **UI:** astra-gui
 *   **Math:** glam

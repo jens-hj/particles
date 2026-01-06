@@ -3,6 +3,7 @@
 //! Simulates quarks, electrons, and the four fundamental forces.
 
 mod gui;
+mod gui_data;
 
 use astra_gui::DebugOptions;
 use astra_gui_wgpu::Renderer as AstraRenderer;
@@ -388,8 +389,8 @@ impl GpuState {
         // Create camera
         let camera = Camera::new(size.width, size.height);
 
-        // Create GUI
-        let gui = Gui::new(&device, config.format, &window);
+        // Create GUI (astra-gui placeholder)
+        let gui = Gui::new();
         let astra_renderer = AstraRenderer::new(&device, config.format);
         let ui_state = UiState::default();
 
@@ -655,9 +656,20 @@ impl GpuState {
 
         self.frame_counter += 1;
 
-        // Update physics parameters from UI
-        // Pass accumulated time to shader for random seeding (using integration.z padding)
+        // Update physics parameters from UI.
+        //
+        // IMPORTANT:
+        // `physics_params.integration` layout is:
+        //   x: dt
+        //   y: damping
+        //   z: time/seed
+        //   w: nucleon_damping
+        //
+        // We must NOT accumulate time into the dt slot (x).
+        // Instead, we advance the time/seed slot (z) so shaders can use it for variation/randomness
+        // while dt remains user-controlled and stable.
         if !self.ui_state.is_paused || self.ui_state.step_one_frame {
+            // Advance accumulated time/seed (integration.z), not dt (integration.x).
             self.ui_state.physics_params.integration[2] += frame_time * 0.001;
             self.ui_state.physics_params_dirty = true;
         }
@@ -786,6 +798,7 @@ impl GpuState {
                     }),
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 });
 
                 self.hadron_renderer.render(
@@ -815,27 +828,7 @@ impl GpuState {
             self.queue.submit(std::iter::once(encoder.finish()));
         }
 
-        // Render GUI
-        {
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("GUI Encoder"),
-                });
-
-            self.gui.render(
-                &self.device,
-                &self.queue,
-                &mut encoder,
-                window,
-                &view,
-                &mut self.ui_state,
-            );
-
-            self.queue.submit(std::iter::once(encoder.finish()));
-        }
-
-        // Render Astra GUI diagnostics panel
+        // Render Astra GUI overlay (astra-gui placeholder)
         {
             let mut encoder = self
                 .device
@@ -845,8 +838,10 @@ impl GpuState {
 
             let size = window.inner_size();
             let window_size = [size.width as f32, size.height as f32];
+
             let astra_output =
-                gui::build_diagnostics_panel(&self.ui_state, window_size, astra_debug_options);
+                self.gui
+                    .build(&mut self.ui_state, window_size, *astra_debug_options);
 
             self.astra_renderer.render(
                 &self.device,
@@ -899,12 +894,13 @@ impl ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        // Handle GUI events
-        if let (Some(gpu_state), Some(window)) = (&mut self.gpu_state, &self.window) {
-            if gpu_state.gui.handle_event(window, &event) {
-                return;
-            }
-        }
+        // Feed events into GUI input state first. We'll gate camera/picking based on whether
+        // the UI consumed pointer/scroll input.
+        let ui_consumed = if let Some(gpu_state) = &mut self.gpu_state {
+            gpu_state.gui.handle_event(&event)
+        } else {
+            false
+        };
 
         match event {
             WindowEvent::CloseRequested
@@ -962,6 +958,21 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::MouseInput { state, button, .. } => {
+                // If the UI is interacting with the pointer, don't start camera drags or picking.
+                // (We still feed all events into the GUI above.)
+                if ui_consumed {
+                    // Ensure we don't leave drag state stuck "on" if the user clicked inside UI.
+                    if button == winit::event::MouseButton::Right && state == ElementState::Pressed
+                    {
+                        self.mouse_pressed = false;
+                        self.last_mouse_pos = None;
+                    }
+                    if button == winit::event::MouseButton::Left && state == ElementState::Pressed {
+                        self.left_mouse_pressed = false;
+                    }
+                    return;
+                }
+
                 if button == winit::event::MouseButton::Right {
                     self.mouse_pressed = state == ElementState::Pressed;
                     if !self.mouse_pressed {
@@ -1195,6 +1206,10 @@ impl ApplicationHandler for App {
             WindowEvent::CursorMoved { position, .. } => {
                 self.last_cursor_pos = Some((position.x, position.y));
 
+                if ui_consumed {
+                    return;
+                }
+
                 if self.mouse_pressed {
                     if let Some(last_pos) = self.last_mouse_pos {
                         let delta_x = (position.x - last_pos.0) as f32;
@@ -1209,6 +1224,10 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::MouseWheel { delta, .. } => {
+                if ui_consumed {
+                    return;
+                }
+
                 let scroll = match delta {
                     MouseScrollDelta::LineDelta(_x, y) => y * 10.0,
                     MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.1,
@@ -1301,20 +1320,9 @@ impl ApplicationHandler for App {
                         true
                     }
                     KeyCode::KeyS => {
-                        if let Some(gpu_state) = &mut self.gpu_state {
-                            let new_mode = match gpu_state.astra_renderer.render_mode() {
-                                astra_gui_wgpu::RenderMode::Sdf
-                                | astra_gui_wgpu::RenderMode::Auto => {
-                                    astra_gui_wgpu::RenderMode::Mesh
-                                }
-                                astra_gui_wgpu::RenderMode::Mesh => astra_gui_wgpu::RenderMode::Sdf,
-                            };
-                            gpu_state.astra_renderer.set_render_mode(new_mode);
-                            println!("Astra GUI Render mode: {:?}", new_mode);
-                            true
-                        } else {
-                            false
-                        }
+                        // NOTE: Render mode toggling removed because the `astra_gui_wgpu::RenderMode`
+                        // API is not available in the version currently used by this project.
+                        false
                     }
                     _ => false,
                 };

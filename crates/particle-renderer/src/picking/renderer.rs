@@ -154,7 +154,7 @@ impl PickingRenderer {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Picking Pipeline Layout"),
             bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
 
         let primitive = wgpu::PrimitiveState {
@@ -198,7 +198,7 @@ impl PickingRenderer {
             primitive,
             depth_stencil: depth_stencil.clone(),
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -224,7 +224,7 @@ impl PickingRenderer {
             primitive,
             depth_stencil: depth_stencil.clone(),
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -250,7 +250,7 @@ impl PickingRenderer {
             primitive,
             depth_stencil,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -391,6 +391,7 @@ impl PickingRenderer {
             }),
             timestamp_writes: None,
             occlusion_query_set: None,
+            multiview_mask: None,
         });
 
         // Render particles first, then hadrons, letting depth determine what is visible.

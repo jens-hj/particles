@@ -538,7 +538,7 @@ impl ParticleSimulation {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Force Pipeline Layout"),
                 bind_group_layouts: &[&force_bind_group_layout],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
         log::info!("Creating force pipeline...");
@@ -556,7 +556,7 @@ impl ParticleSimulation {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Selection Pipeline Layout"),
                 bind_group_layouts: &[&selection_bind_group_layout],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
         log::debug!("Creating selection pipeline...");
@@ -574,7 +574,7 @@ impl ParticleSimulation {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Integration Pipeline Layout"),
                 bind_group_layouts: &[&integrate_bind_group_layout],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
         log::info!("Creating integrate pipeline...");
@@ -592,7 +592,7 @@ impl ParticleSimulation {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Hadron Pipeline Layout"),
                 bind_group_layouts: &[&hadron_bind_group_layout],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
         log::info!("Creating hadron validation pipeline...");
@@ -621,7 +621,7 @@ impl ParticleSimulation {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Nucleus Pipeline Layout"),
                 bind_group_layouts: &[&nucleus_bind_group_layout],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
         log::info!("Creating nucleus pipeline...");
